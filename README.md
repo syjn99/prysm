@@ -14,7 +14,7 @@ This is a personal repository for studying [Prysm](https://github.com/prysmaticl
 ├── execution ✅
 ├── feed
 ├── helpers
-├── signing
+├── signing ✅
 ├── time ✅
 ├── transition ✅
 └── validators ✅
