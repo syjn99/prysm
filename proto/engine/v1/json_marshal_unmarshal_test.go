@@ -289,7 +289,7 @@ func TestJsonMarshalUnmarshal(t *testing.T) {
 		bgu := hexutil.Uint64(5)
 		ebg := hexutil.Uint64(6)
 
-		withdrawalReq := []*enginev1.ExecutionLayerWithdrawalRequest{
+		withdrawalReq := []*enginev1.WithdrawalRequest{
 			{
 				SourceAddress:   bytesutil.PadTo([]byte("sourceAddress-1"), 20),
 				ValidatorPubkey: bytesutil.PadTo([]byte("pubKey-1"), 48),
@@ -306,7 +306,7 @@ func TestJsonMarshalUnmarshal(t *testing.T) {
 				Amount:          3,
 			},
 		}
-		depositReq := []*enginev1.DepositReceipt{
+		depositReq := []*enginev1.DepositRequest{
 			{
 				Pubkey:                bytesutil.PadTo([]byte("pubKey-1"), 48),
 				WithdrawalCredentials: bytesutil.PadTo([]byte("creds-1"), 32),
@@ -327,6 +327,14 @@ func TestJsonMarshalUnmarshal(t *testing.T) {
 				Amount:                3,
 				Signature:             bytesutil.PadTo([]byte("sig-3"), 96),
 				Index:                 13,
+			},
+		}
+
+		consolidationReq := []*enginev1.ConsolidationRequest{
+			{
+				SourceAddress: bytesutil.PadTo([]byte("sourceAddress-1"), 20),
+				SourcePubkey:  bytesutil.PadTo([]byte("s-pubKey-1"), 48),
+				TargetPubkey:  bytesutil.PadTo([]byte("t-pubKey-1"), 48),
 			},
 		}
 
@@ -358,10 +366,11 @@ func TestJsonMarshalUnmarshal(t *testing.T) {
 					Address:        bytesutil.PadTo([]byte("address"), 20),
 					Amount:         1,
 				}},
-				BlobGasUsed:        &bgu,
-				ExcessBlobGas:      &ebg,
-				WithdrawalRequests: enginev1.ProtoWithdrawalRequestsToJson(withdrawalReq),
-				DepositRequests:    enginev1.ProtoDepositRequestsToJson(depositReq),
+				BlobGasUsed:           &bgu,
+				ExcessBlobGas:         &ebg,
+				WithdrawalRequests:    enginev1.ProtoWithdrawalRequestsToJson(withdrawalReq),
+				DepositRequests:       enginev1.ProtoDepositRequestsToJson(depositReq),
+				ConsolidationRequests: enginev1.ProtoConsolidationRequestsToJson(consolidationReq),
 			},
 		}
 		enc, err := json.Marshal(resp)
@@ -410,9 +419,13 @@ func TestJsonMarshalUnmarshal(t *testing.T) {
 		for i := range pb.Payload.WithdrawalRequests {
 			require.DeepEqual(t, pb.Payload.WithdrawalRequests[i], withdrawalReq[i])
 		}
-		require.Equal(t, len(pb.Payload.DepositReceipts), len(depositReq))
-		for i := range pb.Payload.DepositReceipts {
-			require.DeepEqual(t, pb.Payload.DepositReceipts[i], depositReq[i])
+		require.Equal(t, len(pb.Payload.DepositRequests), len(depositReq))
+		for i := range pb.Payload.DepositRequests {
+			require.DeepEqual(t, pb.Payload.DepositRequests[i], depositReq[i])
+		}
+		require.Equal(t, len(pb.Payload.ConsolidationRequests), len(consolidationReq))
+		for i := range pb.Payload.ConsolidationRequests {
+			require.DeepEqual(t, pb.Payload.ConsolidationRequests[i], consolidationReq[i])
 		}
 	})
 	t.Run("execution block", func(t *testing.T) {

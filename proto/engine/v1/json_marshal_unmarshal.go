@@ -306,33 +306,35 @@ type GetPayloadV4ResponseJson struct {
 
 // ExecutionPayloadElectraJSON represents the engine API ExecutionPayloadV4 type.
 type ExecutionPayloadElectraJSON struct {
-	ParentHash         *common.Hash          `json:"parentHash"`
-	FeeRecipient       *common.Address       `json:"feeRecipient"`
-	StateRoot          *common.Hash          `json:"stateRoot"`
-	ReceiptsRoot       *common.Hash          `json:"receiptsRoot"`
-	LogsBloom          *hexutil.Bytes        `json:"logsBloom"`
-	PrevRandao         *common.Hash          `json:"prevRandao"`
-	BlockNumber        *hexutil.Uint64       `json:"blockNumber"`
-	GasLimit           *hexutil.Uint64       `json:"gasLimit"`
-	GasUsed            *hexutil.Uint64       `json:"gasUsed"`
-	Timestamp          *hexutil.Uint64       `json:"timestamp"`
-	ExtraData          hexutil.Bytes         `json:"extraData"`
-	BaseFeePerGas      string                `json:"baseFeePerGas"`
-	BlobGasUsed        *hexutil.Uint64       `json:"blobGasUsed"`
-	ExcessBlobGas      *hexutil.Uint64       `json:"excessBlobGas"`
-	BlockHash          *common.Hash          `json:"blockHash"`
-	Transactions       []hexutil.Bytes       `json:"transactions"`
-	Withdrawals        []*Withdrawal         `json:"withdrawals"`
-	WithdrawalRequests []WithdrawalRequestV1 `json:"withdrawalRequests"`
-	DepositRequests    []DepositRequestV1    `json:"depositRequests"`
+	ParentHash            *common.Hash             `json:"parentHash"`
+	FeeRecipient          *common.Address          `json:"feeRecipient"`
+	StateRoot             *common.Hash             `json:"stateRoot"`
+	ReceiptsRoot          *common.Hash             `json:"receiptsRoot"`
+	LogsBloom             *hexutil.Bytes           `json:"logsBloom"`
+	PrevRandao            *common.Hash             `json:"prevRandao"`
+	BlockNumber           *hexutil.Uint64          `json:"blockNumber"`
+	GasLimit              *hexutil.Uint64          `json:"gasLimit"`
+	GasUsed               *hexutil.Uint64          `json:"gasUsed"`
+	Timestamp             *hexutil.Uint64          `json:"timestamp"`
+	ExtraData             hexutil.Bytes            `json:"extraData"`
+	BaseFeePerGas         string                   `json:"baseFeePerGas"`
+	BlobGasUsed           *hexutil.Uint64          `json:"blobGasUsed"`
+	ExcessBlobGas         *hexutil.Uint64          `json:"excessBlobGas"`
+	BlockHash             *common.Hash             `json:"blockHash"`
+	Transactions          []hexutil.Bytes          `json:"transactions"`
+	Withdrawals           []*Withdrawal            `json:"withdrawals"`
+	WithdrawalRequests    []WithdrawalRequestV1    `json:"withdrawalRequests"`
+	DepositRequests       []DepositRequestV1       `json:"depositRequests"`
+	ConsolidationRequests []ConsolidationRequestV1 `json:"consolidationRequests"`
 }
 
 // ExecutionPayloadBody represents the engine API ExecutionPayloadV1 or ExecutionPayloadV2 type.
 type ExecutionPayloadBody struct {
-	Transactions       []hexutil.Bytes       `json:"transactions"`
-	Withdrawals        []*Withdrawal         `json:"withdrawals"`
-	WithdrawalRequests []WithdrawalRequestV1 `json:"withdrawalRequests"`
-	DepositRequests    []DepositRequestV1    `json:"depositRequests"`
+	Transactions          []hexutil.Bytes          `json:"transactions"`
+	Withdrawals           []*Withdrawal            `json:"withdrawals"`
+	WithdrawalRequests    []WithdrawalRequestV1    `json:"withdrawalRequests"`
+	DepositRequests       []DepositRequestV1       `json:"depositRequests"`
+	ConsolidationRequests []ConsolidationRequestV1 `json:"consolidationRequests"`
 }
 
 // Validate returns an error if key fields in GetPayloadV4ResponseJson are nil or invalid.
@@ -417,7 +419,7 @@ type ExecutionPayloadDenebJSON struct {
 // https://github.com/ethereum/execution-apis/blob/main/src/engine/prague.md#withdrawalrequestv1
 type WithdrawalRequestV1 struct {
 	SourceAddress   *common.Address `json:"sourceAddress"`
-	ValidatorPubkey *BlsPubkey      `json:"validatorPublicKey"`
+	ValidatorPubkey *BlsPubkey      `json:"validatorPubkey"`
 	Amount          *hexutil.Uint64 `json:"amount"`
 }
 
@@ -426,7 +428,7 @@ func (r WithdrawalRequestV1) Validate() error {
 		return errors.Wrap(errJsonNilField, "missing required field 'sourceAddress' for WithdrawalRequestV1")
 	}
 	if r.ValidatorPubkey == nil {
-		return errors.Wrap(errJsonNilField, "missing required field 'validatorPublicKey' for WithdrawalRequestV1")
+		return errors.Wrap(errJsonNilField, "missing required field 'validatorPubkey' for WithdrawalRequestV1")
 	}
 	if r.Amount == nil {
 		return errors.Wrap(errJsonNilField, "missing required field 'amount' for WithdrawalRequestV1")
@@ -464,6 +466,30 @@ func (r DepositRequestV1) Validate() error {
 	}
 	if r.Index == nil {
 		return errors.Wrap(errJsonNilField, "missing required field 'index' for DepositRequestV1")
+	}
+	return nil
+}
+
+// ConsolidationRequestV1 represents an execution engine ConsolidationRequestV1 value
+// https://github.com/ethereum/execution-apis/blob/main/src/engine/prague.md#consolidationrequestv1
+type ConsolidationRequestV1 struct {
+	// sourceAddress: DATA, 20 Bytes
+	SourceAddress *common.Address `json:"sourceAddress"`
+	// sourcePubkey: DATA, 48 Bytes
+	SourcePubkey *BlsPubkey `json:"sourcePubkey"`
+	// targetPubkey: DATA, 48 Bytes
+	TargetPubkey *BlsPubkey `json:"targetPubkey"`
+}
+
+func (r ConsolidationRequestV1) Validate() error {
+	if r.SourceAddress == nil {
+		return errors.Wrap(errJsonNilField, "missing required field 'sourceAddress' for ConsolidationRequestV1")
+	}
+	if r.SourcePubkey == nil {
+		return errors.Wrap(errJsonNilField, "missing required field 'sourcePubkey' for ConsolidationRequestV1")
+	}
+	if r.TargetPubkey == nil {
+		return errors.Wrap(errJsonNilField, "missing required field 'targetPubkey' for ConsolidationRequestV1")
 	}
 	return nil
 }
@@ -966,37 +992,38 @@ func (e *ExecutionPayloadElectra) MarshalJSON() ([]byte, error) {
 	excessBlobGas := hexutil.Uint64(e.ExcessBlobGas)
 
 	return json.Marshal(ExecutionPayloadElectraJSON{
-		ParentHash:         &pHash,
-		FeeRecipient:       &recipient,
-		StateRoot:          &sRoot,
-		ReceiptsRoot:       &recRoot,
-		LogsBloom:          &logsBloom,
-		PrevRandao:         &prevRan,
-		BlockNumber:        &blockNum,
-		GasLimit:           &gasLimit,
-		GasUsed:            &gasUsed,
-		Timestamp:          &timeStamp,
-		ExtraData:          e.ExtraData,
-		BaseFeePerGas:      baseFeeHex,
-		BlockHash:          &bHash,
-		Transactions:       transactions,
-		Withdrawals:        withdrawals,
-		BlobGasUsed:        &blobGasUsed,
-		ExcessBlobGas:      &excessBlobGas,
-		WithdrawalRequests: ProtoWithdrawalRequestsToJson(e.WithdrawalRequests),
-		DepositRequests:    ProtoDepositRequestsToJson(e.DepositReceipts),
+		ParentHash:            &pHash,
+		FeeRecipient:          &recipient,
+		StateRoot:             &sRoot,
+		ReceiptsRoot:          &recRoot,
+		LogsBloom:             &logsBloom,
+		PrevRandao:            &prevRan,
+		BlockNumber:           &blockNum,
+		GasLimit:              &gasLimit,
+		GasUsed:               &gasUsed,
+		Timestamp:             &timeStamp,
+		ExtraData:             e.ExtraData,
+		BaseFeePerGas:         baseFeeHex,
+		BlockHash:             &bHash,
+		Transactions:          transactions,
+		Withdrawals:           withdrawals,
+		BlobGasUsed:           &blobGasUsed,
+		ExcessBlobGas:         &excessBlobGas,
+		WithdrawalRequests:    ProtoWithdrawalRequestsToJson(e.WithdrawalRequests),
+		DepositRequests:       ProtoDepositRequestsToJson(e.DepositRequests),
+		ConsolidationRequests: ProtoConsolidationRequestsToJson(e.ConsolidationRequests),
 	})
 }
 
-func JsonDepositRequestsToProto(j []DepositRequestV1) ([]*DepositReceipt, error) {
-	reqs := make([]*DepositReceipt, len(j))
+func JsonDepositRequestsToProto(j []DepositRequestV1) ([]*DepositRequest, error) {
+	reqs := make([]*DepositRequest, len(j))
 
 	for i := range j {
 		req := j[i]
 		if err := req.Validate(); err != nil {
 			return nil, err
 		}
-		reqs[i] = &DepositReceipt{
+		reqs[i] = &DepositRequest{
 			Pubkey:                req.PubKey.Bytes(),
 			WithdrawalCredentials: req.WithdrawalCredentials.Bytes(),
 			Amount:                uint64(*req.Amount),
@@ -1008,7 +1035,7 @@ func JsonDepositRequestsToProto(j []DepositRequestV1) ([]*DepositReceipt, error)
 	return reqs, nil
 }
 
-func ProtoDepositRequestsToJson(reqs []*DepositReceipt) []DepositRequestV1 {
+func ProtoDepositRequestsToJson(reqs []*DepositRequest) []DepositRequestV1 {
 	j := make([]DepositRequestV1, len(reqs))
 	for i := range reqs {
 		r := reqs[i]
@@ -1030,15 +1057,15 @@ func ProtoDepositRequestsToJson(reqs []*DepositReceipt) []DepositRequestV1 {
 	return j
 }
 
-func JsonWithdrawalRequestsToProto(j []WithdrawalRequestV1) ([]*ExecutionLayerWithdrawalRequest, error) {
-	reqs := make([]*ExecutionLayerWithdrawalRequest, len(j))
+func JsonWithdrawalRequestsToProto(j []WithdrawalRequestV1) ([]*WithdrawalRequest, error) {
+	reqs := make([]*WithdrawalRequest, len(j))
 
 	for i := range j {
 		req := j[i]
 		if err := req.Validate(); err != nil {
 			return nil, err
 		}
-		reqs[i] = &ExecutionLayerWithdrawalRequest{
+		reqs[i] = &WithdrawalRequest{
 			SourceAddress:   req.SourceAddress.Bytes(),
 			ValidatorPubkey: req.ValidatorPubkey.Bytes(),
 			Amount:          uint64(*req.Amount),
@@ -1048,7 +1075,7 @@ func JsonWithdrawalRequestsToProto(j []WithdrawalRequestV1) ([]*ExecutionLayerWi
 	return reqs, nil
 }
 
-func ProtoWithdrawalRequestsToJson(reqs []*ExecutionLayerWithdrawalRequest) []WithdrawalRequestV1 {
+func ProtoWithdrawalRequestsToJson(reqs []*WithdrawalRequest) []WithdrawalRequestV1 {
 	j := make([]WithdrawalRequestV1, len(reqs))
 	for i := range reqs {
 		r := reqs[i]
@@ -1060,6 +1087,42 @@ func ProtoWithdrawalRequestsToJson(reqs []*ExecutionLayerWithdrawalRequest) []Wi
 			SourceAddress:   &address,
 			ValidatorPubkey: &pk,
 			Amount:          &amt,
+		}
+	}
+	return j
+}
+
+func JsonConsolidationRequestsToProto(j []ConsolidationRequestV1) ([]*ConsolidationRequest, error) {
+	reqs := make([]*ConsolidationRequest, len(j))
+
+	for i := range j {
+		req := j[i]
+		if err := req.Validate(); err != nil {
+			return nil, err
+		}
+		reqs[i] = &ConsolidationRequest{
+			SourceAddress: req.SourceAddress.Bytes(),
+			SourcePubkey:  req.SourcePubkey.Bytes(),
+			TargetPubkey:  req.TargetPubkey.Bytes(),
+		}
+	}
+
+	return reqs, nil
+}
+
+func ProtoConsolidationRequestsToJson(reqs []*ConsolidationRequest) []ConsolidationRequestV1 {
+	j := make([]ConsolidationRequestV1, len(reqs))
+	for i := range reqs {
+		r := reqs[i]
+		spk := BlsPubkey{}
+		copy(spk[:], r.SourcePubkey)
+		tpk := BlsPubkey{}
+		copy(tpk[:], r.TargetPubkey)
+		address := common.BytesToAddress(r.SourceAddress)
+		j[i] = ConsolidationRequestV1{
+			SourceAddress: &address,
+			SourcePubkey:  &spk,
+			TargetPubkey:  &tpk,
 		}
 	}
 	return j
@@ -1087,26 +1150,31 @@ func (j *ExecutionPayloadElectraJSON) ElectraPayload() (*ExecutionPayloadElectra
 	if err != nil {
 		return nil, err
 	}
+	cr, err := JsonConsolidationRequestsToProto(j.ConsolidationRequests)
+	if err != nil {
+		return nil, err
+	}
 	return &ExecutionPayloadElectra{
-		ParentHash:         j.ParentHash.Bytes(),
-		FeeRecipient:       j.FeeRecipient.Bytes(),
-		StateRoot:          j.StateRoot.Bytes(),
-		ReceiptsRoot:       j.ReceiptsRoot.Bytes(),
-		LogsBloom:          *j.LogsBloom,
-		PrevRandao:         j.PrevRandao.Bytes(),
-		BlockNumber:        uint64(*j.BlockNumber),
-		GasLimit:           uint64(*j.GasLimit),
-		GasUsed:            uint64(*j.GasUsed),
-		Timestamp:          uint64(*j.Timestamp),
-		ExtraData:          j.ExtraData,
-		BaseFeePerGas:      baseFee,
-		BlockHash:          j.BlockHash.Bytes(),
-		Transactions:       transactions,
-		Withdrawals:        j.Withdrawals,
-		BlobGasUsed:        uint64(*j.BlobGasUsed),
-		ExcessBlobGas:      uint64(*j.ExcessBlobGas),
-		DepositReceipts:    dr,
-		WithdrawalRequests: wr,
+		ParentHash:            j.ParentHash.Bytes(),
+		FeeRecipient:          j.FeeRecipient.Bytes(),
+		StateRoot:             j.StateRoot.Bytes(),
+		ReceiptsRoot:          j.ReceiptsRoot.Bytes(),
+		LogsBloom:             *j.LogsBloom,
+		PrevRandao:            j.PrevRandao.Bytes(),
+		BlockNumber:           uint64(*j.BlockNumber),
+		GasLimit:              uint64(*j.GasLimit),
+		GasUsed:               uint64(*j.GasUsed),
+		Timestamp:             uint64(*j.Timestamp),
+		ExtraData:             j.ExtraData,
+		BaseFeePerGas:         baseFee,
+		BlockHash:             j.BlockHash.Bytes(),
+		Transactions:          transactions,
+		Withdrawals:           j.Withdrawals,
+		BlobGasUsed:           uint64(*j.BlobGasUsed),
+		ExcessBlobGas:         uint64(*j.ExcessBlobGas),
+		DepositRequests:       dr,
+		WithdrawalRequests:    wr,
+		ConsolidationRequests: cr,
 	}, nil
 }
 

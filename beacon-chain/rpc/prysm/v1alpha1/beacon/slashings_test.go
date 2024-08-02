@@ -4,17 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/prysmaticlabs/prysm/v5/config/features"
-	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
-	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
-	"github.com/prysmaticlabs/prysm/v5/testing/util"
-	"google.golang.org/protobuf/proto"
-
 	mock "github.com/prysmaticlabs/prysm/v5/beacon-chain/blockchain/testing"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/operations/slashings"
 	mockp2p "github.com/prysmaticlabs/prysm/v5/beacon-chain/p2p/testing"
+	"github.com/prysmaticlabs/prysm/v5/config/features"
+	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
+	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/testing/assert"
 	"github.com/prysmaticlabs/prysm/v5/testing/require"
+	"github.com/prysmaticlabs/prysm/v5/testing/util"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestServer_SubmitProposerSlashing(t *testing.T) {
@@ -166,4 +165,29 @@ func TestServer_SubmitAttesterSlashing_DontBroadcast(t *testing.T) {
 	// been slashed, we should fail to insert properly into the attester slashing pool.
 	_, err = bs.SubmitAttesterSlashing(ctx, generatedSlashing.(*ethpb.AttesterSlashing))
 	assert.NotNil(t, err, "Expected including a attester slashing for an already slashed validator to fail")
+}
+
+func TestServer_SubmitAttesterSlashingElectra(t *testing.T) {
+	ctx := context.Background()
+	st, privs := util.DeterministicGenesisStateElectra(t, 64)
+	slashedVal, err := st.ValidatorAtIndex(5)
+	require.NoError(t, err)
+	slashedVal.Slashed = true
+	require.NoError(t, st.UpdateValidatorAtIndex(5, slashedVal))
+
+	mb := &mockp2p.MockBroadcaster{}
+	bs := &Server{
+		HeadFetcher: &mock.ChainService{
+			State: st,
+		},
+		SlashingsPool: slashings.NewPool(),
+		Broadcaster:   mb,
+	}
+
+	generatedSlashing, err := util.GenerateAttesterSlashingForValidator(st, privs[2], primitives.ValidatorIndex(2))
+	require.NoError(t, err)
+
+	_, err = bs.SubmitAttesterSlashingElectra(ctx, generatedSlashing.(*ethpb.AttesterSlashingElectra))
+	require.NoError(t, err)
+	assert.Equal(t, true, mb.BroadcastCalled.Load(), "Expected broadcast to be called when flag is set")
 }

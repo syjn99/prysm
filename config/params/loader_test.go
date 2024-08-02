@@ -25,6 +25,7 @@ import (
 // IMPORTANT: Use one field per line and sort these alphabetically to reduce conflicts.
 var placeholderFields = []string{
 	"BYTES_PER_LOGS_BLOOM", // Compile time constant on ExecutionPayload.logs_bloom.
+	"CUSTODY_REQUIREMENT",
 	"EIP6110_FORK_EPOCH",
 	"EIP6110_FORK_VERSION",
 	"EIP7002_FORK_EPOCH",
@@ -34,12 +35,13 @@ var placeholderFields = []string{
 	"FIELD_ELEMENTS_PER_BLOB",              // Compile time constant.
 	"KZG_COMMITMENT_INCLUSION_PROOF_DEPTH", // Compile time constant on BlobSidecar.commitment_inclusion_proof.
 	"MAX_BLOBS_PER_BLOCK",
-	"MAX_BLOB_COMMITMENTS_PER_BLOCK",   // Compile time constant on BeaconBlockBodyDeneb.blob_kzg_commitments.
-	"MAX_BYTES_PER_TRANSACTION",        // Used for ssz of EL transactions. Unused in Prysm.
-	"MAX_DEPOSIT_RECEIPTS_PER_PAYLOAD", // Compile time constant on ExecutionPayload.deposit_receipts.
-	"MAX_EXTRA_DATA_BYTES",             // Compile time constant on ExecutionPayload.extra_data.
-	"MAX_TRANSACTIONS_PER_PAYLOAD",     // Compile time constant on ExecutionPayload.transactions.
+	"MAX_BLOB_COMMITMENTS_PER_BLOCK", // Compile time constant on BeaconBlockBodyDeneb.blob_kzg_commitments.
+	"MAX_BYTES_PER_TRANSACTION",      // Used for ssz of EL transactions. Unused in Prysm.
+	"MAX_EXTRA_DATA_BYTES",           // Compile time constant on ExecutionPayload.extra_data.
+	"MAX_TRANSACTIONS_PER_PAYLOAD",   // Compile time constant on ExecutionPayload.transactions.
 	"REORG_HEAD_WEIGHT_THRESHOLD",
+	"SAMPLES_PER_SLOT",
+	"TARGET_NUMBER_OF_PEERS",
 	"UPDATE_TIMEOUT",
 	"WHISK_EPOCHS_PER_SHUFFLING_PHASE",
 	"WHISK_FORK_EPOCH",

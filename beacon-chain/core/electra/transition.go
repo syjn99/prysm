@@ -2,12 +2,15 @@ package electra
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/altair"
 	e "github.com/prysmaticlabs/prysm/v5/beacon-chain/core/epoch"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/epoch/precompute"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
+	"github.com/prysmaticlabs/prysm/v5/config/params"
+	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 	"go.opencensus.io/trace"
 )
@@ -46,80 +49,113 @@ var (
 //	    process_effective_balance_updates(state)
 //	    process_slashings_reset(state)
 //	    process_randao_mixes_reset(state)
-func ProcessEpoch(ctx context.Context, state state.BeaconState) (state.BeaconState, error) {
+func ProcessEpoch(ctx context.Context, state state.BeaconState) error {
 	_, span := trace.StartSpan(ctx, "electra.ProcessEpoch")
 	defer span.End()
 
 	if state == nil || state.IsNil() {
-		return nil, errors.New("nil state")
+		return errors.New("nil state")
 	}
 	vp, bp, err := InitializePrecomputeValidators(ctx, state)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	vp, bp, err = ProcessEpochParticipation(ctx, state, bp, vp)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	state, err = precompute.ProcessJustificationAndFinalizationPreCompute(state, bp)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not process justification")
+		return errors.Wrap(err, "could not process justification")
 	}
 	state, vp, err = ProcessInactivityScores(ctx, state, vp)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not process inactivity updates")
+		return errors.Wrap(err, "could not process inactivity updates")
 	}
 	state, err = ProcessRewardsAndPenaltiesPrecompute(state, bp, vp)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not process rewards and penalties")
+		return errors.Wrap(err, "could not process rewards and penalties")
 	}
-	state, err = ProcessRegistryUpdates(ctx, state)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not process registry updates")
+
+	if err := ProcessRegistryUpdates(ctx, state); err != nil {
+		return errors.Wrap(err, "could not process registry updates")
 	}
+
 	proportionalSlashingMultiplier, err := state.ProportionalSlashingMultiplier()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	state, err = ProcessSlashings(state, proportionalSlashingMultiplier)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	state, err = ProcessEth1DataReset(state)
 	if err != nil {
-		return nil, err
+		return err
 	}
+
 	if err = ProcessPendingBalanceDeposits(ctx, state, primitives.Gwei(bp.ActiveCurrentEpoch)); err != nil {
-		return nil, err
+		return err
 	}
-	if err := ProcessPendingConsolidations(ctx, state); err != nil {
-		return nil, err
+	if err = ProcessPendingConsolidations(ctx, state); err != nil {
+		return err
 	}
-	if err := ProcessEffectiveBalanceUpdates(state); err != nil {
-		return nil, err
+	if err = ProcessEffectiveBalanceUpdates(state); err != nil {
+		return err
 	}
+
 	state, err = ProcessSlashingsReset(state)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	state, err = ProcessRandaoMixesReset(state)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	state, err = ProcessHistoricalDataUpdate(state)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	state, err = ProcessParticipationFlagUpdates(state)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	state, err = ProcessSyncCommitteeUpdates(ctx, state)
+	_, err = ProcessSyncCommitteeUpdates(ctx, state)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return state, nil
+	return nil
+}
+
+// VerifyBlockDepositLength
+//
+// Spec definition:
+//
+//	# [Modified in Electra:EIP6110]
+//	  # Disable former deposit mechanism once all prior deposits are processed
+//	  eth1_deposit_index_limit = min(state.eth1_data.deposit_count, state.deposit_requests_start_index)
+//	  if state.eth1_deposit_index < eth1_deposit_index_limit:
+//	      assert len(body.deposits) == min(MAX_DEPOSITS, eth1_deposit_index_limit - state.eth1_deposit_index)
+//	  else:
+//	      assert len(body.deposits) == 0
+func VerifyBlockDepositLength(body interfaces.ReadOnlyBeaconBlockBody, state state.BeaconState) error {
+	eth1Data := state.Eth1Data()
+	requestsStartIndex, err := state.DepositRequestsStartIndex()
+	if err != nil {
+		return errors.Wrap(err, "failed to get requests start index")
+	}
+	eth1DepositIndexLimit := min(eth1Data.DepositCount, requestsStartIndex)
+	if state.Eth1DepositIndex() < eth1DepositIndexLimit {
+		if uint64(len(body.Deposits())) != min(params.BeaconConfig().MaxDeposits, eth1DepositIndexLimit-state.Eth1DepositIndex()) {
+			return fmt.Errorf("incorrect outstanding deposits in block body, wanted: %d, got: %d", min(params.BeaconConfig().MaxDeposits, eth1DepositIndexLimit-state.Eth1DepositIndex()), len(body.Deposits()))
+		}
+	} else {
+		if len(body.Deposits()) != 0 {
+			return fmt.Errorf("incorrect outstanding deposits in block body, wanted: %d, got: %d", 0, len(body.Deposits()))
+		}
+	}
+	return nil
 }

@@ -7,9 +7,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-	"go.opencensus.io/trace"
-
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/feed"
 	statefeed "github.com/prysmaticlabs/prysm/v5/beacon-chain/core/feed/state"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/transition"
@@ -17,6 +14,7 @@ import (
 	forkchoicetypes "github.com/prysmaticlabs/prysm/v5/beacon-chain/forkchoice/types"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
 	"github.com/prysmaticlabs/prysm/v5/config/features"
+	field_params "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
@@ -25,6 +23,8 @@ import (
 	ethpbv2 "github.com/prysmaticlabs/prysm/v5/proto/eth/v2"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+	"github.com/sirupsen/logrus"
+	"go.opencensus.io/trace"
 )
 
 // CurrentSlot returns the current slot based on time.
@@ -286,7 +286,7 @@ func (s *Service) getBlockPreState(ctx context.Context, b interfaces.ReadOnlyBea
 	defer span.End()
 
 	// Verify incoming block has a valid pre state.
-	if err := s.verifyBlkPreState(ctx, b); err != nil {
+	if err := s.verifyBlkPreState(ctx, b.ParentRoot()); err != nil {
 		return nil, err
 	}
 
@@ -312,11 +312,10 @@ func (s *Service) getBlockPreState(ctx context.Context, b interfaces.ReadOnlyBea
 }
 
 // verifyBlkPreState validates input block has a valid pre-state.
-func (s *Service) verifyBlkPreState(ctx context.Context, b interfaces.ReadOnlyBeaconBlock) error {
+func (s *Service) verifyBlkPreState(ctx context.Context, parentRoot [field_params.RootLength]byte) error {
 	ctx, span := trace.StartSpan(ctx, "blockChain.verifyBlkPreState")
 	defer span.End()
 
-	parentRoot := b.ParentRoot()
 	// Loosen the check to HasBlock because state summary gets saved in batches
 	// during initial syncing. There's no risk given a state summary object is just a
 	// subset of the block object.

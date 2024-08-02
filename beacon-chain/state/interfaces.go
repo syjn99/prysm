@@ -11,6 +11,7 @@ import (
 	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
+	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
 	enginev1 "github.com/prysmaticlabs/prysm/v5/proto/engine/v1"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 )
@@ -129,6 +130,7 @@ type ReadOnlyValidators interface {
 	ValidatorIndexByPubkey(key [fieldparams.BLSPubkeyLength]byte) (primitives.ValidatorIndex, bool)
 	PublicKeys() ([][fieldparams.BLSPubkeyLength]byte, error)
 	PubkeyAtIndex(idx primitives.ValidatorIndex) [fieldparams.BLSPubkeyLength]byte
+	AggregateKeyFromIndices(idxs []uint64) (bls.PublicKey, error)
 	NumValidators() int
 	ReadFromEveryValidator(f func(idx int, val ReadOnlyValidator) error) error
 }
@@ -198,6 +200,7 @@ type ReadOnlyWithdrawals interface {
 	NextWithdrawalIndex() (uint64, error)
 	PendingBalanceToWithdraw(idx primitives.ValidatorIndex) (uint64, error)
 	NumPendingPartialWithdrawals() (uint64, error)
+	HasPendingBalanceToWithdraw(idx primitives.ValidatorIndex) (bool, error)
 }
 
 // ReadOnlyParticipation defines a struct which only has read access to participation methods.
@@ -219,7 +222,7 @@ type ReadOnlySyncCommittee interface {
 
 type ReadOnlyDeposits interface {
 	DepositBalanceToConsume() (primitives.Gwei, error)
-	DepositReceiptsStartIndex() (uint64, error)
+	DepositRequestsStartIndex() (uint64, error)
 	PendingBalanceDeposits() ([]*ethpb.PendingBalanceDeposit, error)
 }
 
@@ -327,7 +330,7 @@ type WriteOnlyConsolidations interface {
 
 type WriteOnlyDeposits interface {
 	AppendPendingBalanceDeposit(index primitives.ValidatorIndex, amount uint64) error
-	SetDepositReceiptsStartIndex(index uint64) error
+	SetDepositRequestsStartIndex(index uint64) error
 	SetPendingBalanceDeposits(val []*ethpb.PendingBalanceDeposit) error
 	SetDepositBalanceToConsume(primitives.Gwei) error
 }
