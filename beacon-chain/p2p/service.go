@@ -215,14 +215,14 @@ func (s *Service) Start() {
 	s.started = true
 
 	if len(s.cfg.StaticPeers) > 0 {
-		addrs, err := PeersFromStringAddrs(s.cfg.StaticPeers)
+		addrInfos, err := ParseGenericAddrs(s.cfg.StaticPeers)
 		if err != nil {
-			log.WithError(err).Error("could not convert ENR to multiaddr")
+			log.WithError(err).Error("Could not convert raw peer addresses to address infos")
 		}
 		// Set trusted peers for those that are provided as static addresses.
-		pids := peerIdsFromMultiAddrs(addrs)
+		pids := peerIdsFromAddrInfos(addrInfos)
 		s.peers.SetTrustedPeers(pids)
-		s.connectWithAllTrustedPeers(addrs)
+		s.connectWithAllTrustedPeers(addrInfos)
 	}
 	// Initialize metadata according to the
 	// current epoch.
@@ -421,12 +421,7 @@ func (s *Service) awaitStateInitialized() {
 	}
 }
 
-func (s *Service) connectWithAllTrustedPeers(multiAddrs []multiaddr.Multiaddr) {
-	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
-	if err != nil {
-		log.WithError(err).Error("Could not convert to peer address info's from multiaddresses")
-		return
-	}
+func (s *Service) connectWithAllTrustedPeers(addrInfos []peer.AddrInfo) {
 	for _, info := range addrInfos {
 		// add peer into peer status
 		s.peers.Add(nil, info.ID, info.Addrs[0], network.DirUnknown)

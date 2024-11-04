@@ -537,10 +537,11 @@ func (s *Service) wantedPeerDials() int {
 	return wantedCount
 }
 
-// PeersFromStringAddrs converts peer raw ENRs into multiaddrs for p2p.
-func PeersFromStringAddrs(addrs []string) ([]ma.Multiaddr, error) {
+// ParseGenericAddrs parses a list of generic addresses into a list of peer.AddrInfo.
+// The generic addresses can be either 1) enode strings , 2) multiaddresses, or 3) enr strings.
+func ParseGenericAddrs(addrs []string) ([]peer.AddrInfo, error) {
 	var allAddrs []ma.Multiaddr
-	enodeString, multiAddrString := parseGenericAddrs(addrs)
+	enodeString, multiAddrString := classifyAddrs(addrs)
 	for _, stringAddr := range multiAddrString {
 		addr, err := multiAddrFromString(stringAddr)
 		if err != nil {
@@ -559,18 +560,24 @@ func PeersFromStringAddrs(addrs []string) ([]ma.Multiaddr, error) {
 		}
 		allAddrs = append(allAddrs, nodeAddrs...)
 	}
-	return allAddrs, nil
+	
+	addrInfos, err := peer.AddrInfosFromP2pAddrs(allAddrs...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Could not derive addr info from multiaddress")
+	}
+	return addrInfos, nil
 }
 
 func ParseBootStrapAddrs(addrs []string) (discv5Nodes []string) {
-	discv5Nodes, _ = parseGenericAddrs(addrs)
+	discv5Nodes, _ = classifyAddrs(addrs)
 	if len(discv5Nodes) == 0 {
 		log.Warn("No bootstrap addresses supplied")
 	}
 	return discv5Nodes
 }
 
-func parseGenericAddrs(addrs []string) (enodeString, multiAddrString []string) {
+// classifyAddrs tries to parse the given address and classify them into enode and multiaddr strings.
+func classifyAddrs(addrs []string) (enodeString, multiAddrString []string) {
 	for _, addr := range addrs {
 		if addr == "" {
 			// Ignore empty entries
@@ -759,19 +766,13 @@ func convertToUdpMultiAddr(node *enode.Node) ([]ma.Multiaddr, error) {
 	return addresses, nil
 }
 
-func peerIdsFromMultiAddrs(addrs []ma.Multiaddr) []peer.ID {
-	var peers []peer.ID
-	for _, a := range addrs {
-		info, err := peer.AddrInfoFromP2pAddr(a)
-		if err != nil {
-			log.WithError(err).Errorf("Could not derive peer info from multiaddress %s", a.String())
-			continue
-		}
-		peers = append(peers, info.ID)
+func peerIdsFromAddrInfos(addrInfos []peer.AddrInfo) []peer.ID {
+	peerIds := make([]peer.ID, 0, len(addrInfos))
+	for _, info := range addrInfos {
+		peerIds = append(peerIds, info.ID)
 	}
-	return peers
+	return peerIds
 }
-
 func multiAddrFromString(address string) (ma.Multiaddr, error) {
 	return ma.NewMultiaddr(address)
 }
