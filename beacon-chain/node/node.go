@@ -674,7 +674,7 @@ func (b *BeaconNode) registerP2P(cliCtx *cli.Context) error {
 	svc, err := p2p.NewService(b.ctx, &p2p.Config{
 		NoDiscovery:          cliCtx.Bool(cmd.NoDiscovery.Name),
 		StaticPeers:          slice.SplitCommaSeparated(cliCtx.StringSlice(cmd.StaticPeers.Name)),
-		Discv5BootStrapAddrs: p2p.ParseBootStrapAddrs(bootstrapNodeAddrs),
+		Discv5BootStrapAddrs: bootstrapNodeAddrs,
 		RelayNodeAddr:        cliCtx.String(cmd.RelayNode.Name),
 		DataDir:              dataDir,
 		LocalIP:              cliCtx.String(cmd.P2PIP.Name),
