@@ -538,7 +538,7 @@ func (s *Service) wantedPeerDials() int {
 }
 
 // ParseGenericAddrs parses a list of generic addresses into a list of peer.AddrInfo.
-// The generic addresses can be either 1) enode strings , 2) multiaddresses, or 3) enr strings.
+// The generic addresses can be either 1) enode strings, 2) multiaddresses, or 3) enr strings.
 func ParseGenericAddrs(addrs []string) ([]peer.AddrInfo, error) {
 	var allAddrs []ma.Multiaddr
 	enodeString, multiAddrString := classifyAddrs(addrs)
