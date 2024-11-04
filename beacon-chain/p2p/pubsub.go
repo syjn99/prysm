@@ -156,7 +156,7 @@ func (s *Service) pubsubOptions() []pubsub.Option {
 		}
 		if len(peerInfos) > 0 {
 			psOpts = append(psOpts, pubsub.WithDirectPeers(peerInfos))
-		}	
+		}
 	}
 
 	return psOpts

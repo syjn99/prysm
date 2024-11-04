@@ -222,7 +222,8 @@ func (s *Service) Start() {
 		// Set trusted peers for those that are provided as static addresses.
 		pids := peerIdsFromAddrInfos(addrInfos)
 		s.peers.SetTrustedPeers(pids)
-		s.connectWithAllTrustedPeers(addrInfos)
+		s.addPeerIntoStatus(addrInfos)
+		s.connectWithAllPeers(addrInfos)
 	}
 	// Initialize metadata according to the
 	// current epoch.
@@ -421,25 +422,13 @@ func (s *Service) awaitStateInitialized() {
 	}
 }
 
-func (s *Service) connectWithAllTrustedPeers(addrInfos []peer.AddrInfo) {
+func (s *Service) addPeerIntoStatus(addrInfos []peer.AddrInfo) {
 	for _, info := range addrInfos {
-		// add peer into peer status
 		s.peers.Add(nil, info.ID, info.Addrs[0], network.DirUnknown)
-		// make each dial non-blocking
-		go func(info peer.AddrInfo) {
-			if err := s.connectWithPeer(s.ctx, info); err != nil {
-				log.WithError(err).Tracef("Could not connect with peer %s", info.String())
-			}
-		}(info)
 	}
 }
 
-func (s *Service) connectWithAllPeers(multiAddrs []multiaddr.Multiaddr) {
-	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
-	if err != nil {
-		log.WithError(err).Error("Could not convert to peer address info's from multiaddresses")
-		return
-	}
+func (s *Service) connectWithAllPeers(addrInfos []peer.AddrInfo) {
 	for _, info := range addrInfos {
 		// make each dial non-blocking
 		go func(info peer.AddrInfo) {
@@ -474,7 +463,8 @@ func (s *Service) connectToBootnodes() error {
 	for _, addr := range s.cfg.Discv5BootStrapAddrs {
 		bootNode, err := enode.Parse(enode.ValidSchemes, addr)
 		if err != nil {
-			return err
+			log.WithError(err).Error("Could not parse bootnode address")
+			continue
 		}
 		// do not dial bootnodes with their tcp ports not set
 		if err := bootNode.Record().Load(enr.WithEntry("tcp", new(enr.TCP))); err != nil {
@@ -485,8 +475,17 @@ func (s *Service) connectToBootnodes() error {
 		}
 		nodes = append(nodes, bootNode)
 	}
-	multiAddresses := convertToMultiAddr(nodes)
-	s.connectWithAllPeers(multiAddresses)
+	if len(nodes) == 0 {
+		log.Warn("No bootstrap addresses supplied")
+		return nil
+	}
+	multiAddrs := convertToMultiAddr(nodes)
+	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
+	if err != nil {
+		log.WithError(err).Error("Could not convert to peer address info's from multiaddresses")
+		return nil
+	}
+	s.connectWithAllPeers(addrInfos)
 	return nil
 }
 

@@ -560,20 +560,12 @@ func ParseGenericAddrs(addrs []string) ([]peer.AddrInfo, error) {
 		}
 		allAddrs = append(allAddrs, nodeAddrs...)
 	}
-	
+
 	addrInfos, err := peer.AddrInfosFromP2pAddrs(allAddrs...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Could not derive addr info from multiaddress")
 	}
 	return addrInfos, nil
-}
-
-func ParseBootStrapAddrs(addrs []string) (discv5Nodes []string) {
-	discv5Nodes, _ = classifyAddrs(addrs)
-	if len(discv5Nodes) == 0 {
-		log.Warn("No bootstrap addresses supplied")
-	}
-	return discv5Nodes
 }
 
 // classifyAddrs tries to parse the given address and classify them into enode and multiaddr strings.
