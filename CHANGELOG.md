@@ -110,6 +110,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - P2P: Avoid infinite loop when looking for peers in small networks.
 - Fixed another rollback bug due to a context deadline.
 - Fix checkpoint sync bug on holesky. [pr](https://github.com/prysmaticlabs/prysm/pull/14689)
+- Fixed deposit packing for post-Electra: early return if EIP-6110 is applied.
 
 
 ### Security
@@ -1701,7 +1702,7 @@ Aside from the critical fixes for mainnet, this release contains a number of new
 - Use next slot cache for payload attribute
 - Cleanup keymanager mock
 - Update to go 1.20
-- Modify InsertFinalizedDeposits signature to return an error
+  - Modify InsertFinalizedDeposits signature to return an error
 - Improved statefeed initialization
 - Use v1alpha1 server in block production
 - Updated go generated files
