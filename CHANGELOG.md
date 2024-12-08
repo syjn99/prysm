@@ -75,6 +75,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Made QUIC the default method to connect with peers.
 - Check kzg commitments align with blobs and proofs for beacon api end point.
 - Increase Max Payload Size in Gossip.
+- Fixed to print a log(`Finished building block`) only when succeeded.
 
 ### Deprecated
 
@@ -437,7 +438,6 @@ block profit. If you want to preserve the existing behavior, set --local-block-v
 - Set default LocalBlockValueBoost to 10
 - Add bid value metrics
 - REST VC metrics
-- `startDB`: Add log when checkpoint sync.
 
 ### Changed
 
