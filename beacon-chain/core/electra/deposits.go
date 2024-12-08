@@ -564,8 +564,8 @@ func ProcessDepositRequests(ctx context.Context, beaconState state.BeaconState, 
 	}
 
 	var err error
-	for _, receipt := range requests {
-		beaconState, err = processDepositRequest(beaconState, receipt)
+	for _, request := range requests {
+		beaconState, err = processDepositRequest(beaconState, request)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not apply deposit request")
 		}
