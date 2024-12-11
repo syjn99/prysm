@@ -32,6 +32,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Added a Prometheus error counter metric for HTTP requests to track beacon node requests.
 - Added a Prometheus error counter metric for SSE requests.
 - Save light client updates and bootstraps in DB.
+- Added an error field to log `Finished building block`.
 
 ### Changed
 
@@ -75,7 +76,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Made QUIC the default method to connect with peers.
 - Check kzg commitments align with blobs and proofs for beacon api end point.
 - Increase Max Payload Size in Gossip.
-- Fixed to print a log(`Finished building block`) only when succeeded.
 
 ### Deprecated
 
@@ -438,6 +438,7 @@ block profit. If you want to preserve the existing behavior, set --local-block-v
 - Set default LocalBlockValueBoost to 10
 - Add bid value metrics
 - REST VC metrics
+- `startDB`: Add log when checkpoint sync.
 
 ### Changed
 
