@@ -3,8 +3,9 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	mathRand "math/rand"
 	"net"
 	"os"
 	"path"
@@ -48,7 +49,7 @@ func createAddrAndPrivKey(t *testing.T) (net.IP, *ecdsa.PrivateKey) {
 	require.NoError(t, err, "Could not get ip")
 	ipAddr := net.ParseIP(ip)
 	temp := t.TempDir()
-	randNum := rand.Int()
+	randNum := mathRand.Int()
 	tempPath := path.Join(temp, strconv.Itoa(randNum))
 	require.NoError(t, os.Mkdir(tempPath, 0700))
 	pkey, err := privKey(&Config{DataDir: tempPath})
@@ -133,9 +134,6 @@ func TestStartDiscV5_DiscoverAllPeers(t *testing.T) {
 
 func TestCreateLocalNode(t *testing.T) {
 	params.SetupTestConfigCleanup(t)
-	cfg := params.BeaconConfig()
-	cfg.Eip7594ForkEpoch = 1
-	params.OverrideBeaconConfig(cfg)
 	testCases := []struct {
 		name          string
 		cfg           *Config
@@ -606,16 +604,12 @@ func TestRefreshPersistentSubnets(t *testing.T) {
 	defer cache.SubnetIDs.EmptyAllCaches()
 	defer cache.SyncSubnetIDs.EmptyAllCaches()
 
-	const (
-		altairForkEpoch  = 5
-		eip7594ForkEpoch = 10
-	)
+	const altairForkEpoch = 5
 
 	// Set up epochs.
 	defaultCfg := params.BeaconConfig()
 	cfg := defaultCfg.Copy()
 	cfg.AltairForkEpoch = altairForkEpoch
-	cfg.Eip7594ForkEpoch = eip7594ForkEpoch
 	params.OverrideBeaconConfig(cfg)
 
 	// Compute the number of seconds per epoch.

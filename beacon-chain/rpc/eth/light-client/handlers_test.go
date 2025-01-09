@@ -19,6 +19,7 @@ import (
 	dbtesting "github.com/prysmaticlabs/prysm/v5/beacon-chain/db/testing"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/testutil"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
+	"github.com/prysmaticlabs/prysm/v5/config/features"
 	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
@@ -33,6 +34,11 @@ import (
 )
 
 func TestLightClientHandler_GetLightClientBootstrap(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	params.SetupTestConfigCleanup(t)
 	cfg := params.BeaconConfig()
 	cfg.AltairForkEpoch = 0
@@ -40,6 +46,7 @@ func TestLightClientHandler_GetLightClientBootstrap(t *testing.T) {
 	cfg.CapellaForkEpoch = 2
 	cfg.DenebForkEpoch = 3
 	cfg.ElectraForkEpoch = 4
+	cfg.FuluForkEpoch = 5
 	params.OverrideBeaconConfig(cfg)
 
 	t.Run("altair", func(t *testing.T) {
@@ -247,11 +254,57 @@ func TestLightClientHandler_GetLightClientBootstrap(t *testing.T) {
 		require.NotNil(t, resp.Data.CurrentSyncCommittee)
 		require.NotNil(t, resp.Data.CurrentSyncCommitteeBranch)
 	})
+	t.Run("fulu", func(t *testing.T) {
+		l := util.NewTestLightClient(t).SetupTestFulu(false) // result is same for true and false
+
+		slot := primitives.Slot(params.BeaconConfig().FuluForkEpoch * primitives.Epoch(params.BeaconConfig().SlotsPerEpoch)).Add(1)
+		blockRoot, err := l.Block.Block().HashTreeRoot()
+		require.NoError(t, err)
+
+		mockBlocker := &testutil.MockBlocker{BlockToReturn: l.Block}
+		mockChainService := &mock.ChainService{Optimistic: true, Slot: &slot}
+		mockChainInfoFetcher := &mock.ChainService{Slot: &slot}
+		s := &Server{
+			Stater: &testutil.MockStater{StatesBySlot: map[primitives.Slot]state.BeaconState{
+				slot: l.State,
+			}},
+			Blocker:          mockBlocker,
+			HeadFetcher:      mockChainService,
+			ChainInfoFetcher: mockChainInfoFetcher,
+		}
+		request := httptest.NewRequest("GET", "http://foo.com/", nil)
+		request.SetPathValue("block_root", hexutil.Encode(blockRoot[:]))
+		writer := httptest.NewRecorder()
+		writer.Body = &bytes.Buffer{}
+
+		s.GetLightClientBootstrap(writer, request)
+		require.Equal(t, http.StatusOK, writer.Code)
+		var resp structs.LightClientBootstrapResponse
+		err = json.Unmarshal(writer.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		var respHeader structs.LightClientHeader
+		err = json.Unmarshal(resp.Data.Header, &respHeader)
+		require.NoError(t, err)
+		require.Equal(t, "electra", resp.Version)
+
+		blockHeader, err := l.Block.Header()
+		require.NoError(t, err)
+		require.Equal(t, hexutil.Encode(blockHeader.Header.BodyRoot), respHeader.Beacon.BodyRoot)
+		require.Equal(t, strconv.FormatUint(uint64(blockHeader.Header.Slot), 10), respHeader.Beacon.Slot)
+
+		require.NotNil(t, resp.Data.CurrentSyncCommittee)
+		require.NotNil(t, resp.Data.CurrentSyncCommitteeBranch)
+	})
 }
 
 // GetLightClientByRange tests
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeAltair(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 
@@ -301,6 +354,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeAltair(t *testing.T) {
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeCapella(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -350,6 +408,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeCapella(t *testing.T) {
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeDeneb(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -399,6 +462,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeDeneb(t *testing.T) {
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleAltair(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -458,6 +526,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleAltair(t *testin
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleCapella(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -518,6 +591,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleCapella(t *testi
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleDeneb(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -578,6 +656,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleDeneb(t *testing
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleForksAltairCapella(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -646,6 +729,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleForksAltairCapel
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleForksCapellaDeneb(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -715,6 +803,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeMultipleForksCapellaDene
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeCountBiggerThanLimit(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -777,6 +870,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeCountBiggerThanLimit(t *
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeCountBiggerThanMax(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -838,35 +936,22 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeCountBiggerThanMax(t *te
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeStartPeriodBeforeAltair(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
-	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
 	config := params.BeaconConfig()
 	config.AltairForkEpoch = 1
 	config.EpochsPerSyncCommitteePeriod = 1
 	params.OverrideBeaconConfig(config)
-	slot := primitives.Slot(config.AltairForkEpoch * primitives.Epoch(config.SlotsPerEpoch)).Add(1)
-
-	st, err := util.NewBeaconStateAltair()
-	require.NoError(t, err)
-	headSlot := slot.Add(1)
-	err = st.SetSlot(headSlot)
-	require.NoError(t, err)
 
 	db := dbtesting.SetupDB(t)
 
-	updatePeriod := slot.Div(uint64(config.EpochsPerSyncCommitteePeriod)).Div(uint64(config.SlotsPerEpoch))
-
-	update, err := createUpdate(t, version.Altair)
-	require.NoError(t, err)
-
-	err = db.SaveLightClientUpdate(ctx, uint64(updatePeriod), update)
-	require.NoError(t, err)
-
-	mockChainService := &mock.ChainService{State: st}
 	s := &Server{
-		HeadFetcher: mockChainService,
-		BeaconDB:    db,
+		BeaconDB: db,
 	}
 	startPeriod := 0
 	url := fmt.Sprintf("http://foo.com/?count=2&start_period=%d", startPeriod)
@@ -878,18 +963,17 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeStartPeriodBeforeAltair(
 
 	require.Equal(t, http.StatusOK, writer.Code)
 	var resp structs.LightClientUpdatesByRangeResponse
-	err = json.Unmarshal(writer.Body.Bytes(), &resp.Updates)
+	err := json.Unmarshal(writer.Body.Bytes(), &resp.Updates)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(resp.Updates))
-
-	require.Equal(t, "altair", resp.Updates[0].Version)
-	updateJson, err := structs.LightClientUpdateFromConsensus(update)
-	require.NoError(t, err)
-	require.DeepEqual(t, updateJson, resp.Updates[0].Data)
-
+	require.Equal(t, 0, len(resp.Updates))
 }
 
 func TestLightClientHandler_GetLightClientUpdatesByRangeMissingUpdates(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	params.SetupTestConfigCleanup(t)
@@ -996,6 +1080,11 @@ func TestLightClientHandler_GetLightClientUpdatesByRangeMissingUpdates(t *testin
 }
 
 func TestLightClientHandler_GetLightClientFinalityUpdate(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	config := params.BeaconConfig()
@@ -1108,6 +1197,11 @@ func TestLightClientHandler_GetLightClientFinalityUpdate(t *testing.T) {
 }
 
 func TestLightClientHandler_GetLightClientOptimisticUpdateAltair(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	config := params.BeaconConfig()
@@ -1220,6 +1314,11 @@ func TestLightClientHandler_GetLightClientOptimisticUpdateAltair(t *testing.T) {
 }
 
 func TestLightClientHandler_GetLightClientOptimisticUpdateCapella(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	config := params.BeaconConfig()
@@ -1332,6 +1431,11 @@ func TestLightClientHandler_GetLightClientOptimisticUpdateCapella(t *testing.T) 
 }
 
 func TestLightClientHandler_GetLightClientOptimisticUpdateDeneb(t *testing.T) {
+	resetFn := features.InitWithReset(&features.Flags{
+		EnableLightClient: true,
+	})
+	defer resetFn()
+
 	helpers.ClearCache()
 	ctx := context.Background()
 	config := params.BeaconConfig()
@@ -1759,7 +1863,7 @@ func createUpdate(t *testing.T, v int) (interfaces.LightClientUpdate, error) {
 				StateRoot:     sampleRoot,
 				BodyRoot:      sampleRoot,
 			},
-			Execution: &enginev1.ExecutionPayloadHeaderElectra{
+			Execution: &enginev1.ExecutionPayloadHeaderDeneb{
 				ParentHash:       make([]byte, fieldparams.RootLength),
 				FeeRecipient:     make([]byte, fieldparams.FeeRecipientLength),
 				StateRoot:        make([]byte, fieldparams.RootLength),
@@ -1776,6 +1880,34 @@ func createUpdate(t *testing.T, v int) (interfaces.LightClientUpdate, error) {
 		})
 		require.NoError(t, err)
 		st, err = util.NewBeaconStateElectra()
+		require.NoError(t, err)
+	case version.Fulu:
+		slot = primitives.Slot(config.FuluForkEpoch * primitives.Epoch(config.SlotsPerEpoch)).Add(1)
+		header, err = light_client.NewWrappedHeader(&pb.LightClientHeaderDeneb{
+			Beacon: &pb.BeaconBlockHeader{
+				Slot:          1,
+				ProposerIndex: primitives.ValidatorIndex(rand.Int()),
+				ParentRoot:    sampleRoot,
+				StateRoot:     sampleRoot,
+				BodyRoot:      sampleRoot,
+			},
+			Execution: &enginev1.ExecutionPayloadHeaderDeneb{
+				ParentHash:       make([]byte, fieldparams.RootLength),
+				FeeRecipient:     make([]byte, fieldparams.FeeRecipientLength),
+				StateRoot:        make([]byte, fieldparams.RootLength),
+				ReceiptsRoot:     make([]byte, fieldparams.RootLength),
+				LogsBloom:        make([]byte, fieldparams.LogsBloomLength),
+				PrevRandao:       make([]byte, fieldparams.RootLength),
+				ExtraData:        make([]byte, 0),
+				BaseFeePerGas:    make([]byte, fieldparams.RootLength),
+				BlockHash:        make([]byte, fieldparams.RootLength),
+				TransactionsRoot: make([]byte, fieldparams.RootLength),
+				WithdrawalsRoot:  make([]byte, fieldparams.RootLength),
+			},
+			ExecutionBranch: sampleExecutionBranch,
+		})
+		require.NoError(t, err)
+		st, err = util.NewBeaconStateFulu()
 		require.NoError(t, err)
 	default:
 		return nil, fmt.Errorf("unsupported version %s", version.String(v))
