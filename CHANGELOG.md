@@ -1784,7 +1784,7 @@ Aside from the critical fixes for mainnet, this release contains a number of new
 - Use next slot cache for payload attribute
 - Cleanup keymanager mock
 - Update to go 1.20
-  - Modify InsertFinalizedDeposits signature to return an error
+- Modify InsertFinalizedDeposits signature to return an error
 - Improved statefeed initialization
 - Use v1alpha1 server in block production
 - Updated go generated files
