@@ -136,7 +136,6 @@ Notable features:
 - Fix segmentation fault in E2E when light-client feature flag is enabled. [PR](https://github.com/prysmaticlabs/prysm/pull/14699)
 - Fix `searchForPeers` infinite loop in small networks.
 - Fix slashing pool behavior to enforce MaxAttesterSlashings limit in Electra version.
-- Fixed deposit packing for post-Electra: early return if EIP-6110 is applied.
 
 
 ### Security
