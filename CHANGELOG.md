@@ -137,7 +137,6 @@ Notable features:
 - Fix `searchForPeers` infinite loop in small networks.
 - Fix slashing pool behavior to enforce MaxAttesterSlashings limit in Electra version.
 
-
 ### Security
 
 ## [v5.1.2](https://github.com/prysmaticlabs/prysm/compare/v5.1.1...v5.1.2) - 2024-10-16 
