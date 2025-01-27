@@ -591,6 +591,12 @@ func (s *Service) insertFinalizedDeposits(ctx context.Context, fRoot [32]byte) {
 	log.WithField("duration", time.Since(startTime).String()).Debugf("Finalized deposit insertion completed at index %d", finalizedEth1DepIdx)
 }
 
+// pruneAllPendingDeposits prunes all proofs and pending deposits in the cache.
+func (s *Service) pruneAllPendingDeposits(ctx context.Context) {
+	s.cfg.DepositCache.PruneAllPendingDeposits(ctx)
+	s.cfg.DepositCache.PruneAllProofs(ctx)
+}
+
 // This ensures that the input root defaults to using genesis root instead of zero hashes. This is needed for handling
 // fork choice justification routine.
 func (s *Service) ensureRootNotZeros(root [32]byte) [32]byte {

@@ -278,11 +278,25 @@ func (s *Service) executePostFinalizationTasks(ctx context.Context, finalizedSta
 	go func() {
 		s.sendNewFinalizedEvent(ctx, finalizedState)
 	}()
-	depCtx, cancel := context.WithTimeout(context.Background(), depositDeadline)
-	go func() {
-		s.insertFinalizedDeposits(depCtx, finalized.Root)
-		cancel()
-	}()
+
+	// Check if we should prune all pending deposits.
+	// In post-Electra(after the legacy deposit mechanism is deprecated),
+	// we can prune all pending deposits in the deposit cache.
+	shouldPruneAll := false
+	requestsStartIndex, err := finalizedState.DepositRequestsStartIndex()
+	if err == nil {
+		shouldPruneAll = finalizedState.Eth1DepositIndex() == requestsStartIndex
+	}
+
+	if shouldPruneAll {
+		s.pruneAllPendingDeposits(ctx)
+	} else {
+		depCtx, cancel := context.WithTimeout(context.Background(), depositDeadline)
+		go func() {
+			s.insertFinalizedDeposits(depCtx, finalized.Root)
+			cancel()
+		}()
+	}
 }
 
 // ReceiveBlockBatch processes the whole block batch at once, assuming the block batch is linear ,transitioning
