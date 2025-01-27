@@ -209,6 +209,26 @@ func (c *Cache) PruneProofs(ctx context.Context, untilDepositIndex int64) error 
 	return nil
 }
 
+// PruneAllProofs removes proofs from all deposits.
+// As EIP-6110 applies and the legacy deposit mechanism is deprecated,
+// proofs in deposit snapshot are no longer needed.
+// See: https://eips.ethereum.org/EIPS/eip-6110#eth1data-poll-deprecation
+func (c *Cache) PruneAllProofs(ctx context.Context) {
+	_, span := trace.StartSpan(ctx, "Cache.PruneAllProofs")
+	defer span.End()
+
+	c.depositsLock.Lock()
+	defer c.depositsLock.Unlock()
+
+	for i := len(c.deposits) - 1; i >= 0; i-- {
+		if c.deposits[i].Deposit.Proof == nil {
+			break
+		}
+		c.deposits[i].Deposit.Proof = nil
+		prunedProofsCount.Inc()
+	}
+}
+
 // PrunePendingDeposits removes any deposit which is older than the given deposit merkle tree index.
 func (c *Cache) PrunePendingDeposits(ctx context.Context, merkleTreeIndex int64) {
 	_, span := trace.StartSpan(ctx, "Cache.PrunePendingDeposits")
@@ -235,6 +255,24 @@ func (c *Cache) PrunePendingDeposits(ctx context.Context, merkleTreeIndex int64)
 
 	c.pendingDeposits = cleanDeposits
 	pendingDepositsCount.Set(float64(len(c.pendingDeposits)))
+}
+
+// PruneAllPendingDeposits removes all pending deposits from the cache.
+// As EIP-6110 applies and the legacy deposit mechanism is deprecated,
+// pending deposits in deposit snapshot are no longer needed.
+// See: https://eips.ethereum.org/EIPS/eip-6110#eth1data-poll-deprecation
+func (c *Cache) PruneAllPendingDeposits(ctx context.Context) {
+	_, span := trace.StartSpan(ctx, "Cache.PruneAllPendingDeposits")
+	defer span.End()
+
+	c.depositsLock.Lock()
+	defer c.depositsLock.Unlock()
+
+	prunedCount := len(c.pendingDeposits)
+	prunedPendingDepositsCount.Add(float64(prunedCount))
+
+	c.pendingDeposits = make([]*ethpb.DepositContainer, 0)
+	pendingDepositsCount.Set(float64(0))
 }
 
 // InsertPendingDeposit into the database. If deposit or block number are nil
