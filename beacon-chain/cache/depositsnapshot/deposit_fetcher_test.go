@@ -108,3 +108,21 @@ func TestPrunePendingDeposits_OK(t *testing.T) {
 
 	assert.DeepEqual(t, expected, dc.pendingDeposits)
 }
+
+func TestPruneAllPendingDeposits(t *testing.T) {
+	dc := Cache{}
+
+	dc.pendingDeposits = []*ethpb.DepositContainer{
+		{Eth1BlockHeight: 2, Index: 2},
+		{Eth1BlockHeight: 4, Index: 4},
+		{Eth1BlockHeight: 6, Index: 6},
+		{Eth1BlockHeight: 8, Index: 8},
+		{Eth1BlockHeight: 10, Index: 10},
+		{Eth1BlockHeight: 12, Index: 12},
+	}
+
+	dc.PruneAllPendingDeposits(context.Background())
+	expected := []*ethpb.DepositContainer{}
+
+	assert.DeepEqual(t, expected, dc.pendingDeposits)
+}
