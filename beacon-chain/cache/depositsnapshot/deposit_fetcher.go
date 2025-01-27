@@ -21,6 +21,14 @@ var (
 		Name: "beacondb_pending_deposits_eip4881",
 		Help: "The number of pending deposits in memory",
 	})
+	prunedProofsCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "beacondb_pruned_proofs_eip4881",
+		Help: "The number of pruned proofs",
+	})
+	prunedPendingDepositsCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "beacondb_pruned_pending_deposits_eip4881",
+		Help: "The number of pruned pending deposits",
+	})
 )
 
 // Cache stores all in-memory deposit objects. This
@@ -195,6 +203,7 @@ func (c *Cache) PruneProofs(ctx context.Context, untilDepositIndex int64) error 
 			break
 		}
 		c.deposits[i].Deposit.Proof = nil
+		prunedProofsCount.Inc()
 	}
 
 	return nil
@@ -219,6 +228,10 @@ func (c *Cache) PrunePendingDeposits(ctx context.Context, merkleTreeIndex int64)
 			cleanDeposits = append(cleanDeposits, dp)
 		}
 	}
+
+	// Add pruned count to prom metric
+	prunedCount := len(c.pendingDeposits) - len(cleanDeposits)
+	prunedPendingDepositsCount.Add(float64(prunedCount))
 
 	c.pendingDeposits = cleanDeposits
 	pendingDepositsCount.Set(float64(len(c.pendingDeposits)))
