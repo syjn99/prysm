@@ -44,5 +44,3 @@ func TestPendingDeposits_OK(t *testing.T) {
 	all := dc.PendingDeposits(context.Background(), nil)
 	assert.Equal(t, len(dc.pendingDeposits), len(all), "PendingDeposits(ctx, nil) did not return all deposits")
 }
-
-
