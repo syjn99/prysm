@@ -282,6 +282,7 @@ func (s *Service) executePostFinalizationTasks(ctx context.Context, finalizedSta
 	// Check if we should prune all pending deposits.
 	// In post-Electra(after the legacy deposit mechanism is deprecated),
 	// we can prune all pending deposits in the deposit cache.
+	// See: https://eips.ethereum.org/EIPS/eip-6110#eth1data-poll-deprecation
 	shouldPruneAll := false
 	requestsStartIndex, err := finalizedState.DepositRequestsStartIndex()
 	if err == nil {
