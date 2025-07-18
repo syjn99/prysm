@@ -1266,6 +1266,17 @@ func (s *Service) prysmBeaconEndpoints(
 			handler: server.PublishBlobs,
 			methods: []string{http.MethodPost},
 		},
+		{
+			template: "/prysm/v1/beacon/states/{state_id}/query",
+			name:     namespace + ".QuerySSZ",
+			middleware: []middleware.Middleware{
+				middleware.ContentTypeHandler([]string{api.JsonMediaType}),
+				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
+				middleware.AcceptEncodingHeaderHandler(),
+			},
+			handler: server.QuerySSZ,
+			methods: []string{http.MethodPost},
+		},
 	}
 }
 
