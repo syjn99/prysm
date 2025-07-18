@@ -296,3 +296,31 @@ type GetBlobsResponse struct {
 	Finalized           bool     `json:"finalized"`
 	Data                []string `json:"data"` //blobs
 }
+
+type QuerySSZRequest struct {
+	Query        []*QueryObject `json:"query"`
+	IncludeProof bool           `json:"include_proof,omitempty"`
+	IsMultiproof bool           `json:"multiproof,omitempty"`
+}
+
+type QueryObject struct {
+	Path string `json:"path"`
+}
+
+type QuerySSZResponse struct {
+	Version             string        `json:"version"`
+	ExecutionOptimistic bool          `json:"execution_optimistic"`
+	Finalized           bool          `json:"finalized"`
+	Data                *QuerySSZData `json:"data"`
+}
+
+type QuerySSZData struct {
+	Result []*QueryResultItem `json:"result"`
+	Root   string             `json:"root"`
+}
+
+type QueryResultItem struct {
+	Path  string          `json:"path"`
+	Value json.RawMessage `json:"value"` // Can be any type.
+	Proof []string        `json:"proof"` // Empty array if `IncludeProof` is false.
+}
