@@ -41,6 +41,18 @@ func (info *sszInfo) FixedSize() uint64 {
 	return info.fixedSize
 }
 
+func (info *sszInfo) FieldInfos() (map[string]*fieldInfo, error) {
+	if info == nil {
+		return nil, fmt.Errorf("sszInfo is nil")
+	}
+
+	if info.fieldInfos == nil {
+		return nil, fmt.Errorf("sszInfo.fieldInfos is nil")
+	}
+
+	return info.fieldInfos, nil
+}
+
 func (info *sszInfo) UnmarshalFromSSZ(data []byte) (any, error) {
 	if info == nil || info.typ == nil {
 		return nil, fmt.Errorf("sszInfo or its type is nil")

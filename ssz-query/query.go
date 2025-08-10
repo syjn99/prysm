@@ -46,10 +46,15 @@ func CalculateOffsetAndLength(sszInfo *sszInfo, path []PathElement) (*sszInfo, u
 	currentOffset := uint64(0)
 
 	for _, elem := range path {
-		fieldInfo, exists := walk.fieldInfos[elem.Name]
-		if !exists {
+		fieldInfos, err := walk.FieldInfos()
+		if err != nil {
 			// TODO: This logic is only for accessing the field in SSZ container types.
-			return nil, 0, 0, fmt.Errorf("field %s not found in fieldOffsets", elem.Name)
+			return nil, 0, 0, fmt.Errorf("get field infos: %w", err)
+		}
+
+		fieldInfo, exists := fieldInfos[elem.Name]
+		if !exists {
+			return nil, 0, 0, fmt.Errorf("field %s not found in fieldInfos", elem.Name)
 		}
 
 		currentOffset += fieldInfo.offset
