@@ -140,7 +140,7 @@ func marshalAny(value any) ([]byte, error) {
 	case []uint64:
 		buf := make([]byte, len(v)*8)
 		for i, val := range v {
-			ssz.MarshalUint64(buf[i*8:], val)
+			buf = ssz.MarshalUint64(buf[i*8:], val)
 		}
 		return buf, nil
 	default:
