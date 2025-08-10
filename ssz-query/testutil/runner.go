@@ -11,13 +11,12 @@ import (
 
 func RunStructTest(t *testing.T, spec TestSpec) {
 	t.Run(spec.Name, func(t *testing.T) {
-		testInstance := spec.Instance
-
-		info, err := sszquery.PreCalculateSSZInfo(testInstance)
+		info, err := sszquery.PreCalculateSSZInfo(spec.Type)
 		require.NoError(t, err)
 
 		println("Before populating", info.Print())
 
+		testInstance := spec.Instance
 		err = sszquery.PopulateFromValue(info, testInstance)
 		require.NoError(t, err, "PopulateFromValue should not return an error")
 

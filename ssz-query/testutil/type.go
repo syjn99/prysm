@@ -7,6 +7,7 @@ type PathTest struct {
 
 type TestSpec struct {
 	Name      string
+	Type      any
 	Instance  any
 	PathTests []PathTest
 }

@@ -76,6 +76,7 @@ func getIndexedAttestationElectraSpec(t *testing.T) sszquery_testutil.TestSpec {
 
 	return sszquery_testutil.TestSpec{
 		Name:     "IndexedAttestationElectra",
+		Type:     ethpb.IndexedAttestationElectra{},
 		Instance: indexedAtt,
 		PathTests: []sszquery_testutil.PathTest{
 			{
@@ -122,6 +123,7 @@ func getValidatorSpec(t *testing.T) sszquery_testutil.TestSpec {
 
 	return sszquery_testutil.TestSpec{
 		Name:     "Validator",
+		Type:     ethpb.Validator{},
 		Instance: validator,
 		PathTests: []sszquery_testutil.PathTest{
 			{
@@ -177,6 +179,7 @@ func getBeaconBlockHeaderSpec(t *testing.T) sszquery_testutil.TestSpec {
 
 	return sszquery_testutil.TestSpec{
 		Name:     "BeaconBlockHeader",
+		Type:     ethpb.BeaconBlockHeader{},
 		Instance: header,
 		PathTests: []sszquery_testutil.PathTest{
 			{
