@@ -5,6 +5,9 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/OffchainLabs/prysm/v6/encoding/bytesutil"
+	ssz "github.com/ferranbt/fastssz"
 )
 
 const (
@@ -12,25 +15,102 @@ const (
 	sszSizeTag = "ssz-size"
 )
 
-func PreCalculateSSZInfo(obj any) (*sszInfo, error) {
-	// Get the value of the object using reflection.
-	currentValue := reflect.ValueOf(obj)
-	if currentValue.Kind() == reflect.Ptr {
-		if currentValue.IsNil() {
+func DereferencePointer(obj any) reflect.Value {
+	// Get the value of the object using reflection
+	value := reflect.ValueOf(obj)
+	if value.Kind() == reflect.Ptr {
+		if value.IsNil() {
 			// If we encounter a nil pointer before the end of the path, we can still proceed
 			// by analyzing the type, not the value.
-			currentValue = reflect.New(currentValue.Type().Elem()).Elem()
+			value = reflect.New(value.Type().Elem()).Elem()
 		} else {
-			currentValue = currentValue.Elem()
+			value = value.Elem()
 		}
 	}
 
-	info, err := analyzeType(currentValue.Type(), nil)
+	return value
+}
+
+func PreCalculateSSZInfo(obj any) (*sszInfo, error) {
+	value := DereferencePointer(obj)
+
+	info, err := analyzeType(value.Type(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("analyze type %s: %w", currentValue.Type().Name(), err)
+		return nil, fmt.Errorf("analyze type %s: %w", value.Type().Name(), err)
 	}
 
 	return info, nil
+}
+
+func PopulateFromValue(sszInfo *sszInfo, value any) error {
+	if sszInfo == nil {
+		return fmt.Errorf("sszInfo is nil")
+	}
+
+	// If the type is not variable-sized, we don't need to fill in the info.
+	if !sszInfo.isVariable {
+		return nil
+	}
+
+	if value == nil {
+		return fmt.Errorf("value is nil")
+	}
+
+	switch sszInfo.sszType {
+	// In List case, we have to set the actual length of the list.
+	case List:
+		listInfo, err := sszInfo.ListInfo()
+		if err != nil {
+			return fmt.Errorf("get list info: %w", err)
+		}
+
+		val := reflect.ValueOf(value)
+		if val.Kind() != reflect.Slice {
+			return fmt.Errorf("expected slice for List type, got %v", val.Kind())
+		}
+
+		if err := listInfo.SetLength(uint64(val.Len())); err != nil {
+			return fmt.Errorf("failed to set list length: %w", err)
+		}
+
+		return nil
+	// In Container case, we need to recursively populate variable-sized fields.
+	// Also, it is expected to read an actual offset from the marshalled data.
+	case Container:
+		marshalledData, err := value.(ssz.Marshaler).MarshalSSZ()
+		if err != nil {
+			return fmt.Errorf("failed to marshal value: %w", err)
+		}
+
+		for fieldName, fieldInfo := range sszInfo.fieldInfos {
+			childSszInfo := fieldInfo.sszInfo
+			if childSszInfo == nil {
+				return fmt.Errorf("sszInfo is nil for field %s", fieldName)
+			}
+
+			if !childSszInfo.isVariable {
+				// Skip fixed-size fields.
+				continue
+			}
+
+			if len(marshalledData) < int(fieldInfo.offset+4) {
+				return fmt.Errorf("marshalled data is too short for field %s", fieldName)
+			}
+
+			// NOTE: The offset is always 4-byte sized.
+			fieldInfo.actualOffset = bytesutil.FromBytes4(marshalledData[fieldInfo.offset : fieldInfo.offset+4])
+
+			// Recursively populate variable-sized fields.
+			fieldValue := DereferencePointer(value).FieldByName(fieldInfo.goFieldName)
+			if err := PopulateFromValue(childSszInfo, fieldValue.Interface()); err != nil {
+				return fmt.Errorf("populate from value for field %s: %w", fieldName, err)
+			}
+		}
+
+		return nil
+	default:
+		return fmt.Errorf("unsupported SSZ type for variable size info: %s", sszInfo.sszType)
+	}
 }
 
 func CalculateOffsetAndLength(sszInfo *sszInfo, path []PathElement) (*sszInfo, uint64, uint64, error) {
@@ -43,7 +123,7 @@ func CalculateOffsetAndLength(sszInfo *sszInfo, path []PathElement) (*sszInfo, u
 	}
 
 	walk := sszInfo
-	currentOffset := uint64(0)
+	actualOffset, currentOffset := uint64(0), uint64(0)
 
 	for _, elem := range path {
 		fieldInfos, err := walk.FieldInfos()
@@ -58,15 +138,16 @@ func CalculateOffsetAndLength(sszInfo *sszInfo, path []PathElement) (*sszInfo, u
 		}
 
 		currentOffset += fieldInfo.offset
+		actualOffset = fieldInfo.actualOffset
 		walk = fieldInfo.sszInfo
 	}
 
-	// TODO: Handle variable-sized types.
+	offset := currentOffset
 	if walk.isVariable {
-		return nil, 0, 0, fmt.Errorf("cannot calculate offset and length for variable-sized type %s", walk.typ.Name())
+		offset = actualOffset
 	}
 
-	return walk, currentOffset, walk.FixedSize(), nil
+	return walk, offset, walk.ByteLength(), nil
 }
 
 // analyzeType is an entry point that inspects a reflect.Type and computes its SSZ layout information.
@@ -179,8 +260,9 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 
 		// Store nested struct info.
 		sszInfo.fieldInfos[fieldName] = &fieldInfo{
-			sszInfo: info,
-			offset:  currentOffset,
+			sszInfo:     info,
+			offset:      currentOffset,
+			goFieldName: field.Name,
 		}
 
 		// Update the current offset based on the field's fixed size.
@@ -247,6 +329,9 @@ func analyzeListType(typ reflect.Type, elementInfo *sszInfo, limit uint64) (*ssz
 		listInfo: &listInfo{
 			limit:   limit,
 			element: elementInfo,
+			// NOTE: Length is not known until unmarshalling.
+			// This will be set later in `PopulateFromValue`.
+			length: 0,
 		},
 	}, nil
 }

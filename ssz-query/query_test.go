@@ -45,7 +45,7 @@ func TestRoundTripSszInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	// Print the SSZ info for debugging.
-	println(info.Print())
+	println("Before populating", info.Print())
 
 	// Construct IndexedAttestationElectra with dummy data.
 	dummyRoot, err := hexutil.Decode("0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2")
@@ -72,8 +72,15 @@ func TestRoundTripSszInfo(t *testing.T) {
 		},
 		Signature: dummySignature,
 	}
+
 	marshalledIndexedAtt, err := indexedAtt.MarshalSSZ()
 	require.NoError(t, err)
+
+	err = sszquery.PopulateFromValue(info, indexedAtt)
+	require.NoError(t, err, "PopulateFromValue should not return an error")
+
+	// Print the SSZ info for debugging
+	println("After populating", info.Print())
 
 	tests := []struct {
 		path     string
