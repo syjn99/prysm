@@ -9,6 +9,7 @@ import (
 
 type DummyData struct {
 	Root      []byte
+	Pubkey    []byte
 	Signature []byte
 }
 
@@ -17,12 +18,17 @@ func RandomDummyData(t *testing.T) *DummyData {
 	_, err := rand.Read(dummyRoot)
 	require.NoError(t, err)
 
+	dummyPubkey := make([]byte, 48)
+	_, err = rand.Read(dummyPubkey)
+	require.NoError(t, err)
+
 	dummySignature := make([]byte, 96)
 	_, err = rand.Read(dummySignature)
 	require.NoError(t, err)
 
 	return &DummyData{
 		Root:      dummyRoot,
+		Pubkey:    dummyPubkey,
 		Signature: dummySignature,
 	}
 }

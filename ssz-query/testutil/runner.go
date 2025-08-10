@@ -6,7 +6,6 @@ import (
 	sszquery "github.com/OffchainLabs/prysm/v6/ssz-query"
 	"github.com/OffchainLabs/prysm/v6/testing/assert"
 	"github.com/OffchainLabs/prysm/v6/testing/require"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	ssz "github.com/ferranbt/fastssz"
 )
 
@@ -45,10 +44,7 @@ func RunStructTest(t *testing.T, spec TestSpec) {
 					t.Fatalf("Extracted value length mismatch: got %d, want %d", len(expectedRawBytes), length)
 				}
 
-				println("expectedRawBytes:", hexutil.Encode(expectedRawBytes))
-
 				rawBytes, err := marshalAny(pathTest.Expected)
-				println("Raw bytes:", hexutil.Encode(rawBytes))
 				require.NoError(t, err, "Marshalling expected value should not return an error")
 				assert.DeepEqual(t, expectedRawBytes, rawBytes, "Extracted value should match expected")
 

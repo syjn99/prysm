@@ -3,6 +3,7 @@ package testutil
 import (
 	"fmt"
 
+	"github.com/OffchainLabs/prysm/v6/consensus-types/primitives"
 	ssz "github.com/ferranbt/fastssz"
 )
 
@@ -19,6 +20,13 @@ func marshalAny(value any) ([]byte, error) {
 			buf = ssz.MarshalUint64(buf[i*8:], val)
 		}
 		return buf, nil
+	case uint64:
+		return ssz.MarshalUint64(make([]byte, 0), v), nil
+	case bool:
+		return ssz.MarshalBool(make([]byte, 0), v), nil
+	case primitives.Epoch:
+		return v.MarshalSSZ()
+
 	default:
 		return nil, fmt.Errorf("unsupported type for SSZ marshalling: %T", value)
 	}

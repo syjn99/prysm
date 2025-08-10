@@ -125,6 +125,51 @@ func (info *sszInfo) UnmarshalFromSSZ(data []byte) (any, error) {
 		return nil, fmt.Errorf("sszInfo or its type is nil")
 	}
 
+	switch info.sszType {
+	case UintN:
+		converter := bytesutil.FromBytes8
+		switch info.FixedSize() {
+		case 1:
+			converter = func(b []byte) uint64 {
+				if len(b) != 1 {
+					return 0
+				}
+				return uint64(b[0])
+			}
+		case 2:
+			converter = func(b []byte) uint64 {
+				if len(b) != 2 {
+					return 0
+				}
+				return uint64(bytesutil.FromBytes2(b))
+			}
+
+		case 4:
+			converter = bytesutil.FromBytes4
+		case 8:
+			converter = bytesutil.FromBytes8
+		default:
+			return nil, fmt.Errorf("unsupported UintN size: %d", info.FixedSize())
+		}
+
+		value := converter(data)
+
+		// Check if this is a custom type alias (not a built-in type)
+		if info.typ.PkgPath() != "" {
+			return reflect.ValueOf(value).Convert(info.typ).Interface(), nil
+		}
+
+		return value, nil
+
+	case Boolean:
+		if len(data) != 1 {
+			return nil, fmt.Errorf("invalid data length for bool: %d", len(data))
+		}
+		return data[0] != 0, nil
+
+	default:
+	}
+
 	result := reflect.New(info.typ)
 	unmarshaler, ok := result.Interface().(ssz.Unmarshaler)
 	if !ok {

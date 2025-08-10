@@ -40,6 +40,7 @@ func TestCalculateOffset(t *testing.T) {
 func TestRoundTripSszInfo(t *testing.T) {
 	specs := []sszquery_testutil.TestSpec{
 		getIndexedAttestationElectraSpec(t),
+		getValidatorSpec(t),
 	}
 
 	for _, spec := range specs {
@@ -95,6 +96,64 @@ func getIndexedAttestationElectraSpec(t *testing.T) sszquery_testutil.TestSpec {
 			{
 				Path:     ".attesting_indices",
 				Expected: indexedAtt.AttestingIndices,
+			},
+		},
+	}
+}
+
+func createValidator(t *testing.T) any {
+	randomData := sszquery_testutil.RandomDummyData(t)
+
+	return &ethpb.Validator{
+		PublicKey:                  randomData.Pubkey,
+		WithdrawalCredentials:      randomData.Root,
+		EffectiveBalance:           32000000000, // 32 ETH in Gwei
+		Slashed:                    false,
+		ActivationEligibilityEpoch: 1,
+		ActivationEpoch:            2,
+		ExitEpoch:                  3,
+		WithdrawableEpoch:          4,
+	}
+}
+
+func getValidatorSpec(t *testing.T) sszquery_testutil.TestSpec {
+	validator := createValidator(t).(*ethpb.Validator)
+
+	return sszquery_testutil.TestSpec{
+		Name:     "Validator",
+		Instance: validator,
+		PathTests: []sszquery_testutil.PathTest{
+			{
+				Path:     ".public_key",
+				Expected: validator.PublicKey,
+			},
+			{
+				Path:     ".withdrawal_credentials",
+				Expected: validator.WithdrawalCredentials,
+			},
+			{
+				Path:     ".effective_balance",
+				Expected: validator.EffectiveBalance,
+			},
+			{
+				Path:     ".slashed",
+				Expected: validator.Slashed,
+			},
+			{
+				Path:     ".activation_eligibility_epoch",
+				Expected: validator.ActivationEligibilityEpoch,
+			},
+			{
+				Path:     ".activation_epoch",
+				Expected: validator.ActivationEpoch,
+			},
+			{
+				Path:     ".exit_epoch",
+				Expected: validator.ExitEpoch,
+			},
+			{
+				Path:     ".withdrawable_epoch",
+				Expected: validator.WithdrawableEpoch,
 			},
 		},
 	}
