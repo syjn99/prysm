@@ -13,7 +13,8 @@ import (
 type sszInfo struct {
 	// Type of the SSZ structure (Basic, Container, List).
 	sszType SSZType
-	typ     reflect.Type
+	// Type in Go. Need this for unmarshaling.
+	typ reflect.Type
 
 	// isVariable is true if the struct contains any variable-size fields.
 	isVariable bool
@@ -24,14 +25,31 @@ type sszInfo struct {
 	// fieldInfos maps a field's JSON name to its SSZ info (for nested Containers).
 	fieldInfos map[string]*fieldInfo
 
-	// For List/Vector types:
-	elementInfo *sszInfo
+	// For List types:
+	listInfo *listInfo
+
+	// For Vector types:
+	vectorInfo *vectorInfo
 }
 
 type fieldInfo struct {
 	sszInfo *sszInfo
 	// offset is the offset of the field within the parent struct.
 	offset uint64
+}
+
+type listInfo struct {
+	// limit is the maximum number of elements in the list.
+	limit uint64
+	// element is the SSZ info of the list's element type.
+	element *sszInfo
+}
+
+type vectorInfo struct {
+	// length is the length of the vector.
+	length uint64
+	// element is the SSZ info of the vector's element type.
+	element *sszInfo
 }
 
 func (info *sszInfo) FixedSize() uint64 {
@@ -46,6 +64,10 @@ func (info *sszInfo) FieldInfos() (map[string]*fieldInfo, error) {
 		return nil, fmt.Errorf("sszInfo is nil")
 	}
 
+	if info.sszType != Container {
+		return nil, fmt.Errorf("sszInfo is not a Container type, got %s", info.sszType)
+	}
+
 	if info.fieldInfos == nil {
 		return nil, fmt.Errorf("sszInfo.fieldInfos is nil")
 	}
@@ -53,16 +75,36 @@ func (info *sszInfo) FieldInfos() (map[string]*fieldInfo, error) {
 	return info.fieldInfos, nil
 }
 
-func (info *sszInfo) ElementInfo() (*sszInfo, error) {
+func (info *sszInfo) ListInfo() (*listInfo, error) {
 	if info == nil {
 		return nil, fmt.Errorf("sszInfo is nil")
 	}
 
-	if info.elementInfo == nil {
-		return nil, fmt.Errorf("sszInfo.elementInfo is nil")
+	if info.sszType != List {
+		return nil, fmt.Errorf("sszInfo is not a List type, got %s", info.sszType)
 	}
 
-	return info.elementInfo, nil
+	if info.listInfo == nil {
+		return nil, fmt.Errorf("sszInfo.listInfo is nil")
+	}
+
+	return info.listInfo, nil
+}
+
+func (info *sszInfo) VectorInfo() (*vectorInfo, error) {
+	if info == nil {
+		return nil, fmt.Errorf("sszInfo is nil")
+	}
+
+	if info.sszType != Vector {
+		return nil, fmt.Errorf("sszInfo is not a Vector type, got %s", info.sszType)
+	}
+
+	if info.vectorInfo == nil {
+		return nil, fmt.Errorf("sszInfo.vectorInfo is nil")
+	}
+
+	return info.vectorInfo, nil
 }
 
 func (info *sszInfo) UnmarshalFromSSZ(data []byte) (any, error) {
@@ -102,8 +144,10 @@ func printRecursive(info *sszInfo, builder *strings.Builder, prefix string) {
 	switch info.sszType {
 	case Container:
 		builder.WriteString(fmt.Sprintf("%s: %s (fixedSize: %d, isVariable: %t)\n", info.sszType, info.typ.Name(), info.fixedSize, info.isVariable))
-	case List, Vector:
-		builder.WriteString(fmt.Sprintf("%s[%s] (fixedSize: %d, isVariable: %t)\n", info.sszType, info.elementInfo.typ.Name(), info.fixedSize, info.isVariable))
+	case List:
+		builder.WriteString(fmt.Sprintf("%s[%s] (limit: %d, fixedSize: %d, isVariable: %t)\n", info.sszType, info.listInfo.element.typ.Name(), info.listInfo.limit, info.fixedSize, info.isVariable))
+	case Vector:
+		builder.WriteString(fmt.Sprintf("%s[%s] (length: %d, fixedSize: %d, isVariable: %t)\n", info.sszType, info.vectorInfo.element.typ.Name(), info.vectorInfo.length, info.fixedSize, info.isVariable))
 	default:
 		builder.WriteString(fmt.Sprintf("%s (fixedSize: %d, isVariable: %t)\n", info.sszType, info.fixedSize, info.isVariable))
 	}

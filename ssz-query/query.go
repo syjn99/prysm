@@ -78,7 +78,7 @@ func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 	case reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8, reflect.Bool:
 		return analyzeBasicType(typ)
 
-	case reflect.Slice, reflect.Array:
+	case reflect.Slice:
 		elemType := typ.Elem()
 		// Special handling for byte slices.
 		// e.g., Root (Bytes32), Signature (Bytes96)
@@ -104,12 +104,15 @@ func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 				fixedSize:  uint64(byteLength),
 				isVariable: false,
 
-				elementInfo: &sszInfo{
-					sszType: UintN,
-					typ:     elemType,
+				vectorInfo: &vectorInfo{
+					length: uint64(byteLength),
+					element: &sszInfo{
+						sszType: UintN,
+						typ:     elemType,
 
-					fixedSize:  8,
-					isVariable: false,
+						fixedSize:  8,
+						isVariable: false,
+					},
 				},
 			}, nil
 		}
@@ -228,7 +231,6 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 }
 
 // analyzeHomogeneousColType analyzes homogeneous collection types (e.g., List, Vector, Bitlist, Bitvector) and returns its SSZ info.
-// TODO: We need to contain the element type.
 func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 	if typ.Kind() != reflect.Slice && typ.Kind() != reflect.Array {
 		return nil, fmt.Errorf("can only analyze slice/array types, got %v", typ.Kind())
@@ -241,7 +243,8 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 	// 1. Check if the type is List/Bitlist by checking `ssz-max` tag.
 	sszMax := tag.Get(sszMaxTag)
 	if sszMax != "" {
-		limit, err := strconv.ParseUint(sszMax, 10, 64)
+		dims := strings.Split(sszMax, ",")
+		limit, err := strconv.ParseUint(dims[0], 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("invalid ssz-max tag (%s) on field: %w", sszMax, err)
 		}
@@ -252,22 +255,16 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 	// 2. Handle Vector/Bitvector type.
 	sszSize := tag.Get(sszSizeTag)
 	dims := strings.Split(sszSize, ",")
-	sizeVal, err := strconv.Atoi(dims[0])
+	size, err := strconv.ParseUint(dims[0], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid ssz-size tag (%s) on field: %w", sszSize, err)
 	}
 
-	return &sszInfo{
-		// TODO: How do we distinguish between Vector and List?
-		sszType: Vector,
-		typ:     typ,
-
-		fixedSize:  uint64(sizeVal),
-		isVariable: false,
-	}, nil
+	return analyzeVectorType(typ, size)
 }
 
-func analyzeListType(typ reflect.Type, _limit uint64) (*sszInfo, error) {
+// analyzeListType analyzes SSZ List type and returns its SSZ info.
+func analyzeListType(typ reflect.Type, limit uint64) (*sszInfo, error) {
 	elementInfo, err := analyzeType(typ.Elem(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("analyze element type for List: %w", err)
@@ -281,6 +278,31 @@ func analyzeListType(typ reflect.Type, _limit uint64) (*sszInfo, error) {
 		fixedSize:  4,
 		isVariable: true,
 
-		elementInfo: elementInfo,
+		listInfo: &listInfo{
+			limit:   limit,
+			element: elementInfo,
+		},
+	}, nil
+}
+
+// analyzeVectorType analyzes SSZ Vector type and returns its SSZ info.
+func analyzeVectorType(typ reflect.Type, length uint64) (*sszInfo, error) {
+	elementInfo, err := analyzeType(typ.Elem(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("analyze element type for Vector: %w", err)
+	}
+
+	return &sszInfo{
+		// TODO: How do we distinguish between Vector and Bitvector?
+		sszType: Vector,
+		typ:     typ,
+
+		fixedSize:  length * elementInfo.FixedSize(),
+		isVariable: false,
+
+		vectorInfo: &vectorInfo{
+			length:  length,
+			element: elementInfo,
+		},
 	}, nil
 }
