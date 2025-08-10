@@ -69,9 +69,10 @@ func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 	switch typ.Kind() {
 	// Basic types (e.g., uintN where N is 8, 16, 32, 64)
 	// NOTE: uint128 and uint256 are represented as []byte in Go,
-	// so we handle them as slices.
+	// so we handle them as slices. See the case below.
 	case reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8, reflect.Bool:
 		return analyzeBasicType(typ)
+
 	case reflect.Slice, reflect.Array:
 		elemType := typ.Elem()
 		// Special handling for byte slices.
@@ -109,11 +110,14 @@ func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 		}
 
 		return analyzeHomogeneousColType(typ, tag)
+
 	case reflect.Struct:
 		return analyzeContainerType(typ)
+
 	case reflect.Ptr:
 		// Dereference pointer types.
 		return analyzeType(typ.Elem(), tag)
+
 	default:
 		return nil, fmt.Errorf("unsupported type for SSZ calculation: %v", typ.Kind())
 	}
@@ -180,16 +184,15 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 
 		jsonTag := field.Tag.Get("json")
 		if jsonTag == "" {
-			// If the field has no JSON tag, we skip it.
-			continue
+			return nil, fmt.Errorf("field %s has no JSON tag", field.Name)
 		}
 
 		// The JSON tag contains the field name in the first part.
 		// e.g., "attesting_indices,omitempty" -> "attesting_indices".
-		// NOTE: `fieldName` is a string with snake_case format (following consensus specs).
+		// NOTE: `fieldName` is a string with `snake_case`` format (following consensus specs).
 		fieldName := strings.Split(jsonTag, ",")[0]
 		if fieldName == "" {
-			continue
+			return nil, fmt.Errorf("field %s has an empty JSON tag", field.Name)
 		}
 
 		// Analyze each field so that we can complete full SSZ information.
@@ -235,7 +238,7 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 	if sszMax != "" {
 		limit, err := strconv.ParseUint(sszMax, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid ssz-max tag on field: %w", err)
+			return nil, fmt.Errorf("invalid ssz-max tag (%s) on field: %w", sszMax, err)
 		}
 
 		return analyzeListType(typ, limit)
@@ -246,7 +249,7 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 	dims := strings.Split(sszSize, ",")
 	sizeVal, err := strconv.Atoi(dims[0])
 	if err != nil {
-		return nil, fmt.Errorf("invalid ssz-size tag on field: %w", err)
+		return nil, fmt.Errorf("invalid ssz-size tag (%s) on field: %w", sszSize, err)
 	}
 
 	return &sszInfo{
@@ -264,9 +267,6 @@ func analyzeListType(typ reflect.Type, _limit uint64) (*sszInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("analyze element type for List: %w", err)
 	}
-
-	println("Element type for List:", elementInfo.typ.Name())
-	println(elementInfo.Print())
 
 	return &sszInfo{
 		// TODO: How do we distinguish between List and Bitlist?

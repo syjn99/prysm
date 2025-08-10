@@ -47,8 +47,6 @@ func TestRoundTripSszInfo(t *testing.T) {
 	// Print the SSZ info for debugging.
 	println(info.Print())
 
-	// assert.NotNil(t, nil, "Expected non-nil SSZ info")
-
 	// Construct IndexedAttestationElectra with dummy data.
 	dummyRoot, err := hexutil.Decode("0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2")
 	require.NoError(t, err)
