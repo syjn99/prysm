@@ -82,7 +82,7 @@ func PopulateFromValue(sszInfo *sszInfo, value any) error {
 			return fmt.Errorf("failed to marshal value: %w", err)
 		}
 
-		for fieldName, fieldInfo := range sszInfo.fieldInfos {
+		for fieldName, fieldInfo := range sszInfo.containerInfo {
 			childSszInfo := fieldInfo.sszInfo
 			if childSszInfo == nil {
 				return fmt.Errorf("sszInfo is nil for field %s", fieldName)
@@ -126,7 +126,7 @@ func CalculateOffsetAndLength(sszInfo *sszInfo, path []PathElement) (*sszInfo, u
 	actualOffset, currentOffset := uint64(0), uint64(0)
 
 	for _, elem := range path {
-		fieldInfos, err := walk.FieldInfos()
+		fieldInfos, err := walk.ContainerInfo()
 		if err != nil {
 			// TODO: This logic is only for accessing the field in SSZ container types.
 			return nil, 0, 0, fmt.Errorf("get field infos: %w", err)
@@ -147,7 +147,7 @@ func CalculateOffsetAndLength(sszInfo *sszInfo, path []PathElement) (*sszInfo, u
 		offset = actualOffset
 	}
 
-	return walk, offset, walk.ByteLength(), nil
+	return walk, offset, walk.Size(), nil
 }
 
 // analyzeType is an entry point that inspects a reflect.Type and computes its SSZ layout information.
@@ -219,7 +219,7 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 		sszType: Container,
 		typ:     typ,
 
-		fieldInfos: make(map[string]*fieldInfo),
+		containerInfo: make(map[string]*fieldInfo),
 	}
 	var currentOffset uint64
 	var structIsVariable bool
@@ -259,7 +259,7 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 		}
 
 		// Store nested struct info.
-		sszInfo.fieldInfos[fieldName] = &fieldInfo{
+		sszInfo.containerInfo[fieldName] = &fieldInfo{
 			sszInfo:     info,
 			offset:      currentOffset,
 			goFieldName: field.Name,
