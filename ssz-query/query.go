@@ -74,49 +74,11 @@ func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 	switch typ.Kind() {
 	// Basic types (e.g., uintN where N is 8, 16, 32, 64)
 	// NOTE: uint128 and uint256 are represented as []byte in Go,
-	// so we handle them as slices. See the case below.
+	// so we handle them as slices. See `analyzeHomogeneousColType`.
 	case reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8, reflect.Bool:
 		return analyzeBasicType(typ)
 
 	case reflect.Slice:
-		elemType := typ.Elem()
-		// Special handling for byte slices.
-		// e.g., Root (Bytes32), Signature (Bytes96)
-		// e.g2., uint128 ([]bytes with length 16) and uint256 ([]byte with length 32).
-		if elemType.Kind() == reflect.Uint8 {
-			sszSize := tag.Get(sszSizeTag)
-			if sszSize == "" {
-				return nil, fmt.Errorf("ssz-size tag is required for byte slices")
-			}
-
-			byteLength, err := strconv.Atoi(sszSize)
-			if err != nil {
-				return nil, fmt.Errorf("invalid ssz-size tag for byte slice: %w",
-					err)
-			}
-
-			return &sszInfo{
-				// `BytesN` type is an alias of `Vector[byte, N]`, so we use Vector type.
-				// TODO: How can we distinguish between `BytesN` and `uint{128,256}`?
-				sszType: Vector,
-				typ:     typ,
-
-				fixedSize:  uint64(byteLength),
-				isVariable: false,
-
-				vectorInfo: &vectorInfo{
-					length: uint64(byteLength),
-					element: &sszInfo{
-						sszType: UintN,
-						typ:     elemType,
-
-						fixedSize:  8,
-						isVariable: false,
-					},
-				},
-			}, nil
-		}
-
 		return analyzeHomogeneousColType(typ, tag)
 
 	case reflect.Struct:
@@ -232,12 +194,17 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 
 // analyzeHomogeneousColType analyzes homogeneous collection types (e.g., List, Vector, Bitlist, Bitvector) and returns its SSZ info.
 func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
-	if typ.Kind() != reflect.Slice && typ.Kind() != reflect.Array {
-		return nil, fmt.Errorf("can only analyze slice/array types, got %v", typ.Kind())
+	if typ.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("can only analyze slice types, got %v", typ.Kind())
 	}
 
 	if tag == nil {
-		return nil, fmt.Errorf("tag is required for slice/array types")
+		return nil, fmt.Errorf("tag is required for slice types")
+	}
+
+	elementInfo, err := analyzeType(typ.Elem(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("analyze element type for homogeneous collection: %w", err)
 	}
 
 	// 1. Check if the type is List/Bitlist by checking `ssz-max` tag.
@@ -249,7 +216,7 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 			return nil, fmt.Errorf("invalid ssz-max tag (%s) on field: %w", sszMax, err)
 		}
 
-		return analyzeListType(typ, limit)
+		return analyzeListType(typ, elementInfo, limit)
 	}
 
 	// 2. Handle Vector/Bitvector type.
@@ -260,14 +227,13 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 		return nil, fmt.Errorf("invalid ssz-size tag (%s) on field: %w", sszSize, err)
 	}
 
-	return analyzeVectorType(typ, size)
+	return analyzeVectorType(typ, elementInfo, size)
 }
 
 // analyzeListType analyzes SSZ List type and returns its SSZ info.
-func analyzeListType(typ reflect.Type, limit uint64) (*sszInfo, error) {
-	elementInfo, err := analyzeType(typ.Elem(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("analyze element type for List: %w", err)
+func analyzeListType(typ reflect.Type, elementInfo *sszInfo, limit uint64) (*sszInfo, error) {
+	if elementInfo == nil {
+		return nil, fmt.Errorf("element info is required for List")
 	}
 
 	return &sszInfo{
@@ -286,10 +252,9 @@ func analyzeListType(typ reflect.Type, limit uint64) (*sszInfo, error) {
 }
 
 // analyzeVectorType analyzes SSZ Vector type and returns its SSZ info.
-func analyzeVectorType(typ reflect.Type, length uint64) (*sszInfo, error) {
-	elementInfo, err := analyzeType(typ.Elem(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("analyze element type for Vector: %w", err)
+func analyzeVectorType(typ reflect.Type, elementInfo *sszInfo, length uint64) (*sszInfo, error) {
+	if elementInfo == nil {
+		return nil, fmt.Errorf("element info is required for Vector")
 	}
 
 	return &sszInfo{
