@@ -41,6 +41,7 @@ func TestRoundTripSszInfo(t *testing.T) {
 	specs := []sszquery_testutil.TestSpec{
 		getIndexedAttestationElectraSpec(t),
 		getValidatorSpec(t),
+		getBeaconBlockHeaderSpec(t),
 	}
 
 	for _, spec := range specs {
@@ -154,6 +155,49 @@ func getValidatorSpec(t *testing.T) sszquery_testutil.TestSpec {
 			{
 				Path:     ".withdrawable_epoch",
 				Expected: validator.WithdrawableEpoch,
+			},
+		},
+	}
+}
+
+func createBeaconBlockHeader(t *testing.T) any {
+	randomData := sszquery_testutil.RandomDummyData(t)
+
+	return &ethpb.BeaconBlockHeader{
+		Slot:          1,
+		ProposerIndex: 2,
+		ParentRoot:    randomData.Root,
+		StateRoot:     randomData.Root,
+		BodyRoot:      randomData.Root,
+	}
+}
+
+func getBeaconBlockHeaderSpec(t *testing.T) sszquery_testutil.TestSpec {
+	header := createBeaconBlockHeader(t).(*ethpb.BeaconBlockHeader)
+
+	return sszquery_testutil.TestSpec{
+		Name:     "BeaconBlockHeader",
+		Instance: header,
+		PathTests: []sszquery_testutil.PathTest{
+			{
+				Path:     ".slot",
+				Expected: header.Slot,
+			},
+			{
+				Path:     ".proposer_index",
+				Expected: header.ProposerIndex,
+			},
+			{
+				Path:     ".parent_root",
+				Expected: header.ParentRoot,
+			},
+			{
+				Path:     ".state_root",
+				Expected: header.StateRoot,
+			},
+			{
+				Path:     ".body_root",
+				Expected: header.BodyRoot,
 			},
 		},
 	}
