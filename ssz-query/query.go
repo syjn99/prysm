@@ -15,24 +15,8 @@ const (
 	sszSizeTag = "ssz-size"
 )
 
-func DereferencePointer(obj any) reflect.Value {
-	// Get the value of the object using reflection
-	value := reflect.ValueOf(obj)
-	if value.Kind() == reflect.Ptr {
-		if value.IsNil() {
-			// If we encounter a nil pointer before the end of the path, we can still proceed
-			// by analyzing the type, not the value.
-			value = reflect.New(value.Type().Elem()).Elem()
-		} else {
-			value = value.Elem()
-		}
-	}
-
-	return value
-}
-
 func PreCalculateSSZInfo(obj any) (*sszInfo, error) {
-	value := DereferencePointer(obj)
+	value := dereferencePointer(obj)
 
 	info, err := analyzeType(value.Type(), nil)
 	if err != nil {
@@ -101,7 +85,7 @@ func PopulateFromValue(sszInfo *sszInfo, value any) error {
 			fieldInfo.actualOffset = bytesutil.FromBytes4(marshalledData[fieldInfo.offset : fieldInfo.offset+4])
 
 			// Recursively populate variable-sized fields.
-			fieldValue := DereferencePointer(value).FieldByName(fieldInfo.goFieldName)
+			fieldValue := dereferencePointer(value).FieldByName(fieldInfo.goFieldName)
 			if err := PopulateFromValue(childSszInfo, fieldValue.Interface()); err != nil {
 				return fmt.Errorf("populate from value for field %s: %w", fieldName, err)
 			}
@@ -355,4 +339,20 @@ func analyzeVectorType(typ reflect.Type, elementInfo *sszInfo, length uint64) (*
 			element: elementInfo,
 		},
 	}, nil
+}
+
+func dereferencePointer(obj any) reflect.Value {
+	// Get the value of the object using reflection
+	value := reflect.ValueOf(obj)
+	if value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			// If we encounter a nil pointer before the end of the path, we can still proceed
+			// by analyzing the type, not the value.
+			value = reflect.New(value.Type().Elem()).Elem()
+		} else {
+			value = value.Elem()
+		}
+	}
+
+	return value
 }
