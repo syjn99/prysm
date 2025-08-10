@@ -6,6 +6,7 @@ go_library(
         "path.go",
         "query.go",
         "ssz_info.go",
+        "ssz_type.go",
     ],
     importpath = "github.com/OffchainLabs/prysm/v6/ssz-query",
     visibility = ["//visibility:public"],

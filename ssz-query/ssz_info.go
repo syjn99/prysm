@@ -9,58 +9,6 @@ import (
 	ssz "github.com/prysmaticlabs/fastssz"
 )
 
-// SSZType represents the type supported by SSZ.
-// https://github.com/ethereum/consensus-specs/blob/master/ssz/simple-serialize.md#typing
-type SSZType int
-
-// SSZ type constants.
-const (
-	// Basic types
-	UintN SSZType = iota
-	Byte
-	Boolean
-
-	// Composite types
-	Container
-	Vector
-	List
-	Bitvector
-	Bitlist
-
-	// Added in EIP-7916
-	// TODO: Support ProgressiveList
-	ProgressiveList
-	// TODO: Support Union
-	Union
-)
-
-func (t SSZType) String() string {
-	switch t {
-	case UintN:
-		return "UintN"
-	case Byte:
-		return "Byte"
-	case Boolean:
-		return "Boolean"
-	case Container:
-		return "Container"
-	case Vector:
-		return "Vector"
-	case List:
-		return "List"
-	case Bitvector:
-		return "Bitvector"
-	case Bitlist:
-		return "Bitlist"
-	case ProgressiveList:
-		return "ProgressiveList"
-	case Union:
-		return "Union"
-	default:
-		return fmt.Sprintf("Unknown(%d)", t)
-	}
-}
-
 // sszInfo holds the pre-calculated SSZ data for a struct type.
 type sszInfo struct {
 	// Type of the SSZ structure (Basic, Container, List).
