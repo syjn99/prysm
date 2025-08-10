@@ -53,6 +53,18 @@ func (info *sszInfo) FieldInfos() (map[string]*fieldInfo, error) {
 	return info.fieldInfos, nil
 }
 
+func (info *sszInfo) ElementInfo() (*sszInfo, error) {
+	if info == nil {
+		return nil, fmt.Errorf("sszInfo is nil")
+	}
+
+	if info.elementInfo == nil {
+		return nil, fmt.Errorf("sszInfo.elementInfo is nil")
+	}
+
+	return info.elementInfo, nil
+}
+
 func (info *sszInfo) UnmarshalFromSSZ(data []byte) (any, error) {
 	if info == nil || info.typ == nil {
 		return nil, fmt.Errorf("sszInfo or its type is nil")
