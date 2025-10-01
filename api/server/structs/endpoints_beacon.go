@@ -315,12 +315,18 @@ type QuerySSZResponse struct {
 }
 
 type QuerySSZData struct {
-	Result []*QueryResultItem `json:"result"`
-	Root   string             `json:"root"`
+	Root   string           `json:"root"`
+	Values []*QuerySSZValue `json:"values"`
+	Proofs []*QuerySSZProof `json:"proofs,omitempty"` // Empty array if `IncludeProof` is false.
 }
 
-type QueryResultItem struct {
-	Path  string          `json:"path"`
-	Value json.RawMessage `json:"value"` // Can be any type.
-	Proof []string        `json:"proof"` // Empty array if `IncludeProof` is false.
+type QuerySSZValue struct {
+	Paths   []string          `json:"paths"`
+	Results []json.RawMessage `json:"results"`
+}
+
+type QuerySSZProof struct {
+	Leaves   []string `json:"leaves"`
+	Gindices []string `json:"gindices"`
+	Proofs   []string `json:"proofs"`
 }

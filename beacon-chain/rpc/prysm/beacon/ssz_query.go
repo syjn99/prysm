@@ -86,8 +86,10 @@ func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
 		ExecutionOptimistic: isOptimistic,
 		Finalized:           isFinalized,
 		Data: &structs.QuerySSZData{
-			Result: []*structs.QueryResultItem{}, // Placeholder.
-			Root:   hexutil.Encode(stateRoot),
+			Root: hexutil.Encode(stateRoot),
+			// Below fields are Placeholders
+			Values: []*structs.QuerySSZValue{},
+			Proofs: []*structs.QuerySSZProof{},
 		},
 	}
 
