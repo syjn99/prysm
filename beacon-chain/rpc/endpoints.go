@@ -1268,13 +1268,24 @@ func (s *Service) prysmBeaconEndpoints(
 		},
 		{
 			template: "/prysm/v1/beacon/states/{state_id}/query",
-			name:     namespace + ".QuerySSZ",
+			name:     namespace + ".QueryBeaconState",
 			middleware: []middleware.Middleware{
 				middleware.ContentTypeHandler([]string{api.JsonMediaType}),
 				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
 				middleware.AcceptEncodingHeaderHandler(),
 			},
-			handler: server.QuerySSZ,
+			handler: server.QueryBeaconState,
+			methods: []string{http.MethodPost},
+		},
+		{
+			template: "/prysm/v1/beacon/blocks/{block_id}/query",
+			name:     namespace + ".QueryBeaconBlock",
+			middleware: []middleware.Middleware{
+				middleware.ContentTypeHandler([]string{api.JsonMediaType}),
+				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
+				middleware.AcceptEncodingHeaderHandler(),
+			},
+			handler: server.QueryBeaconBlock,
 			methods: []string{http.MethodPost},
 		},
 	}

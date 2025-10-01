@@ -2,4 +2,6 @@ package beacon
 
 import "testing"
 
-func TestServer_QuerySSZ(t *testing.T) {}
+func TestServer_QueryBeaconState(t *testing.T) {}
+
+func TestServer_QueryBeaconBlock(t *testing.T) {}

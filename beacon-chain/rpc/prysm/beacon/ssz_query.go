@@ -16,8 +16,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-func (s *Server) QuerySSZ(w http.ResponseWriter, r *http.Request) {
-	ctx, span := trace.StartSpan(r.Context(), "beacon.QuerySSZ")
+func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
+	ctx, span := trace.StartSpan(r.Context(), "beacon.QueryBeaconState")
 	defer span.End()
 
 	stateID := r.PathValue("state_id")
@@ -92,4 +92,11 @@ func (s *Server) QuerySSZ(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJson(w, querySSZResponse)
+}
+
+func (s *Server) QueryBeaconBlock(w http.ResponseWriter, r *http.Request) {
+	_, span := trace.StartSpan(r.Context(), "beacon.QueryBeaconBlock")
+	defer span.End()
+
+	httputil.HandleError(w, "not implemented", http.StatusNotImplemented)
 }
