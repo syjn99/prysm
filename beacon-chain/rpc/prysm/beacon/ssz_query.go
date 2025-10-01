@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 
 	"github.com/OffchainLabs/prysm/v6/api/server/structs"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/eth/helpers"
@@ -13,8 +14,10 @@ import (
 	"github.com/OffchainLabs/prysm/v6/encoding/ssz/query"
 	"github.com/OffchainLabs/prysm/v6/monitoring/tracing/trace"
 	"github.com/OffchainLabs/prysm/v6/network/httputil"
+	ethpb "github.com/OffchainLabs/prysm/v6/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v6/runtime/version"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	fssz "github.com/prysmaticlabs/fastssz"
 )
 
 func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
@@ -77,8 +80,9 @@ func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Analyze the state object to get sszInfo.
-	protoState := st.ToProto()
-	info, err := query.AnalyzeObject(&protoState)
+	// TODO: match with version.
+	pbState := st.ToProto().(*ethpb.BeaconState)
+	info, err := query.AnalyzeObject(pbState)
 	if err != nil {
 		httputil.HandleError(w, "Could not analyze state object: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -104,13 +108,31 @@ func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
 
 		paths = append(paths, pathStr)
 
-		_, offset, length, err := query.CalculateOffsetAndLength(info, path)
+		walk, offset, length, err := query.CalculateOffsetAndLength(info, path)
 		if err != nil {
 			httputil.HandleError(w, "Could not calculate offset and length for path '"+pathStr+"': "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		_ = marshalledData[offset : offset+length]
+		result := reflect.New(walk.GoType()).Interface()
+		unmarshaler, ok := result.(fssz.Unmarshaler)
+		if !ok {
+			httputil.HandleError(w, "Type at path '"+pathStr+"' does not implement fssz.Unmarshaler", http.StatusInternalServerError)
+			return
+		}
+		err = unmarshaler.UnmarshalSSZ(marshalledData[offset : offset+length])
+		if err != nil {
+			httputil.HandleError(w, "Could not unmarshal SSZ for path '"+pathStr+"': "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		marshalledResult, err := json.Marshal(result)
+		if err != nil {
+			httputil.HandleError(w, "Could not marshal result to JSON for path '"+pathStr+"': "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		results = append(results, json.RawMessage(marshalledResult))
 	}
 
 	querySSZResponse := &structs.QuerySSZResponse{
