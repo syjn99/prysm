@@ -316,7 +316,7 @@ type QuerySSZResponse struct {
 
 type QuerySSZData struct {
 	Root   string           `json:"root"`
-	Values []*QuerySSZValue `json:"values"`
+	Values *QuerySSZValue   `json:"values"`
 	Proofs []*QuerySSZProof `json:"proofs,omitempty"` // Empty array if `IncludeProof` is false.
 }
 

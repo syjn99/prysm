@@ -10,6 +10,7 @@ import (
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/eth/helpers"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/eth/shared"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/lookup"
+	"github.com/OffchainLabs/prysm/v6/encoding/ssz/query"
 	"github.com/OffchainLabs/prysm/v6/monitoring/tracing/trace"
 	"github.com/OffchainLabs/prysm/v6/network/httputil"
 	"github.com/OffchainLabs/prysm/v6/runtime/version"
@@ -75,11 +76,42 @@ func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement the actual SSZ query logic.
-	// For now, as we can't build proofs,
-	// just assume `req.IncludeProof` and `req.Multiproof` are both false.
+	// Analyze the state object to get sszInfo.
+	protoState := st.ToProto()
+	info, err := query.AnalyzeObject(&protoState)
+	if err != nil {
+		httputil.HandleError(w, "Could not analyze state object: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	// End of the TODO section.
+	// marshalledData is needed to slice out the requested paths.
+	marshalledData, err := st.MarshalSSZ()
+	if err != nil {
+		httputil.HandleError(w, "Could not marshal state to SSZ: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	paths := make([]string, 0, len(req.Query))
+	results := make([]json.RawMessage, 0, len(req.Query))
+	for _, eachQuery := range req.Query {
+		pathStr := eachQuery.Path
+
+		path, err := query.ParsePath(pathStr)
+		if err != nil {
+			httputil.HandleError(w, "Could not parse path '"+pathStr+"': "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		paths = append(paths, pathStr)
+
+		_, offset, length, err := query.CalculateOffsetAndLength(info, path)
+		if err != nil {
+			httputil.HandleError(w, "Could not calculate offset and length for path '"+pathStr+"': "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		_ = marshalledData[offset : offset+length]
+	}
 
 	querySSZResponse := &structs.QuerySSZResponse{
 		Version:             version.String(st.Version()),
@@ -87,9 +119,13 @@ func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
 		Finalized:           isFinalized,
 		Data: &structs.QuerySSZData{
 			Root: hexutil.Encode(stateRoot),
-			// Below fields are Placeholders
-			Values: []*structs.QuerySSZValue{},
-			Proofs: []*structs.QuerySSZProof{},
+			Values: &structs.QuerySSZValue{
+				Paths:   paths,
+				Results: results,
+			},
+			// For now, as we can't build proofs,
+			// just assume `req.IncludeProof` and `req.Multiproof` are both false.
+			Proofs: nil,
 		},
 	}
 
