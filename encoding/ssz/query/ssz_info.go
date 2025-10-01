@@ -42,6 +42,13 @@ func (info *sszInfo) FixedSize() uint64 {
 	return info.fixedSize
 }
 
+func (info *sszInfo) GoType() reflect.Type {
+	if info == nil {
+		return nil
+	}
+	return info.typ
+}
+
 func (info *sszInfo) Size() uint64 {
 	if info == nil {
 		return 0
