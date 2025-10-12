@@ -9,7 +9,7 @@ import (
 )
 
 func TestAnalyzeSSZInfo(t *testing.T) {
-	info, err := query.AnalyzeObject(&sszquerypb.FixedTestContainer{})
+	info, err := query.AnalyzeObject(&sszquerypb.VariableTestContainer{})
 	require.NoError(t, err)
 
 	require.NotNil(t, info, "Expected non-nil SSZ info")

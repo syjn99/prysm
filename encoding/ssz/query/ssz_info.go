@@ -55,6 +55,12 @@ func (info *sszInfo) Size() uint64 {
 		return info.fixedSize
 	}
 
+	// if info.source == nil {
+	// 	panic("sszInfo.source is nil")
+	// }
+
+	// return uint64(info.source.SizeSSZ())
+
 	switch info.sszType {
 	case List:
 		return info.listInfo.Size()
