@@ -137,6 +137,19 @@ func TestSSZInterface_batch(t *testing.T) {
 			expectedHashTreeRoot, err := originalFunctions.HashTreeRoot()
 			require.NoError(t, err, "HashTreeRoot on original object should not return an error")
 			require.Equal(t, expectedHashTreeRoot, hashTreeRoot, "HashTreeRoot from sszInfo should match original object's HashTreeRoot")
+
+			// Test for VariableTestContainer to ensure nested HashTreeRoot works
+			if tt.name == "VariableTestContainer" {
+				ci, err := info.ContainerInfo()
+				require.NoError(t, err)
+
+				htr, err := ci.Fields()["nested"].SSZInfo().HashTreeRoot()
+				require.NoError(t, err)
+				expectedHtr, err := object.(*sszquerypb.VariableTestContainer).Nested.HashTreeRoot()
+				require.NoError(t, err)
+
+				require.Equal(t, expectedHtr, htr)
+			}
 		})
 	}
 }
