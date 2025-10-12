@@ -1,5 +1,9 @@
 package testutil
 
+import (
+	"github.com/OffchainLabs/prysm/v6/encoding/ssz/query"
+)
+
 type PathTest struct {
 	Path     string
 	Expected any
@@ -7,7 +11,7 @@ type PathTest struct {
 
 type TestSpec struct {
 	Name      string
-	Type      any
-	Instance  any
+	Type      query.SSZObject
+	Instance  query.SSZObject
 	PathTests []PathTest
 }
