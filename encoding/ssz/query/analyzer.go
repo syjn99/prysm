@@ -164,7 +164,7 @@ func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 	case reflect.Struct:
 		return analyzeContainerType(typ)
 
-	case reflect.Ptr:
+	case reflect.Pointer:
 		// Dereference pointer types.
 		return analyzeType(typ.Elem(), tag)
 
@@ -401,7 +401,7 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 // dereferencePointer dereferences a pointer to get the underlying value using reflection.
 func dereferencePointer(obj any) reflect.Value {
 	value := reflect.ValueOf(obj)
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		if value.IsNil() {
 			// If we encounter a nil pointer before the end of the path, we can still proceed
 			// by analyzing the type, not the value.
