@@ -11,18 +11,22 @@ const offsetBytes = 4
 
 // AnalyzeObject analyzes given object and returns its SSZ information.
 func AnalyzeObject(obj SSZObject) (*sszInfo, error) {
-	value := dereferencePointer(obj)
+	// Get the reflect.Value of the original object (which might be a pointer)
+	objValue := reflect.ValueOf(obj)
 
-	info, err := analyzeType(value.Type(), nil)
+	// Get the dereferenced value for type analysis
+	derefValue := dereferencePointer(obj)
+
+	// Pass both type AND value to analyzeType.
+	// IMPORTANT: We pass objValue (which preserves the pointer) so that
+	// analyzeContainerType can properly set the source field from the pointer type.
+	info, err := analyzeType(derefValue.Type(), objValue, nil)
 	if err != nil {
-		return nil, fmt.Errorf("could not analyze type %s: %w", value.Type().Name(), err)
+		return nil, fmt.Errorf("could not analyze type %s: %w", derefValue.Type().Name(), err)
 	}
 
-	// Store the original object interface
-	info.source = obj
-
-	// Populate variable-length information using the actual value.
-	err = PopulateVariableLengthInfo(info, value.Interface())
+	// Populate variable-length information using the dereferenced value.
+	err = PopulateVariableLengthInfo(info, derefValue.Interface())
 	if err != nil {
 		return nil, fmt.Errorf("could not populate variable length info: %w", err)
 	}
@@ -111,6 +115,14 @@ func PopulateVariableLengthInfo(sszInfo *sszInfo, value any) error {
 		// Dereference first in case value is a pointer.
 		derefValue := dereferencePointer(value)
 
+		// Update source if it wasn't set during initial analysis.
+		// This can happen if the container was created with a zero value initially.
+		if derefValue.IsValid() && !derefValue.IsZero() && derefValue.CanInterface() {
+			if sszObj, ok := derefValue.Interface().(SSZObject); ok {
+				sszInfo.source = sszObj
+			}
+		}
+
 		// Start with the fixed size of this Container.
 		currentOffset := sszInfo.FixedSize()
 
@@ -121,13 +133,30 @@ func PopulateVariableLengthInfo(sszInfo *sszInfo, value any) error {
 				return fmt.Errorf("sszInfo is nil for field %s", fieldName)
 			}
 
-			// Skip fixed-size fields.
+			// Get the field value for potential source setting on nested containers.
+			fieldValue := derefValue.FieldByName(fieldInfo.goFieldName)
+
+			// If this is a nested Container, ensure its source is set.
+			if childSszInfo.sszType == Container {
+				if fieldValue.IsValid() && !fieldValue.IsZero() && fieldValue.CanInterface() {
+					// Try the value as-is (might be a pointer field)
+					if sszObj, ok := fieldValue.Interface().(SSZObject); ok {
+						childSszInfo.source = sszObj
+					} else if fieldValue.Kind() == reflect.Struct && fieldValue.CanAddr() {
+						// If it's a struct value and addressable, try getting its address
+						if sszObj, ok := fieldValue.Addr().Interface().(SSZObject); ok {
+							childSszInfo.source = sszObj
+						}
+					}
+				}
+			}
+
+			// Skip fixed-size fields for offset calculation.
 			if !childSszInfo.isVariable {
 				continue
 			}
 
 			// Recursively populate variable-sized fields.
-			fieldValue := derefValue.FieldByName(fieldInfo.goFieldName)
 			if err := PopulateVariableLengthInfo(childSszInfo, fieldValue.Interface()); err != nil {
 				return fmt.Errorf("could not populate from value for field %s: %w", fieldName, err)
 			}
@@ -150,23 +179,34 @@ func PopulateVariableLengthInfo(sszInfo *sszInfo, value any) error {
 }
 
 // analyzeType is an entry point that inspects a reflect.Type and computes its SSZ layout information.
-func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
+// The value parameter is used to set the source field for Container types and propagate SSZObject references.
+func analyzeType(typ reflect.Type, value reflect.Value, tag *reflect.StructTag) (*sszInfo, error) {
 	switch typ.Kind() {
 	// Basic types (e.g., uintN where N is 8, 16, 32, 64)
 	// NOTE: uint128 and uint256 are represented as []byte in Go,
 	// so we handle them as slices. See `analyzeHomogeneousColType`.
 	case reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8, reflect.Bool:
-		return analyzeBasicType(typ)
+		return analyzeBasicType(typ, value)
 
 	case reflect.Slice:
-		return analyzeHomogeneousColType(typ, tag)
+		return analyzeHomogeneousColType(typ, value, tag)
 
 	case reflect.Struct:
-		return analyzeContainerType(typ)
+		return analyzeContainerType(typ, value)
 
 	case reflect.Pointer:
 		// Dereference pointer types.
-		return analyzeType(typ.Elem(), tag)
+		derefValue := value
+		if value.IsValid() && value.Kind() == reflect.Pointer {
+			if value.IsNil() {
+				// Create a zero value for type-only analysis
+				fmt.Println("Dereferencing nil pointer for type:", typ.Elem().Name())
+				derefValue = reflect.New(typ.Elem()).Elem()
+			} else {
+				derefValue = value.Elem()
+			}
+		}
+		return analyzeType(typ.Elem(), derefValue, tag)
 
 	default:
 		return nil, fmt.Errorf("unsupported type %v for SSZ calculation", typ.Kind())
@@ -174,12 +214,14 @@ func analyzeType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
 }
 
 // analyzeBasicType analyzes SSZ basic types (uintN, bool) and returns its info.
-func analyzeBasicType(typ reflect.Type) (*sszInfo, error) {
+// Basic types don't implement SSZObject, so source is never set.
+func analyzeBasicType(typ reflect.Type, value reflect.Value) (*sszInfo, error) {
 	sszInfo := &sszInfo{
 		typ: typ,
 
 		// Every basic type is fixed-size and not variable.
 		isVariable: false,
+		// source is intentionally not set - basic types don't implement SSZObject
 	}
 
 	switch typ.Kind() {
@@ -206,7 +248,8 @@ func analyzeBasicType(typ reflect.Type) (*sszInfo, error) {
 }
 
 // analyzeHomogeneousColType analyzes homogeneous collection types (e.g., List, Vector, Bitlist, Bitvector) and returns its SSZ info.
-func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszInfo, error) {
+// Collections themselves don't implement SSZObject, but their element type might (if it's a Container).
+func analyzeHomogeneousColType(typ reflect.Type, value reflect.Value, tag *reflect.StructTag) (*sszInfo, error) {
 	if typ.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("can only analyze slice types, got %v", typ.Kind())
 	}
@@ -220,8 +263,14 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 		return nil, errors.New("ssz tag is required for slice types")
 	}
 
+	// For element analysis, we analyze the element TYPE with a zero value.
+	// Actual element values (for setting source on nested containers) are handled
+	// during PopulateVariableLengthInfo when we iterate through the slice.
+	elementType := typ.Elem()
+	elementZeroValue := reflect.New(elementType).Elem()
+
 	// Analyze element type with remaining dimensions
-	elementInfo, err := analyzeType(typ.Elem(), remainingTag)
+	elementInfo, err := analyzeType(elementType, elementZeroValue, remainingTag)
 	if err != nil {
 		return nil, fmt.Errorf("could not analyze element type for homogeneous collection: %w", err)
 	}
@@ -233,7 +282,7 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 			return nil, fmt.Errorf("could not get list limit: %w", err)
 		}
 
-		return analyzeListType(typ, elementInfo, limit, sszDimension.isBitfield)
+		return analyzeListType(typ, value, elementInfo, limit, sszDimension.isBitfield)
 	}
 
 	// 2. Handle Vector/Bitvector type
@@ -243,7 +292,7 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 			return nil, fmt.Errorf("could not get vector length: %w", err)
 		}
 
-		return analyzeVectorType(typ, elementInfo, length, sszDimension.isBitfield)
+		return analyzeVectorType(typ, value, elementInfo, length, sszDimension.isBitfield)
 	}
 
 	// Parsing ssz tag doesn't provide enough information to determine the collection type,
@@ -252,7 +301,8 @@ func analyzeHomogeneousColType(typ reflect.Type, tag *reflect.StructTag) (*sszIn
 }
 
 // analyzeListType analyzes SSZ List/Bitlist type and returns its SSZ info.
-func analyzeListType(typ reflect.Type, elementInfo *sszInfo, limit uint64, isBitfield bool) (*sszInfo, error) {
+// Lists/Bitlists don't implement SSZObject, so source is never set.
+func analyzeListType(typ reflect.Type, value reflect.Value, elementInfo *sszInfo, limit uint64, isBitfield bool) (*sszInfo, error) {
 	if isBitfield {
 		return &sszInfo{
 			sszType: Bitlist,
@@ -264,6 +314,7 @@ func analyzeListType(typ reflect.Type, elementInfo *sszInfo, limit uint64, isBit
 			bitlistInfo: &bitlistInfo{
 				limit: limit,
 			},
+			// source is intentionally not set - slices don't implement SSZObject
 		}, nil
 	}
 
@@ -282,11 +333,13 @@ func analyzeListType(typ reflect.Type, elementInfo *sszInfo, limit uint64, isBit
 			limit:   limit,
 			element: elementInfo,
 		},
+		// source is intentionally not set - slices don't implement SSZObject
 	}, nil
 }
 
 // analyzeVectorType analyzes SSZ Vector/Bitvector type and returns its SSZ info.
-func analyzeVectorType(typ reflect.Type, elementInfo *sszInfo, length uint64, isBitfield bool) (*sszInfo, error) {
+// Vectors/Bitvectors don't implement SSZObject, so source is never set.
+func analyzeVectorType(typ reflect.Type, value reflect.Value, elementInfo *sszInfo, length uint64, isBitfield bool) (*sszInfo, error) {
 	if isBitfield {
 		return &sszInfo{
 			sszType: Bitvector,
@@ -299,6 +352,7 @@ func analyzeVectorType(typ reflect.Type, elementInfo *sszInfo, length uint64, is
 			bitvectorInfo: &bitvectorInfo{
 				length: length * 8, // length in bits
 			},
+			// source is intentionally not set - slices don't implement SSZObject
 		}, nil
 	}
 
@@ -323,11 +377,13 @@ func analyzeVectorType(typ reflect.Type, elementInfo *sszInfo, length uint64, is
 			length:  length,
 			element: elementInfo,
 		},
+		// source is intentionally not set - slices don't implement SSZObject
 	}, nil
 }
 
 // analyzeContainerType analyzes SSZ Container type and returns its SSZ info.
-func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
+// This is where we set the source field if the value implements SSZObject.
+func analyzeContainerType(typ reflect.Type, value reflect.Value) (*sszInfo, error) {
 	if typ.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("can only analyze struct types, got %v", typ.Kind())
 	}
@@ -339,6 +395,23 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 		sszType: Container,
 		typ:     typ,
 	}
+
+	// Set source if value is valid and implements SSZObject.
+	// This enables HashTreeRoot() to be called on this sszInfo.
+	// Note: value might be a pointer (from top-level) or a struct value (from nested fields).
+	// SSZObject methods are typically implemented on pointer receivers, so we need to handle both cases.
+	if value.IsValid() && value.CanInterface() {
+		// First try the value as-is (might already be a pointer)
+		if sszObj, ok := value.Interface().(SSZObject); ok {
+			sszInfo.source = sszObj
+		} else if value.Kind() == reflect.Struct && value.CanAddr() {
+			// If it's a struct value and addressable, try getting its address
+			if sszObj, ok := value.Addr().Interface().(SSZObject); ok {
+				sszInfo.source = sszObj
+			}
+		}
+	}
+
 	var currentOffset uint64
 
 	for i := 0; i < typ.NumField(); i++ {
@@ -363,8 +436,29 @@ func analyzeContainerType(typ reflect.Type) (*sszInfo, error) {
 			return nil, fmt.Errorf("field %s has an empty JSON tag", field.Name)
 		}
 
+		// Get the field's value for nested analysis.
+		var fieldValue reflect.Value
+		if value.IsValid() && !value.IsZero() {
+			// If value is a pointer, dereference it first to access fields
+			actualValue := value
+			if value.Kind() == reflect.Pointer {
+				actualValue = value.Elem()
+			}
+			fieldValue = actualValue.FieldByName(field.Name)
+
+			// For pointer fields (like *NestedContainer), we want to pass the pointer itself
+			// so that nested containers can properly set their source field.
+			// The analyzeType function will handle dereferencing in the Pointer case.
+		} else {
+			// Create zero value for type-only analysis.
+			fieldValue = reflect.New(field.Type).Elem()
+		}
+
 		// Analyze each field so that we can complete full SSZ information.
-		info, err := analyzeType(field.Type, &field.Tag)
+		// Pass both the type AND value down for nested container source propagation.
+		// IMPORTANT: For pointer fields, fieldValue will be the pointer, which is what we want
+		// because SSZObject methods are implemented on pointer receivers.
+		info, err := analyzeType(field.Type, fieldValue, &field.Tag)
 		if err != nil {
 			return nil, fmt.Errorf("could not analyze type for field %s: %w", fieldName, err)
 		}
