@@ -143,6 +143,26 @@ func (info *sszInfo) BitvectorInfo() (*bitvectorInfo, error) {
 	return info.bitvectorInfo, nil
 }
 
+func (info *sszInfo) Unmarshaler() (SSZObject, error) {
+	if info == nil {
+		return nil, errors.New("sszInfo is nil")
+	}
+
+	if info.typ == nil {
+		return nil, errors.New("sszInfo.typ is nil")
+	}
+
+	// Creating a new instance of the type.
+	newInstance := reflect.New(info.typ).Interface()
+
+	unmarshaler, ok := newInstance.(SSZObject)
+	if !ok {
+		return nil, fmt.Errorf("type %s does not implement SSZObject", info.typ)
+	}
+
+	return unmarshaler, nil
+}
+
 // String implements the Stringer interface for sszInfo.
 // This follows the notation used in the consensus specs.
 func (info *sszInfo) String() string {

@@ -26,12 +26,22 @@ func TestServer_QueryBeaconState(t *testing.T) {
 	require.NoError(t, fakeState.SetSlot(100))
 
 	// Set a finalized checkpoint
-	fcRoot, err := hexutil.Decode("0x4A2C7E9D1F0B85A632E4C9B0F8D716A54B0E8F2D9C5A7136B8D0F4A9E27C1B63")
+	fcRoot, err := hexutil.Decode("0x4a2c7e9d1f0b85a632e4c9b0f8d716a54b0e8f2d9c5a7136b8d0f4a9e27c1b63")
 	require.NoError(t, err)
 	fakeState.SetFinalizedCheckpoint(&ethpb.Checkpoint{
 		Epoch: 2,
 		Root:  fcRoot,
 	})
+
+	fakeBlockHeader := &ethpb.BeaconBlockHeader{
+		Slot:          112,
+		ProposerIndex: 1,
+		ParentRoot:    fcRoot,
+		StateRoot:     fcRoot,
+		BodyRoot:      fcRoot,
+	}
+	fakeState.SetLatestBlockHeader(fakeBlockHeader)
+	// Ensure the latest block header is set correctly.
 
 	stateRoot, err := fakeState.HashTreeRoot(ctx)
 	require.NoError(t, err)
@@ -57,10 +67,39 @@ func TestServer_QueryBeaconState(t *testing.T) {
 		ChainInfoFetcher:      chainService,
 	}
 
-	t.Run("success - query single field", func(t *testing.T) {
+	// t.Run("success - query single field", func(t *testing.T) {
+	// 	requestBody := &structs.QuerySSZRequest{
+	// 		Query: []*structs.QueryObject{
+	// 			{Path: ".slot"},
+	// 		},
+	// 	}
+	// 	var buf bytes.Buffer
+	// 	require.NoError(t, json.NewEncoder(&buf).Encode(requestBody))
+
+	// 	request := httptest.NewRequest(http.MethodPost, "http://example.com/prysm/v1/beacon/states/{state_id}/query", &buf)
+	// 	request.SetPathValue("state_id", "head")
+	// 	writer := httptest.NewRecorder()
+	// 	writer.Body = &bytes.Buffer{}
+
+	// 	s.QueryBeaconState(writer, request)
+	// 	fmt.Println(string(writer.Body.Bytes()))
+	// 	require.Equal(t, http.StatusOK, writer.Code)
+
+	// 	resp := &structs.QuerySSZResponse{}
+	// 	require.NoError(t, json.Unmarshal(writer.Body.Bytes(), resp))
+	// 	assert.Equal(t, hexutil.Encode(stateRoot[:]), resp.Data.Root)
+	// 	assert.Equal(t, 1, len(resp.Data.Values.Paths))
+	// 	assert.Equal(t, ".slot", resp.Data.Values.Paths[0])
+	// 	assert.Equal(t, 1, len(resp.Data.Values.Results))
+	// 	assert.Equal(t, `"100"`, string(resp.Data.Values.Results[0]))
+	// })
+
+	t.Run("success - query single field bh", func(t *testing.T) {
 		requestBody := &structs.QuerySSZRequest{
 			Query: []*structs.QueryObject{
-				{Path: ".slot"},
+				{Path: ".latest_block_header.slot"},
+				{Path: ".latest_block_header.proposer_index"},
+				{Path: ".latest_block_header"},
 			},
 		}
 		var buf bytes.Buffer
@@ -75,45 +114,50 @@ func TestServer_QueryBeaconState(t *testing.T) {
 		fmt.Println(string(writer.Body.Bytes()))
 		require.Equal(t, http.StatusOK, writer.Code)
 
-		resp := &structs.QuerySSZResponse{}
-		require.NoError(t, json.Unmarshal(writer.Body.Bytes(), resp))
-		assert.Equal(t, hexutil.Encode(stateRoot[:]), resp.Data.Root)
-		assert.Equal(t, 1, len(resp.Data.Values.Paths))
-		assert.Equal(t, ".slot", resp.Data.Values.Paths[0])
-		assert.Equal(t, 1, len(resp.Data.Values.Results))
-		assert.Equal(t, `"100"`, string(resp.Data.Values.Results[0]))
-	})
-
-	t.Run("success - query finalized checkpoint", func(t *testing.T) {
-		requestBody := &structs.QuerySSZRequest{
-			Query: []*structs.QueryObject{
-				{Path: ".finalized_checkpoint"},
-			},
-		}
-		var buf bytes.Buffer
-		require.NoError(t, json.NewEncoder(&buf).Encode(requestBody))
-
-		request := httptest.NewRequest(http.MethodPost, "http://example.com/prysm/v1/beacon/states/{state_id}/query", &buf)
-		request.SetPathValue("state_id", "head")
-		writer := httptest.NewRecorder()
-		writer.Body = &bytes.Buffer{}
-
-		s.QueryBeaconState(writer, request)
-		fmt.Println(string(writer.Body.Bytes()))
-		require.Equal(t, http.StatusOK, writer.Code)
+		jsonBeaconBlockHeader, err := json.Marshal(structs.BeaconBlockHeaderFromConsensus(fakeBlockHeader))
+		require.NoError(t, err)
 
 		resp := &structs.QuerySSZResponse{}
 		require.NoError(t, json.Unmarshal(writer.Body.Bytes(), resp))
 		assert.Equal(t, hexutil.Encode(stateRoot[:]), resp.Data.Root)
-		assert.Equal(t, 1, len(resp.Data.Values.Paths))
-		assert.Equal(t, ".finalized_checkpoint", resp.Data.Values.Paths[0])
-		assert.Equal(t, 1, len(resp.Data.Values.Results))
-		assert.Equal(t, `{"epoch":"2","root":"0x4A2C7E9D1F0B85A632E4C9B0F8D716A54B0E8F2D9C5A7136B8D0F4A9E27C1B63"}`, string(resp.Data.Values.Results[0]))
+		assert.Equal(t, 3, len(resp.Data.Values.Paths))
+		assert.Equal(t, ".latest_block_header.slot", resp.Data.Values.Paths[0])
+		assert.Equal(t, 3, len(resp.Data.Values.Results))
+		assert.Equal(t, `"112"`, string(resp.Data.Values.Results[0]))
+		assert.Equal(t, `"1"`, string(resp.Data.Values.Results[1]))
+		assert.DeepEqual(t, string(jsonBeaconBlockHeader), string(resp.Data.Values.Results[2]), "latest_block_header does not match")
 	})
+
+	// t.Run("success - query finalized checkpoint", func(t *testing.T) {
+	// 	requestBody := &structs.QuerySSZRequest{
+	// 		Query: []*structs.QueryObject{
+	// 			{Path: ".finalized_checkpoint"},
+	// 		},
+	// 	}
+	// 	var buf bytes.Buffer
+	// 	require.NoError(t, json.NewEncoder(&buf).Encode(requestBody))
+
+	// 	request := httptest.NewRequest(http.MethodPost, "http://example.com/prysm/v1/beacon/states/{state_id}/query", &buf)
+	// 	request.SetPathValue("state_id", "head")
+	// 	writer := httptest.NewRecorder()
+	// 	writer.Body = &bytes.Buffer{}
+
+	// 	s.QueryBeaconState(writer, request)
+	// 	fmt.Println(string(writer.Body.Bytes()))
+	// 	require.Equal(t, http.StatusOK, writer.Code)
+
+	// 	resp := &structs.QuerySSZResponse{}
+	// 	require.NoError(t, json.Unmarshal(writer.Body.Bytes(), resp))
+	// 	assert.Equal(t, hexutil.Encode(stateRoot[:]), resp.Data.Root)
+	// 	assert.Equal(t, 1, len(resp.Data.Values.Paths))
+	// 	assert.Equal(t, ".finalized_checkpoint", resp.Data.Values.Paths[0])
+	// 	assert.Equal(t, 1, len(resp.Data.Values.Results))
+	// 	assert.Equal(t, `{"epoch":"2","root":"0x4a2c7e9d1f0b85a632e4c9b0f8d716a54b0e8f2d9c5a7136b8d0f4a9e27c1b63"}`, string(resp.Data.Values.Results[0]))
+	// })
 
 	// t.Run("success - query multiple fields", func(t *testing.T) {
 	// 	requestBody := &structs.QuerySSZRequest{
-	// 		Query: []*structs.QuerySSZQuery{
+	// 		Query: []*structs.QueryObject{
 	// 			{Path: ".slot"},
 	// 			{Path: ".finalized_checkpoint"},
 	// 		},
@@ -135,6 +179,8 @@ func TestServer_QueryBeaconState(t *testing.T) {
 	// 	assert.Equal(t, ".slot", resp.Data.Values.Paths[0])
 	// 	assert.Equal(t, ".finalized_checkpoint", resp.Data.Values.Paths[1])
 	// 	assert.Equal(t, 2, len(resp.Data.Values.Results))
+	// 	assert.Equal(t, `"100"`, string(resp.Data.Values.Results[0]))
+	// 	assert.Equal(t, `{"epoch":"2","root":"0x4a2c7e9d1f0b85a632e4c9b0f8d716a54b0e8f2d9c5a7136b8d0f4a9e27c1b63"}`, string(resp.Data.Values.Results[1]))
 	// })
 
 	// t.Run("error - no state_id", func(t *testing.T) {

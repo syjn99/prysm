@@ -3,21 +3,21 @@ package beacon
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 
 	"github.com/OffchainLabs/prysm/v6/api/server/structs"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/eth/helpers"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/eth/shared"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/lookup"
+	"github.com/OffchainLabs/prysm/v6/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v6/encoding/ssz/query"
 	"github.com/OffchainLabs/prysm/v6/monitoring/tracing/trace"
 	"github.com/OffchainLabs/prysm/v6/network/httputil"
 	ethpb "github.com/OffchainLabs/prysm/v6/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v6/runtime/version"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	fssz "github.com/prysmaticlabs/fastssz"
 )
 
 func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
@@ -114,25 +114,25 @@ func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		result := reflect.New(walk.GoType()).Interface()
-		unmarshaler, ok := result.(fssz.Unmarshaler)
-		if !ok {
-			httputil.HandleError(w, "Type at path '"+pathStr+"' does not implement fssz.Unmarshaler", http.StatusInternalServerError)
+		result, err := walk.Unmarshaler()
+		if err != nil {
+			httputil.HandleError(w, "Could not get unmarshaler for path '"+pathStr+"': "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		err = unmarshaler.UnmarshalSSZ(marshalledData[offset : offset+length])
+		err = result.UnmarshalSSZ(marshalledData[offset : offset+length])
 		if err != nil {
 			httputil.HandleError(w, "Could not unmarshal SSZ for path '"+pathStr+"': "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		marshalledResult, err := json.Marshal(result)
+		jsoner := convertToAPIFormat(result)
+		rawJsonBytes, err := json.Marshal(jsoner)
 		if err != nil {
 			httputil.HandleError(w, "Could not marshal result to JSON for path '"+pathStr+"': "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		results = append(results, json.RawMessage(marshalledResult))
+		results = append(results, json.RawMessage(rawJsonBytes))
 	}
 
 	querySSZResponse := &structs.QuerySSZResponse{
@@ -159,4 +159,60 @@ func (s *Server) QueryBeaconBlock(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	httputil.HandleError(w, "not implemented", http.StatusNotImplemented)
+}
+
+func convertToAPIFormat(result interface{}) interface{} {
+	if result == nil {
+		return nil
+	}
+
+	// Handle primitive wrapper types (both value and pointer)
+	switch v := result.(type) {
+	case primitives.Slot:
+		return fmt.Sprintf("%d", v)
+	case *primitives.Slot:
+		return fmt.Sprintf("%d", *v)
+	case primitives.Epoch:
+		return fmt.Sprintf("%d", v)
+	case *primitives.Epoch:
+		return fmt.Sprintf("%d", *v)
+	case primitives.ValidatorIndex:
+		return fmt.Sprintf("%d", v)
+	case *primitives.ValidatorIndex:
+		return fmt.Sprintf("%d", *v)
+	case primitives.CommitteeIndex:
+		return fmt.Sprintf("%d", v)
+	case *primitives.CommitteeIndex:
+		return fmt.Sprintf("%d", *v)
+	case primitives.Gwei:
+		return fmt.Sprintf("%d", v)
+	case *primitives.Gwei:
+		return fmt.Sprintf("%d", *v)
+
+	// Handle struct pointers with FromConsensus
+	case *ethpb.Checkpoint:
+		return structs.CheckpointFromConsensus(v)
+	case *ethpb.Validator:
+		return structs.ValidatorFromConsensus(v)
+	case *ethpb.AttestationData:
+		return structs.AttDataFromConsensus(v)
+	case *ethpb.Eth1Data:
+		return structs.Eth1DataFromConsensus(v)
+	case *ethpb.BeaconBlockHeader:
+		return structs.BeaconBlockHeaderFromConsensus(v)
+
+	// Byte arrays to hex
+	case []byte:
+		return hexutil.Encode(v)
+	case [32]byte:
+		return hexutil.Encode(v[:])
+	case [48]byte:
+		return hexutil.Encode(v[:])
+	case [96]byte:
+		return hexutil.Encode(v[:])
+
+	default:
+		// Fallback: return as-is (consensus struct)
+		return result
+	}
 }
