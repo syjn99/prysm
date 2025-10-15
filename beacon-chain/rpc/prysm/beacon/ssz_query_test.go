@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/OffchainLabs/prysm/v6/api"
 	"github.com/OffchainLabs/prysm/v6/api/server/structs"
 	chainMock "github.com/OffchainLabs/prysm/v6/beacon-chain/blockchain/testing"
 	dbTest "github.com/OffchainLabs/prysm/v6/beacon-chain/db/testing"
@@ -363,3 +364,102 @@ func TestServer_QueryBeaconState(t *testing.T) {
 // 	s.QueryBeaconBlock(writer, request)
 // 	require.Equal(t, http.StatusNotImplemented, writer.Code)
 // }
+
+func TestServer_QueryBeaconStateSSZ(t *testing.T) {
+	ctx := t.Context()
+	fakeState, err := util.NewBeaconState()
+	require.NoError(t, err)
+	require.NoError(t, fakeState.SetSlot(100))
+
+	// Set a finalized checkpoint
+	fcRoot, err := hexutil.Decode("0x4a2c7e9d1f0b85a632e4c9b0f8d716a54b0e8f2d9c5a7136b8d0f4a9e27c1b63")
+	require.NoError(t, err)
+	fakeState.SetFinalizedCheckpoint(&ethpb.Checkpoint{
+		Epoch: 2,
+		Root:  fcRoot,
+	})
+
+	fakeBlockHeader := &ethpb.BeaconBlockHeader{
+		Slot:          112,
+		ProposerIndex: 1,
+		ParentRoot:    fcRoot,
+		StateRoot:     fcRoot,
+		BodyRoot:      fcRoot,
+	}
+	fakeState.SetLatestBlockHeader(fakeBlockHeader)
+	// Ensure the latest block header is set correctly.
+
+	stateRoot, err := fakeState.HashTreeRoot(ctx)
+	require.NoError(t, err)
+	db := dbTest.SetupDB(t)
+	parentRoot := [32]byte{'a'}
+	blk := util.NewBeaconBlock()
+	blk.Block.ParentRoot = parentRoot[:]
+	root, err := blk.Block.HashTreeRoot()
+	require.NoError(t, err)
+	util.SaveBlock(t, ctx, db, blk)
+	require.NoError(t, db.SaveGenesisBlockRoot(ctx, root))
+
+	chainService := &chainMock.ChainService{}
+	s := &Server{
+		Stater: &testutil.MockStater{
+			BeaconStateRoot: stateRoot[:],
+			BeaconState:     fakeState,
+		},
+		HeadFetcher:           chainService,
+		OptimisticModeFetcher: chainService,
+		FinalizationFetcher:   chainService,
+		BeaconDB:              db,
+		ChainInfoFetcher:      chainService,
+	}
+
+	t.Run("success - query single field", func(t *testing.T) {
+		requestBody := &structs.QuerySSZRequest{
+			Query: []*structs.QueryObject{
+				{Path: ".slot"},
+			},
+		}
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(requestBody))
+
+		request := httptest.NewRequest(http.MethodPost, "http://example.com/prysm/v1/beacon/states/{state_id}/query", &buf)
+		request.SetPathValue("state_id", "head")
+		request.Header.Set("Accept", api.OctetStreamMediaType)
+		writer := httptest.NewRecorder()
+		writer.Body = &bytes.Buffer{}
+
+		s.QueryBeaconStateSSZ(writer, request)
+		require.Equal(t, http.StatusOK, writer.Code)
+
+		slot := fakeState.Slot()
+		expected, err := slot.MarshalSSZ()
+		require.NoError(t, err)
+
+		assert.DeepEqual(t, expected, writer.Body.Bytes())
+	})
+
+	t.Run("success - query finalized_checkpoint", func(t *testing.T) {
+		requestBody := &structs.QuerySSZRequest{
+			Query: []*structs.QueryObject{
+				{Path: ".finalized_checkpoint"},
+			},
+		}
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(requestBody))
+
+		request := httptest.NewRequest(http.MethodPost, "http://example.com/prysm/v1/beacon/states/{state_id}/query", &buf)
+		request.SetPathValue("state_id", "head")
+		request.Header.Set("Accept", api.OctetStreamMediaType)
+		writer := httptest.NewRecorder()
+		writer.Body = &bytes.Buffer{}
+
+		s.QueryBeaconStateSSZ(writer, request)
+		require.Equal(t, http.StatusOK, writer.Code)
+
+		finalizedCheckpoint := fakeState.FinalizedCheckpoint()
+		expected, err := finalizedCheckpoint.MarshalSSZ()
+		require.NoError(t, err)
+
+		assert.DeepEqual(t, expected, writer.Body.Bytes())
+	})
+}

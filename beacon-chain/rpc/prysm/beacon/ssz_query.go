@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/OffchainLabs/prysm/v6/api"
 	"github.com/OffchainLabs/prysm/v6/api/server/structs"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/eth/helpers"
 	"github.com/OffchainLabs/prysm/v6/beacon-chain/rpc/eth/shared"
@@ -152,6 +153,73 @@ func (s *Server) QueryBeaconState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJson(w, querySSZResponse)
+}
+
+func (s *Server) QueryBeaconStateSSZ(w http.ResponseWriter, r *http.Request) {
+	ctx, span := trace.StartSpan(r.Context(), "beacon.QueryBeaconState")
+	defer span.End()
+
+	stateID := r.PathValue("state_id")
+	if stateID == "" {
+		httputil.HandleError(w, "state_id is required in URL params", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch state from given state ID.
+	st, err := s.Stater.State(ctx, []byte(stateID))
+	if err != nil {
+		shared.WriteStateFetchError(w, err)
+		return
+	}
+
+	// Parse request body.
+	var req structs.QuerySSZRequest
+	err = json.NewDecoder(r.Body).Decode(&req)
+	switch {
+	case errors.Is(err, io.EOF):
+		httputil.HandleError(w, "No data submitted", http.StatusBadRequest)
+		return
+	case err != nil:
+		httputil.HandleError(w, "Could not decode request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Query) == 0 {
+		httputil.HandleError(w, "No query submitted", http.StatusBadRequest)
+		return
+	}
+
+	// Analyze the state object to get sszInfo.
+	// TODO: match with version.
+	pbState := st.ToProto().(*ethpb.BeaconState)
+	info, err := query.AnalyzeObject(pbState)
+	if err != nil {
+		httputil.HandleError(w, "Could not analyze state object: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// marshalledData is needed to slice out the requested paths.
+	marshalledData, err := st.MarshalSSZ()
+	if err != nil {
+		httputil.HandleError(w, "Could not marshal state to SSZ: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rawPath := req.Query[0].Path
+	path, err := query.ParsePath(rawPath)
+	if err != nil {
+		httputil.HandleError(w, "Could not parse path '"+rawPath+"': "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, offset, length, err := query.CalculateOffsetAndLength(info, path)
+	if err != nil {
+		httputil.HandleError(w, "Could not calculate offset and length for path '"+rawPath+"': "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set(api.VersionHeader, version.String(st.Version()))
+	httputil.WriteSsz(w, marshalledData[offset:offset+length])
 }
 
 func (s *Server) QueryBeaconBlock(w http.ResponseWriter, r *http.Request) {
