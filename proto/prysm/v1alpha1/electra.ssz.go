@@ -3312,6 +3312,139 @@ func (i *IndexedAttestationElectra) HashTreeRootWith(hh *ssz.Hasher) (err error)
 	return
 }
 
+// MarshalSSZ ssz marshals the ValidatorRawContainer object
+func (v *ValidatorRawContainer) MarshalSSZ() ([]byte, error) {
+	return ssz.MarshalSSZ(v)
+}
+
+// MarshalSSZTo ssz marshals the ValidatorRawContainer object to a target array
+func (v *ValidatorRawContainer) MarshalSSZTo(buf []byte) (dst []byte, err error) {
+	dst = buf
+	offset := int(68)
+
+	// Field (0) 'LeadingField'
+	if size := len(v.LeadingField); size != 32 {
+		err = ssz.ErrBytesLengthFn("--.LeadingField", size, 32)
+		return
+	}
+	dst = append(dst, v.LeadingField...)
+
+	// Offset (1) 'ValidatorBytes'
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(v.ValidatorBytes)
+
+	// Field (2) 'TrailingField'
+	if size := len(v.TrailingField); size != 32 {
+		err = ssz.ErrBytesLengthFn("--.TrailingField", size, 32)
+		return
+	}
+	dst = append(dst, v.TrailingField...)
+
+	// Field (1) 'ValidatorBytes'
+	if size := len(v.ValidatorBytes); size > 130 {
+		err = ssz.ErrBytesLengthFn("--.ValidatorBytes", size, 130)
+		return
+	}
+	dst = append(dst, v.ValidatorBytes...)
+
+	return
+}
+
+// UnmarshalSSZ ssz unmarshals the ValidatorRawContainer object
+func (v *ValidatorRawContainer) UnmarshalSSZ(buf []byte) error {
+	var err error
+	size := uint64(len(buf))
+	if size < 68 {
+		return ssz.ErrSize
+	}
+
+	tail := buf
+	var o1 uint64
+
+	// Field (0) 'LeadingField'
+	if cap(v.LeadingField) == 0 {
+		v.LeadingField = make([]byte, 0, len(buf[0:32]))
+	}
+	v.LeadingField = append(v.LeadingField, buf[0:32]...)
+
+	// Offset (1) 'ValidatorBytes'
+	if o1 = ssz.ReadOffset(buf[32:36]); o1 > size {
+		return ssz.ErrOffset
+	}
+
+	if o1 != 68 {
+		return ssz.ErrInvalidVariableOffset
+	}
+
+	// Field (2) 'TrailingField'
+	if cap(v.TrailingField) == 0 {
+		v.TrailingField = make([]byte, 0, len(buf[36:68]))
+	}
+	v.TrailingField = append(v.TrailingField, buf[36:68]...)
+
+	// Field (1) 'ValidatorBytes'
+	{
+		buf = tail[o1:]
+		if len(buf) > 130 {
+			return ssz.ErrBytesLength
+		}
+		if cap(v.ValidatorBytes) == 0 {
+			v.ValidatorBytes = make([]byte, 0, len(buf))
+		}
+		v.ValidatorBytes = append(v.ValidatorBytes, buf...)
+	}
+	return err
+}
+
+// SizeSSZ returns the ssz encoded size in bytes for the ValidatorRawContainer object
+func (v *ValidatorRawContainer) SizeSSZ() (size int) {
+	size = 68
+
+	// Field (1) 'ValidatorBytes'
+	size += len(v.ValidatorBytes)
+
+	return
+}
+
+// HashTreeRoot ssz hashes the ValidatorRawContainer object
+func (v *ValidatorRawContainer) HashTreeRoot() ([32]byte, error) {
+	return ssz.HashWithDefaultHasher(v)
+}
+
+// HashTreeRootWith ssz hashes the ValidatorRawContainer object with a hasher
+func (v *ValidatorRawContainer) HashTreeRootWith(hh *ssz.Hasher) (err error) {
+	indx := hh.Index()
+
+	// Field (0) 'LeadingField'
+	if size := len(v.LeadingField); size != 32 {
+		err = ssz.ErrBytesLengthFn("--.LeadingField", size, 32)
+		return
+	}
+	hh.PutBytes(v.LeadingField)
+
+	// Field (1) 'ValidatorBytes'
+	{
+		elemIndx := hh.Index()
+		byteLen := uint64(len(v.ValidatorBytes))
+		if byteLen > 130 {
+			err = ssz.ErrIncorrectListSize
+			return
+		}
+		hh.PutBytes(v.ValidatorBytes)
+		hh.MerkleizeWithMixin(elemIndx, byteLen, (130+31)/32)
+	}
+
+	// Field (2) 'TrailingField'
+	if size := len(v.TrailingField); size != 32 {
+		err = ssz.ErrBytesLengthFn("--.TrailingField", size, 32)
+		return
+	}
+	hh.PutBytes(v.TrailingField)
+
+	hh.Merkleize(indx)
+	return
+}
+
 // MarshalSSZ ssz marshals the BeaconStateElectra object
 func (b *BeaconStateElectra) MarshalSSZ() ([]byte, error) {
 	return ssz.MarshalSSZ(b)

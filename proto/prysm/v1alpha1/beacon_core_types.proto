@@ -234,3 +234,9 @@ message Validator {
         "github.com/OffchainLabs/prysm/v6/consensus-types/primitives.Epoch"
   ];
 }
+
+message ValidatorRawContainer {
+  bytes leading_field = 1 [ (ethereum.eth.ext.ssz_size) = "32" ];
+  bytes validator_bytes = 2 [ (ethereum.eth.ext.ssz_max) = "130" ];
+  bytes trailing_field = 3 [ (ethereum.eth.ext.ssz_size) = "32" ];
+}

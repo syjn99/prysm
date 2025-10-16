@@ -179,6 +179,7 @@ ssz_electra_objs = [
     "SignedConsolidation",
     "SingleAttestation",
     "SignedBuilderBidElectra",
+    "ValidatorRawContainer",
 ]
 
 ssz_fulu_objs = [
