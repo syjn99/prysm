@@ -3,12 +3,20 @@ package proofgeneration
 import (
 	"fmt"
 
+	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
+	"github.com/OffchainLabs/prysm/v7/time/slots"
 )
 
 func (s *Service) GenerateProofs(slot primitives.Slot, payloadHash []byte, blockRoot []byte) ([]*ethpb.ExecutionProof, error) {
 	// Check if proofs are required for this epoch
+	requestedEpoch := slots.ToEpoch(slot)
+	if !s.isProofRequiredForEpoch(requestedEpoch) {
+		log.WithField("epoch", requestedEpoch).Info("Proof generation not required for this epoch")
+		return nil, nil
+	}
+
 	// Get the list of proof types we should generate
 
 	// TODO: For now, we generate all proofs configured in the service.
@@ -36,4 +44,20 @@ func (s *Service) GenerateProofs(slot primitives.Slot, payloadHash []byte, block
 	}
 
 	return proofs, nil
+}
+
+// isProofRequiredForEpoch checks if proof generation is required for the given epoch.
+// This checks against the current epoch and the configured retention policy.
+func (s *Service) isProofRequiredForEpoch(epoch primitives.Epoch) bool {
+	currentSlot := s.cfg.TimeFetcher.CurrentSlot()
+	currentEpoch := slots.ToEpoch(currentSlot)
+
+	proofRetentionEpoch := primitives.Epoch(0)
+	if currentEpoch >= primitives.Epoch(params.BeaconConfig().MinEpochsForExecutionProofRequests) {
+		proofRetentionEpoch = currentEpoch.Sub(params.BeaconConfig().MinEpochsForExecutionProofRequests)
+	}
+
+	boundaryEpoch := primitives.MaxEpoch(params.BeaconConfig().FuluForkEpoch, proofRetentionEpoch)
+
+	return epoch >= boundaryEpoch
 }
