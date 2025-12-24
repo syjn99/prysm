@@ -1172,6 +1172,7 @@ func (b *BeaconNode) registerProofGenerationService(cliCtx *cli.Context) error {
 		ProofTypes:    flags.Get().ProofGenerationTypes,
 		Broadcaster:   p2pService,
 		TimeFetcher:   chainService,
+		ExecProofPool: b.execProofPool,
 	}
 
 	pgs, err := proofgen.NewService(cliCtx.Context, cfg)

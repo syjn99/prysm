@@ -17,13 +17,15 @@ func (s *Service) GenerateProofs(slot primitives.Slot, payloadHash []byte, block
 		return nil, nil
 	}
 
-	// Get the list of proof types we should generate
+	// Get the list of proof types we should generate,
+	// so check if we already have this proof in the pool
+	requiredProofTypes := make([]primitives.ExecutionProofId, 0, len(s.cfg.ProofTypes))
+	for _, proofType := range s.cfg.ProofTypes {
+		if !s.cfg.ExecProofPool.ProofExists(slot, proofType) {
+			requiredProofTypes = append(requiredProofTypes, proofType)
+		}
 
-	// TODO: For now, we generate all proofs configured in the service.
-	requiredProofTypes := s.cfg.ProofTypes
-
-	// Check which proofs are missing/we haven't received yet
-	// Check if we already have this proof
+	}
 
 	// Generate the required proofs
 	proofs := []*ethpb.ExecutionProof{}
