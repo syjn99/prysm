@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	p2ptypes "github.com/OffchainLabs/prysm/v7/beacon-chain/p2p/types"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -46,23 +45,23 @@ func (s *Service) executionProofsByRootRPCHandler(ctx context.Context, msg any, 
 	SetRPCStreamDeadlines(stream)
 	// log := log.WithField("handler", "execution_proof_by_root")
 
-	rawMsg, ok := msg.(*p2ptypes.ExecutionProofByRootsReq)
+	_, ok := msg.(*ethpb.ExecutionProofsByRootRequest)
 	if !ok {
-		return errors.New("message is not type ExecutionProofByRootsReq")
+		return errors.New("message is not type ExecutionProofsByRootRequest")
 	}
-	blockRoots := *rawMsg
-	if err := s.rateLimiter.validateRequest(stream, uint64(len(blockRoots))); err != nil {
-		return err
-	}
-	if len(blockRoots) == 0 {
-		// Add to rate limiter in the event no
-		// roots are requested.
-		s.rateLimiter.add(stream, 1)
-		s.writeErrorResponseToStream(responseCodeInvalidRequest, "no block roots provided in request", stream)
-		return errors.New("no block roots provided")
-	}
+	// blockRoots := *rawMsg
+	// if err := s.rateLimiter.validateRequest(stream, uint64(len(blockRoots))); err != nil {
+	// 	return err
+	// }
+	// if len(blockRoots) == 0 {
+	// 	// Add to rate limiter in the event no
+	// 	// roots are requested.
+	// 	s.rateLimiter.add(stream, 1)
+	// 	s.writeErrorResponseToStream(responseCodeInvalidRequest, "no block roots provided in request", stream)
+	// 	return errors.New("no block roots provided")
+	// }
 
-	s.rateLimiter.add(stream, int64(len(blockRoots)))
+	// s.rateLimiter.add(stream, int64(len(blockRoots)))
 
 	// for _, root := range blockRoots {
 	// 	blk, err := s.cfg.beaconDB.Block(ctx, root)
