@@ -16,6 +16,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
+	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
@@ -103,7 +104,7 @@ func (s *Service) requestAndSaveMissingExecutionProofs(blks []blocks.ROBlock) er
 	}
 
 	for _, blk := range blks {
-		if err := s.sendAndSaveExecutionProofs(s.ctx, blk.Block()); err != nil {
+		if err := s.sendAndSaveExecutionProofs(s.ctx, blk); err != nil {
 			return err
 		}
 	}
@@ -112,7 +113,7 @@ func (s *Service) requestAndSaveMissingExecutionProofs(blks []blocks.ROBlock) er
 
 func (s *Service) sendAndSaveExecutionProofs(
 	ctx context.Context,
-	block interfaces.ReadOnlyBeaconBlock,
+	block blocks.ROBlock,
 ) error {
 	// If EIP-8025 is not enabled, skip.
 	if !features.Get().EnableZkvm {
@@ -120,14 +121,34 @@ func (s *Service) sendAndSaveExecutionProofs(
 	}
 
 	// Check proof retention period.
-	blockEpoch := slots.ToEpoch(block.Slot())
+	blockEpoch := slots.ToEpoch(block.Block().Slot())
 	currentEpoch := slots.ToEpoch(s.cfg.clock.CurrentSlot())
 	if !params.WithinExecutionProofPeriod(blockEpoch, currentEpoch) {
 		return nil
 	}
 
+	// Check how many proofs are needed with Execution Proof Pool.
+	proofTypesSet := s.cfg.execProofPool.GetProofTypesForBlock(block.Root())
+	if uint64(len(proofTypesSet)) >= params.BeaconConfig().MinProofsRequired {
+		return nil
+	}
+
+	alreadyHave := make([]primitives.ExecutionProofId, 0, len(proofTypesSet))
+	for proofType := range proofTypesSet {
+		alreadyHave = append(alreadyHave, proofType)
+	}
+
 	// Call SendExecutionProofByRootRequest
+	proofs, err := SendExecutionProofsByRootRequest(ctx, block, alreadyHave)
+	if err != nil {
+		return fmt.Errorf("send execution proofs by root request: %w", err)
+	}
+
 	// Insert ExecProofPool
+	for _, proof := range proofs {
+		s.cfg.execProofPool.InsertExecutionProof(proof)
+	}
+
 	return nil
 }
 

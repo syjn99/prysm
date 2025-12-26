@@ -3,57 +3,40 @@ package sync
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain"
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
 	p2ptypes "github.com/OffchainLabs/prysm/v7/beacon-chain/p2p/types"
-	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
-	"github.com/OffchainLabs/prysm/v7/time/slots"
+	"github.com/OffchainLabs/prysm/v7/config/params"
+	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
+	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
+	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	libp2pcore "github.com/libp2p/go-libp2p/core"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
-// SendBeaconBlocksByRootRequest sends BeaconBlocksByRoot and returns fetched blocks, if any.
-func SendExecutionProofByRootRequest(
-	ctx context.Context, clock blockchain.TemporalOracle, p2pProvider p2p.P2P, pid peer.ID,
-	req *p2ptypes.ExecutionProofByRootsReq, blockProcessor BeaconBlockProcessor,
-) ([]eth.ExecutionProof, error) {
-	topic, err := p2p.TopicFromMessage(p2p.ExecutionProofsByRootName, slots.ToEpoch(clock.CurrentSlot()))
-	if err != nil {
-		return nil, err
+// SendExecutionProofsByRootRequest sends ExecutionProofsByRoot and returns fetched execution proofs, if any.
+func SendExecutionProofsByRootRequest(
+	ctx context.Context,
+	blk blocks.ROBlock,
+	alreadyHave []primitives.ExecutionProofId,
+) ([]*ethpb.ExecutionProof, error) {
+	// Return error if we already have enough proofs.
+	alreadyHaveCount := uint64(len(alreadyHave))
+	countNeeded := params.BeaconConfig().MinProofsRequired
+	if alreadyHaveCount >= countNeeded {
+		return nil, fmt.Errorf("already have enough proofs: have %d, need %d", len(alreadyHave), countNeeded)
 	}
-	stream, err := p2pProvider.Send(ctx, req, topic, pid)
-	if err != nil {
-		return nil, err
+	countNeeded -= alreadyHaveCount
+
+	// Construct the request.
+	blockRoot := blk.Root()
+	req := &ethpb.ExecutionProofsByRootRequest{
+		BlockRoot:   blockRoot[:],
+		CountNeeded: countNeeded,
+		AlreadyHave: alreadyHave,
 	}
-	defer closeStream(stream, log)
+	fmt.Printf("Req.BlockRoot: %#x\n", req.BlockRoot)
 
-	// Augment block processing function, if non-nil block processor is provided.
-	execution_proofs := make([]eth.ExecutionProof, 0, len(*req))
-	// process := func(block interfaces.ReadOnlySignedBeaconBlock) error {
-	// 	blocks = append(blocks, block)
-	// 	if blockProcessor != nil {
-	// 		return blockProcessor(block)
-	// 	}
-	// 	return nil
-	// }
-	// currentEpoch := slots.ToEpoch(clock.CurrentSlot())
-	// for i := 0; i < len(*req); i++ {
-	// 	isFirstChunk := i == 0
-	// 	blk, err := ReadChunkedBlock(stream, clock, p2pProvider, isFirstChunk)
-	// 	if errors.Is(err, io.EOF) {
-	// 		break
-	// 	}
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	if err := process(blk); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
-	return execution_proofs, nil
+	return []*ethpb.ExecutionProof{}, nil
 }
 
 // executionProofsByRootRPCHandler looks up the request blocks from the database from the given block roots.
