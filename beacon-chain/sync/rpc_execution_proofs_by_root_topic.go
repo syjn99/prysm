@@ -11,6 +11,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
+	"github.com/OffchainLabs/prysm/v7/monitoring/tracing/trace"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	libp2pcore "github.com/libp2p/go-libp2p/core"
@@ -131,7 +132,9 @@ func validateExecutionProof(
 
 // executionProofsByRootRPCHandler handles incoming ExecutionProofsByRoot RPC requests.
 func (s *Service) executionProofsByRootRPCHandler(ctx context.Context, msg any, stream libp2pcore.Stream) error {
-	ctx, cancel := context.WithTimeout(ctx, ttfbTimeout)
+	ctx, span := trace.StartSpan(ctx, "sync.executionProofsByRootRPCHandler")
+	defer span.End()
+	_, cancel := context.WithTimeout(ctx, ttfbTimeout)
 	defer cancel()
 
 	SetRPCStreamDeadlines(stream)
@@ -169,7 +172,7 @@ func (s *Service) executionProofsByRootRPCHandler(ctx context.Context, msg any, 
 	defer closeStream(stream, log)
 
 	if !features.Get().EnableZkvm {
-		log.Debug("zkVM mode is disabled; refusing to serve execution proofs by root request")
+		log.Debug("Disabled zkVM mode; refusing to serve execution proofs by root request")
 		return nil
 	}
 

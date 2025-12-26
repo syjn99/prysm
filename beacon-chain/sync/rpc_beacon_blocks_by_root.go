@@ -148,8 +148,14 @@ func (s *Service) sendAndSaveExecutionProofs(
 	}
 
 	// Call SendExecutionProofByRootRequest
-	// TODO: pid should be selected from best peers.
-	pid := peer.ID("")
+	zkvmEnabledPeers := s.cfg.p2p.Peers().ZkvmEnabledPeers()
+	if len(zkvmEnabledPeers) == 0 {
+		return fmt.Errorf("no zkVM enabled peers available to request execution proofs")
+	}
+
+	// For simplicity, just pick the first peer for now.
+	// In the future, we can implement better peer selection logic.
+	pid := zkvmEnabledPeers[0]
 	proofs, err := SendExecutionProofsByRootRequest(ctx, s.cfg.clock, s.cfg.p2p, pid, req)
 	if err != nil {
 		return fmt.Errorf("send execution proofs by root request: %w", err)
