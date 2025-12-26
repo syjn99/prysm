@@ -84,17 +84,22 @@ func ReadChunkedExecutionProof(
 	encoding p2p.EncodingProvider,
 	isFirstChunk bool,
 ) (*ethpb.ExecutionProof, error) {
-	// Use the same chunked reading pattern as blocks
-	if isFirstChunk {
-		code, errMsg, err := ReadStatusCode(stream, encoding.Encoding())
-		if err != nil {
-			return nil, err
-		}
-		if code != 0 {
-			return nil, errors.New(errMsg)
-		}
+	// Read status code for each chunk (like data columns, not like blocks)
+	code, errMsg, err := ReadStatusCode(stream, encoding.Encoding())
+	if err != nil {
+		return nil, err
+	}
+	if code != 0 {
+		return nil, errors.New(errMsg)
 	}
 
+	// Read context bytes (fork digest)
+	_, err = readContextFromStream(stream)
+	if err != nil {
+		return nil, fmt.Errorf("read context from stream: %w", err)
+	}
+
+	// Decode the proof
 	proof := &ethpb.ExecutionProof{}
 	if err := encoding.Encoding().DecodeWithMaxLength(stream, proof); err != nil {
 		return nil, err
@@ -137,8 +142,6 @@ func (s *Service) executionProofsByRootRPCHandler(ctx context.Context, msg any, 
 	_, cancel := context.WithTimeout(ctx, ttfbTimeout)
 	defer cancel()
 
-	SetRPCStreamDeadlines(stream)
-
 	log := log.WithField("handler", "execution_proofs_by_root")
 
 	req, ok := msg.(*ethpb.ExecutionProofsByRootRequest)
@@ -147,6 +150,7 @@ func (s *Service) executionProofsByRootRPCHandler(ctx context.Context, msg any, 
 	}
 
 	remotePeer := stream.Conn().RemotePeer()
+	SetRPCStreamDeadlines(stream)
 
 	// Validate request
 	if err := s.rateLimiter.validateRequest(stream, 1); err != nil {
