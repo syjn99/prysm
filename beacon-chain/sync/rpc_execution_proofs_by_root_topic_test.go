@@ -240,7 +240,7 @@ func TestExecutionProofsByRootRPCHandler(t *testing.T) {
 
 			proofs := make([]*ethpb.ExecutionProof, 0, 2)
 
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				isFirstChunk := i == 0
 				proof, err := ReadChunkedExecutionProof(stream, remoteP2P, isFirstChunk)
 				if errors.Is(err, io.EOF) {
@@ -349,7 +349,7 @@ func TestExecutionProofsByRootRPCHandler(t *testing.T) {
 
 			proofs := make([]*ethpb.ExecutionProof, 0, 2)
 
-			for i := 0; i < 3; i++ {
+			for i := range 3 {
 				isFirstChunk := i == 0
 				proof, err := ReadChunkedExecutionProof(stream, remoteP2P, isFirstChunk)
 				if errors.Is(err, io.EOF) {
@@ -438,7 +438,7 @@ func TestExecutionProofsByRootRPCHandler(t *testing.T) {
 
 			proofs := make([]*ethpb.ExecutionProof, 0, 5)
 
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				isFirstChunk := i == 0
 				proof, err := ReadChunkedExecutionProof(stream, remoteP2P, isFirstChunk)
 				if errors.Is(err, io.EOF) {
@@ -493,5 +493,235 @@ func TestValidateExecutionProofsByRootRequest(t *testing.T) {
 		}
 		err := validateExecutionProofsByRootRequest(req)
 		require.NoError(t, err)
+	})
+}
+
+func TestSendExecutionProofsByRootRequest(t *testing.T) {
+	params.SetupTestConfigCleanup(t)
+	cfg := params.BeaconConfig()
+	cfg.FuluForkEpoch = 0
+	params.OverrideBeaconConfig(cfg)
+	params.BeaconConfig().InitializeForkSchedule()
+
+	protocolID := protocol.ID(p2p.RPCExecutionProofsByRootTopicV1) + "/" + encoder.ProtocolSuffixSSZSnappy
+
+	t.Run("count_needed is 0 - returns error", func(t *testing.T) {
+		localP2P := p2ptest.NewTestP2P(t)
+		remoteP2P := p2ptest.NewTestP2P(t)
+		localP2P.Connect(remoteP2P)
+
+		clock := startup.NewClock(time.Now(), [fieldparams.RootLength]byte{})
+		blockRoot := bytesutil.PadTo([]byte("blockroot"), 32)
+
+		req := &ethpb.ExecutionProofsByRootRequest{
+			BlockRoot:   blockRoot,
+			CountNeeded: 0,
+			AlreadyHave: []primitives.ExecutionProofId{},
+		}
+
+		proofs, err := SendExecutionProofsByRootRequest(t.Context(), clock, localP2P, remoteP2P.PeerID(), req)
+		require.ErrorContains(t, "count_needed must be greater than 0", err)
+		require.Equal(t, 0, len(proofs))
+	})
+
+	t.Run("success - receives requested proofs", func(t *testing.T) {
+		localP2P := p2ptest.NewTestP2P(t)
+		remoteP2P := p2ptest.NewTestP2P(t)
+		localP2P.Connect(remoteP2P)
+
+		clock := startup.NewClock(time.Now(), [fieldparams.RootLength]byte{})
+		blockRoot := [32]byte{0x01, 0x02, 0x03}
+		blockHash := bytesutil.PadTo([]byte("blockhash"), 32)
+
+		// Create proofs to send back
+		proof1 := &ethpb.ExecutionProof{
+			BlockRoot: blockRoot[:],
+			BlockHash: blockHash,
+			Slot:      primitives.Slot(10),
+			ProofId:   primitives.ExecutionProofId(1),
+			ProofData: []byte("proof1"),
+		}
+		proof2 := &ethpb.ExecutionProof{
+			BlockRoot: blockRoot[:],
+			BlockHash: blockHash,
+			Slot:      primitives.Slot(10),
+			ProofId:   primitives.ExecutionProofId(2),
+			ProofData: []byte("proof2"),
+		}
+
+		// Setup remote to send proofs
+		remoteP2P.BHost.SetStreamHandler(protocolID, func(stream network.Stream) {
+			defer func() {
+				_ = stream.Close()
+			}()
+
+			// Read the request (we don't validate it in this test)
+			_ = &ethpb.ExecutionProofsByRootRequest{}
+
+			// Send proof1
+			require.NoError(t, WriteExecutionProofChunk(stream, remoteP2P.Encoding(), proof1))
+
+			// Send proof2
+			require.NoError(t, WriteExecutionProofChunk(stream, remoteP2P.Encoding(), proof2))
+		})
+
+		req := &ethpb.ExecutionProofsByRootRequest{
+			BlockRoot:   blockRoot[:],
+			CountNeeded: 2,
+			AlreadyHave: []primitives.ExecutionProofId{},
+		}
+
+		proofs, err := SendExecutionProofsByRootRequest(t.Context(), clock, localP2P, remoteP2P.PeerID(), req)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(proofs))
+		assert.Equal(t, primitives.ExecutionProofId(1), proofs[0].ProofId)
+		assert.Equal(t, primitives.ExecutionProofId(2), proofs[1].ProofId)
+		assert.DeepEqual(t, blockRoot[:], proofs[0].BlockRoot)
+		assert.DeepEqual(t, blockRoot[:], proofs[1].BlockRoot)
+	})
+
+	t.Run("partial response - EOF before count_needed", func(t *testing.T) {
+		localP2P := p2ptest.NewTestP2P(t)
+		remoteP2P := p2ptest.NewTestP2P(t)
+		localP2P.Connect(remoteP2P)
+
+		clock := startup.NewClock(time.Now(), [fieldparams.RootLength]byte{})
+		blockRoot := [32]byte{0x01, 0x02, 0x03}
+		blockHash := bytesutil.PadTo([]byte("blockhash"), 32)
+
+		proof1 := &ethpb.ExecutionProof{
+			BlockRoot: blockRoot[:],
+			BlockHash: blockHash,
+			Slot:      primitives.Slot(10),
+			ProofId:   primitives.ExecutionProofId(1),
+			ProofData: []byte("proof1"),
+		}
+
+		// Setup remote to send only 1 proof (but we request 5)
+		remoteP2P.BHost.SetStreamHandler(protocolID, func(stream network.Stream) {
+			defer func() {
+				_ = stream.Close()
+			}()
+			// Send only proof1
+			require.NoError(t, WriteExecutionProofChunk(stream, remoteP2P.Encoding(), proof1))
+		})
+
+		req := &ethpb.ExecutionProofsByRootRequest{
+			BlockRoot:   blockRoot[:],
+			CountNeeded: 5, // Request 5 but only get 1
+			AlreadyHave: []primitives.ExecutionProofId{},
+		}
+
+		proofs, err := SendExecutionProofsByRootRequest(t.Context(), clock, localP2P, remoteP2P.PeerID(), req)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(proofs)) // Only received 1
+		assert.Equal(t, primitives.ExecutionProofId(1), proofs[0].ProofId)
+	})
+
+	t.Run("invalid block root - validation fails", func(t *testing.T) {
+		localP2P := p2ptest.NewTestP2P(t)
+		remoteP2P := p2ptest.NewTestP2P(t)
+		localP2P.Connect(remoteP2P)
+
+		clock := startup.NewClock(time.Now(), [fieldparams.RootLength]byte{})
+		requestedRoot := [32]byte{0x01, 0x02, 0x03}
+		wrongRoot := [32]byte{0xFF, 0xFF, 0xFF}
+		blockHash := bytesutil.PadTo([]byte("blockhash"), 32)
+
+		// Create proof with wrong block root
+		proof1 := &ethpb.ExecutionProof{
+			BlockRoot: wrongRoot[:], // Wrong root!
+			BlockHash: blockHash,
+			Slot:      primitives.Slot(10),
+			ProofId:   primitives.ExecutionProofId(1),
+			ProofData: []byte("proof1"),
+		}
+
+		remoteP2P.BHost.SetStreamHandler(protocolID, func(stream network.Stream) {
+			defer func() {
+				_ = stream.Close()
+			}()
+			require.NoError(t, WriteExecutionProofChunk(stream, remoteP2P.Encoding(), proof1))
+		})
+
+		req := &ethpb.ExecutionProofsByRootRequest{
+			BlockRoot:   requestedRoot[:],
+			CountNeeded: 1,
+			AlreadyHave: []primitives.ExecutionProofId{},
+		}
+
+		proofs, err := SendExecutionProofsByRootRequest(t.Context(), clock, localP2P, remoteP2P.PeerID(), req)
+		require.ErrorContains(t, "does not match requested root", err)
+		require.Equal(t, 0, len(proofs))
+	})
+
+	t.Run("already_have proof - validation fails", func(t *testing.T) {
+		localP2P := p2ptest.NewTestP2P(t)
+		remoteP2P := p2ptest.NewTestP2P(t)
+		localP2P.Connect(remoteP2P)
+
+		clock := startup.NewClock(time.Now(), [fieldparams.RootLength]byte{})
+		blockRoot := [32]byte{0x01, 0x02, 0x03}
+		blockHash := bytesutil.PadTo([]byte("blockhash"), 32)
+
+		proof1 := &ethpb.ExecutionProof{
+			BlockRoot: blockRoot[:],
+			BlockHash: blockHash,
+			Slot:      primitives.Slot(10),
+			ProofId:   primitives.ExecutionProofId(1),
+			ProofData: []byte("proof1"),
+		}
+
+		remoteP2P.BHost.SetStreamHandler(protocolID, func(stream network.Stream) {
+			defer func() {
+				_ = stream.Close()
+			}()
+			require.NoError(t, WriteExecutionProofChunk(stream, remoteP2P.Encoding(), proof1))
+		})
+
+		req := &ethpb.ExecutionProofsByRootRequest{
+			BlockRoot:   blockRoot[:],
+			CountNeeded: 1,
+			AlreadyHave: []primitives.ExecutionProofId{1}, // Already have proof_id 1
+		}
+
+		proofs, err := SendExecutionProofsByRootRequest(t.Context(), clock, localP2P, remoteP2P.PeerID(), req)
+		require.ErrorContains(t, "received proof we already have", err)
+		require.Equal(t, 0, len(proofs))
+	})
+
+	t.Run("invalid proof_id - validation fails", func(t *testing.T) {
+		localP2P := p2ptest.NewTestP2P(t)
+		remoteP2P := p2ptest.NewTestP2P(t)
+		localP2P.Connect(remoteP2P)
+
+		clock := startup.NewClock(time.Now(), [fieldparams.RootLength]byte{})
+		blockRoot := [32]byte{0x01, 0x02, 0x03}
+		blockHash := bytesutil.PadTo([]byte("blockhash"), 32)
+
+		proof1 := &ethpb.ExecutionProof{
+			BlockRoot: blockRoot[:],
+			BlockHash: blockHash,
+			Slot:      primitives.Slot(10),
+			ProofId:   primitives.ExecutionProofId(255), // Invalid proof_id (max valid is 7)
+			ProofData: []byte("proof1"),
+		}
+
+		remoteP2P.BHost.SetStreamHandler(protocolID, func(stream network.Stream) {
+			defer func() {
+				_ = stream.Close()
+			}()
+			require.NoError(t, WriteExecutionProofChunk(stream, remoteP2P.Encoding(), proof1))
+		})
+
+		req := &ethpb.ExecutionProofsByRootRequest{
+			BlockRoot:   blockRoot[:],
+			CountNeeded: 1,
+			AlreadyHave: []primitives.ExecutionProofId{},
+		}
+
+		proofs, err := SendExecutionProofsByRootRequest(t.Context(), clock, localP2P, remoteP2P.PeerID(), req)
+		require.ErrorContains(t, "invalid proof_id", err)
+		require.Equal(t, 0, len(proofs))
 	})
 }
