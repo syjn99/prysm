@@ -1,6 +1,3 @@
-// Package execproof defines an execution proof pool
-// service implementation which manages the lifecycle
-// of execution proofs received via gossip.
 package execproof
 
 import (
@@ -15,12 +12,11 @@ import (
 
 // Service manages the execution proof pool operations.
 type Service struct {
-	cfg         *Config
-	ctx         context.Context
-	cancel      context.CancelFunc
-	err         error
-	slotTicker  slots.Ticker
-	genesisTime time.Time
+	cfg        *Config
+	ctx        context.Context
+	cancel     context.CancelFunc
+	err        error
+	slotTicker slots.Ticker
 }
 
 // Config options for the service.
@@ -54,17 +50,16 @@ func NewService(ctx context.Context, cfg *Config) (*Service, error) {
 
 // Start the execution proof pool service's main event loop.
 func (s *Service) Start() {
-	// TODO: Why optimistic node cannot be ready?
 	clock, err := s.cfg.ClockWaiter.WaitForClock(s.ctx)
 	if err != nil {
 		log.WithError(err).Error("failed to wait for clock")
 		return
 	}
-
 	log.Info("Execution proof service starting after clock is set")
-
-	genesisTime := clock.GenesisTime()
-	s.slotTicker = slots.NewSlotTicker(slots.UnsafeStartTime(genesisTime, 0), params.BeaconConfig().SecondsPerSlot)
+	s.slotTicker = slots.NewSlotTicker(
+		slots.UnsafeStartTime(clock.GenesisTime(), 0),
+		params.BeaconConfig().SecondsPerSlot,
+	)
 
 	go s.pruneFinalizedProofs()
 }

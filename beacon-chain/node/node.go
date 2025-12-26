@@ -440,7 +440,7 @@ func registerServices(cliCtx *cli.Context, beacon *BeaconNode, synchronizer *sta
 		}
 	}
 
-	if features.Get().EnableZkvm && len(flags.Get().ProofGenerationTypes) > 0 {
+	if features.Get().EnableZkvm {
 		log.Debugln("Registering Execution Proof Pool")
 		if err := beacon.registerExecutionProofPool(); err != nil {
 			return errors.Wrap(err, "could not register execution proof pool")
@@ -1190,7 +1190,6 @@ func (b *BeaconNode) registerProofGenerationService(cliCtx *cli.Context) error {
 }
 
 func (b *BeaconNode) registerExecutionProofPool() error {
-
 	var chainService *blockchain.Service
 	if err := b.services.FetchService(&chainService); err != nil {
 		return err
