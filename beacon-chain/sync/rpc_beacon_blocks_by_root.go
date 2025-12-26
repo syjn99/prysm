@@ -11,6 +11,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p/types"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/sync/verify"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/verification"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
@@ -113,7 +114,18 @@ func (s *Service) sendAndSaveExecutionProofs(
 	ctx context.Context,
 	block interfaces.ReadOnlyBeaconBlock,
 ) error {
-	// Check shouldFetchExecutionProofs
+	// If EIP-8025 is not enabled, skip.
+	if !features.Get().EnableZkvm {
+		return nil
+	}
+
+	// Check proof retention period.
+	blockEpoch := slots.ToEpoch(block.Slot())
+	currentEpoch := slots.ToEpoch(s.cfg.clock.CurrentSlot())
+	if !params.WithinExecutionProofPeriod(blockEpoch, currentEpoch) {
+		return nil
+	}
+
 	// Call SendExecutionProofByRootRequest
 	// Insert ExecProofPool
 	return nil
