@@ -87,7 +87,36 @@ func (s *Service) sendBeaconBlocksRequest(ctx context.Context, requests *types.B
 		return errors.Wrap(err, "request and save missing data columns")
 	}
 
+	// EIP-8025: Optional Execution Proofs
+	// When requesting beacon blocks, also request execution proofs for blocks that are missing them.
+	if err := s.requestAndSaveMissingExecutionProofs(postFuluBlocks); err != nil {
+		return errors.Wrap(err, "request and save missing execution proofs")
+	}
+
 	return err
+}
+
+func (s *Service) requestAndSaveMissingExecutionProofs(blks []blocks.ROBlock) error {
+	if len(blks) == 0 {
+		return nil
+	}
+
+	for _, blk := range blks {
+		if err := s.sendAndSaveExecutionProofs(s.ctx, blk.Block()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) sendAndSaveExecutionProofs(
+	ctx context.Context,
+	block interfaces.ReadOnlyBeaconBlock,
+) error {
+	// Check shouldFetchExecutionProofs
+	// Call SendExecutionProofByRootRequest
+	// Insert ExecProofPool
+	return nil
 }
 
 // requestAndSaveMissingDataColumns checks if the data columns are missing for the given block.
