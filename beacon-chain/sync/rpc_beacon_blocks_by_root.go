@@ -18,6 +18,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
+	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	libp2pcore "github.com/libp2p/go-libp2p/core"
@@ -138,8 +139,18 @@ func (s *Service) sendAndSaveExecutionProofs(
 		alreadyHave = append(alreadyHave, proofType)
 	}
 
+	// Construct request
+	blockRoot := block.Root()
+	req := &ethpb.ExecutionProofsByRootRequest{
+		BlockRoot:   blockRoot[:],
+		CountNeeded: params.BeaconConfig().MinProofsRequired - uint64(len(proofTypesSet)),
+		AlreadyHave: alreadyHave,
+	}
+
 	// Call SendExecutionProofByRootRequest
-	proofs, err := SendExecutionProofsByRootRequest(ctx, block, alreadyHave)
+	// TODO: pid should be selected from best peers.
+	pid := peer.ID("")
+	proofs, err := SendExecutionProofsByRootRequest(ctx, s.cfg.clock, s.cfg.p2p, pid, req)
 	if err != nil {
 		return fmt.Errorf("send execution proofs by root request: %w", err)
 	}
