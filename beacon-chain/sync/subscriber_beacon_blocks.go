@@ -85,7 +85,7 @@ func (s *Service) beaconBlockSubscriber(ctx context.Context, msg proto.Message) 
 }
 
 func (s *Service) generateAndBroadcastExecutionProofs(ctx context.Context, roBlock blocks.ROBlock) {
-	const delay = 2 * time.Second
+	const delay = 100 * time.Millisecond
 	proofTypes := flags.Get().ProofGenerationTypes
 
 	if len(proofTypes) == 0 {
@@ -96,7 +96,6 @@ func (s *Service) generateAndBroadcastExecutionProofs(ctx context.Context, roBlo
 	for _, proofType := range proofTypes {
 		wg.Go(func() error {
 			execProof, err := generateExecProof(roBlock, primitives.ExecutionProofId(proofType), delay)
-
 			if err != nil {
 				return fmt.Errorf("generate exec proof: %w", err)
 			}
