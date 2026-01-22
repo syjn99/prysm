@@ -8,7 +8,6 @@ participants:
     cl_image: prysm-bn-custom-image
     cl_extra_params:
       - --activate-zkvm
-      - --zkvm-generation-proof-types=0,1
     vc_image: prysm-vc-custom-image
     count: 2
   # Lighthouse: Proof generating nodes (node 3)
@@ -18,7 +17,6 @@ participants:
     cl_image: lighthouse:local
     cl_extra_params:
       - --activate-zkvm
-      - --zkvm-generation-proof-types=0,1
       - --target-peers=3
     count: 1
   # Prysm: Proof verifying only node (node 4)
