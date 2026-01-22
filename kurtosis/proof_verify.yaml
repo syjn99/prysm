@@ -7,7 +7,6 @@ participants:
     cl_image: prysm-bn-custom-image
     cl_extra_params:
       - --activate-zkvm
-      - --zkvm-generation-proof-types=0,1
     vc_image: prysm-vc-custom-image
     count: 3
   # Proof verifying only node (node 4)
