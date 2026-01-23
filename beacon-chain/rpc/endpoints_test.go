@@ -48,6 +48,7 @@ func Test_endpoints(t *testing.T) {
 		"/eth/v1/beacon/pool/sync_committees":                          {http.MethodPost},
 		"/eth/v1/beacon/pool/voluntary_exits":                          {http.MethodGet, http.MethodPost},
 		"/eth/v1/beacon/pool/bls_to_execution_changes":                 {http.MethodGet, http.MethodPost},
+		"/eth/v1/beacon/pool/execution_proofs":                         {http.MethodPost},
 		"/prysm/v1/beacon/individual_votes":                            {http.MethodPost},
 	}
 

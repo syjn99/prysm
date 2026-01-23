@@ -262,3 +262,11 @@ type PendingConsolidation struct {
 	SourceIndex string `json:"source_index"`
 	TargetIndex string `json:"target_index"`
 }
+
+type ExecutionProof struct {
+	ProofId   string `json:"proof_id"`
+	Slot      string `json:"slot"`
+	BlockHash string `json:"block_hash"`
+	BlockRoot string `json:"block_root"`
+	ProofData string `json:"proof_data"`
+}

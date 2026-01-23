@@ -21,13 +21,15 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
 	blstoexecmock "github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec/mock"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/execproofs"
 	slashingsmock "github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings/mock"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/synccommittee"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits/mock"
 	p2pMock "github.com/OffchainLabs/prysm/v7/beacon-chain/p2p/testing"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core"
-	mockSync "github.com/OffchainLabs/prysm/v7/beacon-chain/sync/initial-sync/testing"
 	state_native "github.com/OffchainLabs/prysm/v7/beacon-chain/state/state-native"
+	mockSync "github.com/OffchainLabs/prysm/v7/beacon-chain/sync/initial-sync/testing"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/crypto/bls"
@@ -2240,6 +2242,121 @@ func TestSubmitProposerSlashing_InvalidSlashing(t *testing.T) {
 	require.NoError(t, json.Unmarshal(writer.Body.Bytes(), e))
 	assert.Equal(t, http.StatusBadRequest, e.Code)
 	assert.StringContains(t, "Invalid proposer slashing", e.Message)
+}
+
+func TestSubmitExecutionProofs(t *testing.T) {
+	transition.SkipSlotCache.Disable()
+	defer transition.SkipSlotCache.Enable()
+
+	_, keys, err := util.DeterministicDepositsAndKeys(1)
+	require.NoError(t, err)
+	privKey := keys[0]
+	pubKey := privKey.PublicKey().Marshal()
+
+	validator := &ethpbv1alpha1.Validator{
+		PublicKey:        pubKey,
+		EffectiveBalance: params.BeaconConfig().MaxEffectiveBalance,
+	}
+
+	bs, err := util.NewBeaconState(func(state *ethpbv1alpha1.BeaconState) error {
+		state.Validators = []*ethpbv1alpha1.Validator{validator}
+		state.Slot = 10
+		return nil
+	})
+	require.NoError(t, err)
+
+	blockRoot := bytesutil.PadTo([]byte("blockroot"), 32)
+
+	// Prepare a valid Execution Proof
+	proof := &ethpbv1alpha1.ExecutionProof{
+		ProofId:   primitives.ExecutionProofId(1),
+		Slot:      10,
+		BlockHash: bytesutil.PadTo([]byte("blockhash"), 32),
+		BlockRoot: blockRoot,
+		ProofData: []byte("proof-data"),
+	}
+
+	// Convert to JSON request struct
+	reqStruct := &structs.ExecutionProof{
+		ProofId:   fmt.Sprintf("%d", proof.ProofId),
+		Slot:      fmt.Sprintf("%d", proof.Slot),
+		BlockHash: hexutil.Encode(proof.BlockHash),
+		BlockRoot: hexutil.Encode(proof.BlockRoot),
+		ProofData: hexutil.Encode(proof.ProofData),
+	}
+
+	jsonBytes, err := json.Marshal(reqStruct)
+	require.NoError(t, err)
+
+	t.Run("ZKVM Feature Disabled", func(t *testing.T) {
+		params.SetupTestConfigCleanup(t)
+		resetCfg := features.InitWithReset(&features.Flags{
+			EnableZkvm: false,
+		})
+		t.Cleanup(func() {
+			resetCfg()
+		})
+
+		s := &Server{}
+
+		request := httptest.NewRequest(http.MethodPost, "http://example.com/beacon/pool/execution_proofs", bytes.NewReader(jsonBytes))
+		writer := httptest.NewRecorder()
+
+		s.SubmitExecutionProofs(writer, request)
+
+		assert.Equal(t, http.StatusBadRequest, writer.Code)
+		assert.StringContains(t, "ZKVM features are disabled", writer.Body.String())
+	})
+
+	t.Run("Valid Submission", func(t *testing.T) {
+		params.SetupTestConfigCleanup(t)
+		resetCfg := features.InitWithReset(&features.Flags{
+			EnableZkvm: true,
+		})
+		t.Cleanup(func() {
+			resetCfg()
+		})
+
+		broadcaster := &p2pMock.MockBroadcaster{}
+		chainService := &blockchainmock.ChainService{State: bs}
+		mockPool := execproofs.NewPool()
+
+		s := &Server{
+			ChainInfoFetcher:    chainService,
+			Broadcaster:         broadcaster,
+			OperationNotifier:   chainService.OperationNotifier(),
+			ExecutionProofsPool: mockPool,
+		}
+
+		request := httptest.NewRequest(http.MethodPost, "http://example.com/beacon/pool/execution_proofs", bytes.NewReader(jsonBytes))
+		writer := httptest.NewRecorder()
+
+		s.SubmitExecutionProofs(writer, request)
+
+		assert.Equal(t, http.StatusOK, writer.Code)
+
+		assert.Equal(t, http.StatusOK, writer.Code)
+		assert.Equal(t, true, broadcaster.BroadcastCalled.Load())
+		assert.Equal(t, 1, len(mockPool.Get([32]byte(blockRoot))))
+		assert.DeepEqual(t, proof.ProofData, mockPool.Get([32]byte(blockRoot))[0].ProofData)
+	})
+
+	t.Run("Invalid Body", func(t *testing.T) {
+		params.SetupTestConfigCleanup(t)
+		resetCfg := features.InitWithReset(&features.Flags{
+			EnableZkvm: true,
+		})
+		t.Cleanup(func() {
+			resetCfg()
+		})
+
+		s := &Server{}
+		request := httptest.NewRequest(http.MethodPost, "http://example.com", bytes.NewReader([]byte("invalid-json")))
+		writer := httptest.NewRecorder()
+
+		s.SubmitExecutionProofs(writer, request)
+		assert.Equal(t, http.StatusBadRequest, writer.Code)
+	})
 }
 
 var (

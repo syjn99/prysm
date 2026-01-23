@@ -508,6 +508,7 @@ func (s *Service) beaconEndpoints(
 		HeadFetcher:             s.cfg.HeadFetcher,
 		TimeFetcher:             s.cfg.GenesisTimeFetcher,
 		VoluntaryExitsPool:      s.cfg.ExitPool,
+		ExecutionProofsPool:     s.cfg.ExecutionProofsPool,
 		V1Alpha1ValidatorServer: validatorServer,
 		SyncChecker:             s.cfg.SyncService,
 		ExecutionReconstructor:  s.cfg.ExecutionReconstructor,
@@ -746,6 +747,17 @@ func (s *Service) beaconEndpoints(
 				middleware.AcceptEncodingHeaderHandler(),
 			},
 			handler: server.SubmitProposerSlashing,
+			methods: []string{http.MethodPost},
+		},
+		{
+			template: "/eth/v1/beacon/pool/execution_proofs",
+			name:     namespace + ".SubmitExecutionProof",
+			middleware: []middleware.Middleware{
+				middleware.ContentTypeHandler([]string{api.JsonMediaType}),
+				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
+				middleware.AcceptEncodingHeaderHandler(),
+			},
+			handler: server.SubmitExecutionProofs,
 			methods: []string{http.MethodPost},
 		},
 		{

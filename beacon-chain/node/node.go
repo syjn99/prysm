@@ -978,6 +978,7 @@ func (b *BeaconNode) registerRPCService(router *http.ServeMux) error {
 		SlashingsPool:             b.slashingsPool,
 		BLSChangesPool:            b.blsToExecPool,
 		SyncCommitteeObjectPool:   b.syncCommitteePool,
+		ExecutionProofsPool:       b.execProofsPool,
 		ExecutionChainService:     web3Service,
 		ExecutionChainInfoFetcher: web3Service,
 		ChainStartFetcher:         chainStartFetcher,

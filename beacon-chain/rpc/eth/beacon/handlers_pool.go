@@ -12,6 +12,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/api/server"
 	"github.com/OffchainLabs/prysm/v7/api/server/structs"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/blocks"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/executionproofs"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed/operation"
 	corehelpers "github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
@@ -892,4 +893,72 @@ func (s *Server) SubmitProposerSlashing(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
+}
+
+// SubmitExecutionProofs submits an execution proof object to node. If the execution proof
+// passes all validation constraints, node MUST publish the execution proof on the network.
+func (s *Server) SubmitExecutionProofs(w http.ResponseWriter, r *http.Request) {
+	ctx, span := trace.StartSpan(r.Context(), "beacon.SubmitExecutionProofs")
+	defer span.End()
+
+	if !features.Get().EnableZkvm {
+		httputil.HandleError(w, "ZKVM features are disabled", http.StatusBadRequest)
+		return
+	}
+
+	var req structs.ExecutionProof
+	err := json.NewDecoder(r.Body).Decode(&req)
+	switch {
+	case errors.Is(err, io.EOF):
+		httputil.HandleError(w, "No data submitted", http.StatusBadRequest)
+		return
+	case err != nil:
+		httputil.HandleError(w, "Could not decode request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	executionProof, err := req.ToConsensus()
+	if err != nil {
+		httputil.HandleError(w, "Could not convert request execution proof to consensus execution proof: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate execution proof
+	headState, err := s.ChainInfoFetcher.HeadState(ctx)
+	if err != nil {
+		httputil.HandleError(w, "Could not get head state: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	headState, err = transition.ProcessSlotsIfPossible(ctx, headState, executionProof.Slot)
+	if err != nil {
+		httputil.HandleError(w, "Could not process slots: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := executionproofs.VerifyExecutionProof(headState, executionProof); err != nil {
+		httputil.HandleError(w, "Invalid execution proof: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Insert into pool
+	s.ExecutionProofsPool.Insert(executionProof)
+
+	// Notify events
+	s.OperationNotifier.OperationFeed().Send(&feed.Event{
+		Type: operation.ExecutionProofReceived,
+		Data: &operation.ExecutionProofReceivedData{
+			ExecutionProof: executionProof,
+		},
+	})
+
+	// Broadcast execution proof
+	if err = s.Broadcaster.Broadcast(ctx, executionProof); err != nil {
+		httputil.HandleError(w, "Could not broadcast execution proof object: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.WithFields(logrus.Fields{
+		"slot":    executionProof.Slot,
+		"proofId": executionProof.ProofId,
+	}).Debug("Successfully submitted execution proof")
 }

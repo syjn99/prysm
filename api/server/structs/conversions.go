@@ -878,6 +878,45 @@ func (a *IndexedAttestationElectra) ToConsensus() (*eth.IndexedAttestationElectr
 	}, nil
 }
 
+func (ep *ExecutionProof) ToConsensus() (*eth.ExecutionProof, error) {
+	if ep == nil {
+		return nil, server.NewDecodeError(errNilValue, "ExecutionProof")
+	}
+
+	proofId, err := strconv.ParseUint(ep.ProofId, 10, 8)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "ProofId")
+	}
+
+	slot, err := strconv.ParseUint(ep.Slot, 10, 64)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "Slot")
+	}
+
+	blockHash, err := bytesutil.DecodeHexWithLength(ep.BlockHash, fieldparams.RootLength)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "BlockHash")
+	}
+
+	blockRoot, err := bytesutil.DecodeHexWithLength(ep.BlockRoot, fieldparams.RootLength)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "BlockRoot")
+	}
+
+	proofData, err := bytesutil.DecodeHexWithMaxLength(ep.ProofData, params.BeaconConfig().MaxProofDataBytes)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "ProofData")
+	}
+
+	return &eth.ExecutionProof{
+		ProofId:   primitives.ExecutionProofId(proofId),
+		Slot:      primitives.Slot(slot),
+		BlockHash: blockHash,
+		BlockRoot: blockRoot,
+		ProofData: proofData,
+	}, nil
+}
+
 func WithdrawalsFromConsensus(ws []*enginev1.Withdrawal) []*Withdrawal {
 	result := make([]*Withdrawal, len(ws))
 	for i, w := range ws {

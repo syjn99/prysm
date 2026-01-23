@@ -12,6 +12,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/execution"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/execproofs"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
@@ -36,6 +37,7 @@ type Server struct {
 	AttestationsPool        attestations.Pool
 	SlashingsPool           slashings.PoolManager
 	VoluntaryExitsPool      voluntaryexits.PoolManager
+	ExecutionProofsPool     execproofs.PoolManager
 	StateGenService         stategen.StateManager
 	Stater                  lookup.Stater
 	Blocker                 lookup.Blocker

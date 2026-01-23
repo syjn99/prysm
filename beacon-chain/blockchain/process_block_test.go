@@ -30,6 +30,7 @@ import (
 	forkchoicetypes "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/types"
 	lightClient "github.com/OffchainLabs/prysm/v7/beacon-chain/light-client"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations/kv"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/execproofs"
 	mockp2p "github.com/OffchainLabs/prysm/v7/beacon-chain/p2p/testing"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/config/features"
@@ -3070,6 +3071,7 @@ func TestIsDataAvailable(t *testing.T) {
 		testParams := testIsAvailableParams{
 			options: []Option{
 				WithOperationNotifier(&mock.MockOperationNotifier{}),
+				WithExecProofsPool(execproofs.NewPool()),
 			},
 			columnsToSave:           indices,
 			blobKzgCommitmentsCount: 3,
