@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/executionproofs"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/transition"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
@@ -48,7 +49,12 @@ func (s *Service) validateExecutionProof(ctx context.Context, pid peer.ID, msg *
 		return pubsub.ValidationIgnore, nil
 	}
 
-	st, err := s.cfg.chain.HeadStateReadOnly(ctx)
+	st, err := s.cfg.chain.HeadState(ctx)
+	if err != nil {
+		return pubsub.ValidationIgnore, err
+	}
+
+	st, err = transition.ProcessSlotsIfPossible(ctx, st, executionProof.Slot)
 	if err != nil {
 		return pubsub.ValidationIgnore, err
 	}
