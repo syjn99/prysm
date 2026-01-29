@@ -34,7 +34,8 @@ func (vs *Server) GetAttestationData(ctx context.Context, req *ethpb.Attestation
 		trace.Int64Attribute("committeeIndex", int64(req.CommitteeIndex)),
 	)
 
-	if vs.SyncChecker.Syncing() {
+	// Skip sync check if AllowOptimisticAttestation flag is enabled
+	if !features.Get().AllowOptimisticAttestation && vs.SyncChecker.Syncing() {
 		return nil, status.Errorf(codes.Unavailable, "Syncing to latest head, not ready to respond")
 	}
 	res, err := vs.CoreService.GetAttestationData(ctx, req)

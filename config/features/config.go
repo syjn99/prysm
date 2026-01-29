@@ -53,6 +53,7 @@ type Flags struct {
 	EnableWeb                           bool // EnableWeb enables the webui on the validator client
 	EnableStateDiff                     bool // EnableStateDiff enables the experimental state diff feature for the beacon node.
 	EnableZkvm                          bool // EnableZkvm enables zkVM related features.
+	AllowOptimisticAttestation          bool // AllowOptimisticAttestation allows attestation when head is optimistic.
 
 	// Logging related toggles.
 	DisableGRPCConnectionLogs bool // Disables logging when a new grpc client has connected.
@@ -302,6 +303,11 @@ func ConfigureBeaconChain(ctx *cli.Context) error {
 	if ctx.IsSet(EnableZkvmFlag.Name) {
 		logEnabled(EnableZkvmFlag)
 		cfg.EnableZkvm = true
+	}
+
+	if ctx.IsSet(AllowOptimisticAttestation.Name) {
+		logEnabled(AllowOptimisticAttestation)
+		cfg.AllowOptimisticAttestation = true
 	}
 
 	cfg.AggregateIntervals = [3]time.Duration{aggregateFirstInterval.Value, aggregateSecondInterval.Value, aggregateThirdInterval.Value}

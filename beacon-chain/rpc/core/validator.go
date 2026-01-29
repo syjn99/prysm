@@ -19,6 +19,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/validators"
 	forkchoicetypes "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/types"
 	beaconState "github.com/OffchainLabs/prysm/v7/beacon-chain/state"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -523,12 +524,15 @@ func (s *Service) GetAttestationData(
 		}, nil
 	}
 	// cache miss, we need to check for optimistic status before proceeding
-	optimistic, err := s.OptimisticModeFetcher.IsOptimistic(ctx)
-	if err != nil {
-		return nil, &RpcError{Reason: Internal, Err: err}
-	}
-	if optimistic {
-		return nil, &RpcError{Reason: Unavailable, Err: errOptimisticMode}
+	// Skip optimistic check if AllowOptimisticAttestation flag is enabled
+	if !features.Get().AllowOptimisticAttestation {
+		optimistic, err := s.OptimisticModeFetcher.IsOptimistic(ctx)
+		if err != nil {
+			return nil, &RpcError{Reason: Internal, Err: err}
+		}
+		if optimistic {
+			return nil, &RpcError{Reason: Unavailable, Err: errOptimisticMode}
+		}
 	}
 
 	headRoot, err := s.HeadFetcher.HeadRoot(ctx)

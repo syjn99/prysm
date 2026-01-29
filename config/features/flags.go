@@ -220,6 +220,18 @@ var (
         	and advertise zkVM support in its ENR for peer discovery.
 		`,
 	}
+	// AllowOptimisticAttestation allows validators to attest even when the head is optimistic.
+	// NOTE: This flag is only for demo. Though it is considered "optimistic",
+	// the node is fully verifying the execution payloads with the proofs.
+	AllowOptimisticAttestation = &cli.BoolFlag{
+		Name: "allow-optimistic-attestation",
+		Usage: `
+			Allows validators to produce attestations even when the beacon node head is in
+			optimistic mode (execution payload not yet validated). This is useful for stateless
+			nodes using a dummy execution layer that always returns SYNCING status.
+			WARNING: Use only in testing or controlled environments.
+		`,
+	}
 )
 
 // devModeFlags holds list of flags that are set when development mode is on.
@@ -282,6 +294,7 @@ var BeaconChainFlags = combinedFlags([]cli.Flag{
 	forceHeadFlag,
 	blacklistRoots,
 	EnableZkvmFlag,
+	AllowOptimisticAttestation,
 }, deprecatedBeaconFlags, deprecatedFlags, upcomingDeprecation)
 
 func combinedFlags(flags ...[]cli.Flag) []cli.Flag {

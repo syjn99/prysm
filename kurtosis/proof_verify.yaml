@@ -13,6 +13,7 @@ participants:
     cl_image: prysm-bn-custom-image
     cl_extra_params:
       - --activate-zkvm
+      - --allow-optimistic-attestation
     vc_image: prysm-vc-custom-image
     count: 2
 network_params:

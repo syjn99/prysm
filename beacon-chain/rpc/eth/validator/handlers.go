@@ -620,8 +620,11 @@ func (s *Server) GetAttestationData(w http.ResponseWriter, r *http.Request) {
 	ctx, span := trace.StartSpan(r.Context(), "validator.GetAttestationData")
 	defer span.End()
 
-	if shared.IsSyncing(ctx, w, s.SyncChecker, s.HeadFetcher, s.TimeFetcher, s.OptimisticModeFetcher) {
-		return
+	// Skip sync check if AllowOptimisticAttestation flag is enabled
+	if !features.Get().AllowOptimisticAttestation {
+		if shared.IsSyncing(ctx, w, s.SyncChecker, s.HeadFetcher, s.TimeFetcher, s.OptimisticModeFetcher) {
+			return
+		}
 	}
 
 	_, slot, ok := shared.UintFromQuery(w, r, "slot", true)
