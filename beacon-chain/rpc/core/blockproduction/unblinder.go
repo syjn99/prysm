@@ -12,7 +12,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func unblindBlobsSidecars(block interfaces.SignedBeaconBlock, bundle enginev1.BlobsBundler) ([]*ethpb.BlobSidecar, error) {
+// UnblindBlobsSidecars reconstructs blob sidecars from a blinded block and a builder bundle.
+func UnblindBlobsSidecars(block interfaces.SignedBeaconBlock, bundle enginev1.BlobsBundler) ([]*ethpb.BlobSidecar, error) {
 	if block.Version() < version.Deneb {
 		return nil, nil
 	}
