@@ -246,8 +246,7 @@ func (v *ValidatorNode) Start(ctx context.Context) error {
 		}
 
 		args = append(args,
-			fmt.Sprintf("--%s=http://localhost:%d", flags.BeaconRESTApiProviderFlag.Name, beaconRestApiPort),
-			fmt.Sprintf("--%s", features.EnableBeaconRESTApi.Name))
+			fmt.Sprintf("--%s=http://localhost:%d", flags.BeaconRESTApiProviderFlag.Name, beaconRestApiPort))
 	}
 
 	// Only apply e2e flags to the current branch. New flags may not exist in previous release.
