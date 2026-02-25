@@ -7,11 +7,9 @@ import (
 	"time"
 
 	builderapi "github.com/OffchainLabs/prysm/v7/api/client/builder"
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed"
 	blockfeed "github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed/block"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed/operation"
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/peerdas"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/transition"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
@@ -21,7 +19,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/monitoring/tracing/trace"
-	enginev1 "github.com/OffchainLabs/prysm/v7/proto/engine/v1"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
@@ -60,233 +57,19 @@ func (vs *Server) optimisticStatus(ctx context.Context) error {
 //
 // GetBeaconBlock is called by a proposer during its assigned slot to request a block to sign
 // by passing in the slot and the signed randao reveal of the slot.
+// Delegates to BlockProducer.ProduceBlock for the actual block construction.
 func (vs *Server) GetBeaconBlock(ctx context.Context, req *ethpb.BlockRequest) (*ethpb.GenericBeaconBlock, error) {
 	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
-	ctx, span := trace.StartSpan(ctx, "ProposerServer.GetBeaconBlock")
-	defer span.End()
-	span.SetAttributes(trace.Int64Attribute("slot", int64(req.Slot)))
-
-	t, err := slots.StartTime(vs.TimeFetcher.GenesisTime(), req.Slot)
-	if err != nil {
-		log.WithError(err).Error("Could not convert slot to time")
-	}
-
-	log := log.WithField("slot", req.Slot)
-	log.WithField("sinceSlotStartTime", time.Since(t)).Info("Begin building block")
-
-	// A syncing validator should not produce a block.
-	if vs.SyncChecker.Syncing() {
-		log.Error("Fail to build block: node is syncing")
-		return nil, status.Error(codes.Unavailable, "Syncing to latest head, not ready to respond")
-	}
-	// An optimistic validator MUST NOT produce a block (i.e., sign across the DOMAIN_BEACON_PROPOSER domain).
-	if slots.ToEpoch(req.Slot) >= params.BeaconConfig().BellatrixForkEpoch {
-		if err := vs.optimisticStatus(ctx); err != nil {
-			log.WithError(err).Error("Fail to build block: node is optimistic")
-			return nil, status.Errorf(codes.Unavailable, "Validator is not ready to propose: %v", err)
-		}
-	}
-
-	head, parentRoot, err := vs.getParentState(ctx, req.Slot)
-	if err != nil {
-		log.WithError(err).Error("Fail to build block: could not get parent state")
-		return nil, err
-	}
-	sBlk, err := getEmptyBlock(req.Slot)
-	if err != nil {
-		log.WithError(err).Error("Fail to build block: could not get empty block")
-		return nil, status.Errorf(codes.Internal, "Could not prepare block: %v", err)
-	}
-	// Set slot, graffiti, randao reveal, and parent root.
-	sBlk.SetSlot(req.Slot)
-	// Generate graffiti with client version info using flexible standard
-	if vs.GraffitiInfo != nil {
-		graffiti := vs.GraffitiInfo.GenerateGraffiti(req.Graffiti)
-		sBlk.SetGraffiti(graffiti[:])
-	} else {
-		sBlk.SetGraffiti(req.Graffiti)
-	}
-	sBlk.SetRandaoReveal(req.RandaoReveal)
-	sBlk.SetParentRoot(parentRoot[:])
-
-	// Set proposer index.
-	idx, err := helpers.BeaconProposerIndex(ctx, head)
-	if err != nil {
-		return nil, fmt.Errorf("could not calculate proposer index %w", err)
-	}
-	sBlk.SetProposerIndex(idx)
-
 	builderBoostFactor := defaultBuilderBoostFactor
 	if req.BuilderBoostFactor != nil {
 		builderBoostFactor = primitives.Gwei(req.BuilderBoostFactor.Value)
 	}
-
-	resp, err := vs.BuildBlockParallel(ctx, sBlk, head, req.SkipMevBoost, builderBoostFactor)
-	log = log.WithFields(logrus.Fields{
-		"sinceSlotStartTime": time.Since(t),
-		"validator":          sBlk.Block().ProposerIndex(),
-	})
-
-	if err != nil {
-		log.WithError(err).Error("Finished building block")
-		return nil, errors.Wrap(err, "could not build block in parallel")
-	}
-
-	log.Info("Finished building block")
-	return resp, nil
+	return vs.BlockProducer.ProduceBlock(ctx, req.Slot, req.RandaoReveal, req.Graffiti, req.SkipMevBoost, builderBoostFactor)
 }
 
-func (vs *Server) handleSuccesfulReorgAttempt(ctx context.Context, slot primitives.Slot, parentRoot, _ [32]byte) (state.BeaconState, error) {
-	// Try to get the state from the NSC
-	head := transition.NextSlotState(parentRoot[:], slot)
-	if head != nil {
-		return head, nil
-	}
-	// cache miss
-	head, err := vs.StateGen.StateByRoot(ctx, parentRoot)
-	if err != nil {
-		return nil, status.Error(codes.Unavailable, "could not obtain head state")
-	}
-	return head, nil
-}
-
-func logFailedReorgAttempt(slot primitives.Slot, oldHeadRoot, headRoot [32]byte) {
-	blockchain.LateBlockAttemptedReorgCount.Inc()
-	log.WithFields(logrus.Fields{
-		"slot":        slot,
-		"oldHeadRoot": fmt.Sprintf("%#x", oldHeadRoot),
-		"headRoot":    fmt.Sprintf("%#x", headRoot),
-	}).Warn("Late block attempted reorg failed")
-}
-
-func (vs *Server) getHeadNoReorg(ctx context.Context, slot primitives.Slot, parentRoot [32]byte) (state.BeaconState, error) {
-	// Try to get the state from the NSC
-	head := transition.NextSlotState(parentRoot[:], slot)
-	if head != nil {
-		return head, nil
-	}
-	head, err := vs.HeadFetcher.HeadState(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Could not get head state: %v", err)
-	}
-	return head, nil
-}
-
-func (vs *Server) getParentStateFromReorgData(ctx context.Context, slot primitives.Slot, oldHeadRoot, parentRoot, headRoot [32]byte) (head state.BeaconState, err error) {
-	if parentRoot != headRoot {
-		head, err = vs.handleSuccesfulReorgAttempt(ctx, slot, parentRoot, headRoot)
-	} else {
-		if oldHeadRoot != headRoot {
-			logFailedReorgAttempt(slot, oldHeadRoot, headRoot)
-		}
-		head, err = vs.getHeadNoReorg(ctx, slot, parentRoot)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if head.Slot() >= slot {
-		return head, nil
-	}
-	head, err = transition.ProcessSlotsUsingNextSlotCache(ctx, head, parentRoot[:], slot)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Could not process slots up to %d: %v", slot, err)
-	}
-	return head, nil
-}
-
-func (vs *Server) getParentState(ctx context.Context, slot primitives.Slot) (state.BeaconState, [32]byte, error) {
-	// process attestations and update head in forkchoice
-	oldHeadRoot := vs.ForkchoiceFetcher.CachedHeadRoot()
-	vs.ForkchoiceFetcher.UpdateHead(ctx, vs.TimeFetcher.CurrentSlot())
-	headRoot := vs.ForkchoiceFetcher.CachedHeadRoot()
-	parentRoot := vs.ForkchoiceFetcher.GetProposerHead()
-	head, err := vs.getParentStateFromReorgData(ctx, slot, oldHeadRoot, parentRoot, headRoot)
-	return head, parentRoot, err
-}
-
+// BuildBlockParallel delegates to BlockProducer.BuildBlockParallel.
 func (vs *Server) BuildBlockParallel(ctx context.Context, sBlk interfaces.SignedBeaconBlock, head state.BeaconState, skipMevBoost bool, builderBoostFactor primitives.Gwei) (*ethpb.GenericBeaconBlock, error) {
-	// Build consensus fields in background
-	var wg sync.WaitGroup
-	wg.Go(func() {
-
-		// Set eth1 data.
-		eth1Data, err := vs.eth1DataMajorityVote(ctx, head)
-		if err != nil {
-			eth1Data = &ethpb.Eth1Data{DepositRoot: params.BeaconConfig().ZeroHash[:], BlockHash: params.BeaconConfig().ZeroHash[:]}
-			log.WithError(err).Error("Could not get eth1data")
-		}
-		sBlk.SetEth1Data(eth1Data)
-
-		// Set deposit and attestation.
-		deposits, atts, err := vs.packDepositsAndAttestations(ctx, head, sBlk.Block().Slot(), eth1Data) // TODO: split attestations and deposits
-		if err != nil {
-			sBlk.SetDeposits([]*ethpb.Deposit{})
-			if err := sBlk.SetAttestations([]ethpb.Att{}); err != nil {
-				log.WithError(err).Error("Could not set attestations on block")
-			}
-			log.WithError(err).Error("Could not pack deposits and attestations")
-		} else {
-			sBlk.SetDeposits(deposits)
-			if err := sBlk.SetAttestations(atts); err != nil {
-				log.WithError(err).Error("Could not set attestations on block")
-			}
-		}
-
-		// Set slashings.
-		validProposerSlashings, validAttSlashings := vs.getSlashings(ctx, head)
-		sBlk.SetProposerSlashings(validProposerSlashings)
-		if err := sBlk.SetAttesterSlashings(validAttSlashings); err != nil {
-			log.WithError(err).Error("Could not set attester slashings on block")
-		}
-
-		// Set exits.
-		sBlk.SetVoluntaryExits(vs.getExits(head, sBlk.Block().Slot()))
-
-		// Set sync aggregate. New in Altair.
-		vs.setSyncAggregate(ctx, sBlk, head)
-
-		// Set bls to execution change. New in Capella.
-		vs.setBlsToExecData(sBlk, head)
-	})
-
-	winningBid := primitives.ZeroWei()
-	var bundle enginev1.BlobsBundler
-	if sBlk.Version() >= version.Bellatrix {
-		local, err := vs.getLocalPayload(ctx, sBlk.Block(), head)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Could not get local payload: %v", err)
-		}
-
-		// There's no reason to try to get a builder bid if local override is true.
-		var builderBid builderapi.Bid
-		if !(local.OverrideBuilder || skipMevBoost) {
-			latestHeader, err := head.LatestExecutionPayloadHeader()
-			if err != nil {
-				return nil, status.Errorf(codes.Internal, "Could not get latest execution payload header: %v", err)
-			}
-			parentGasLimit := latestHeader.GasLimit()
-			builderBid, err = vs.getBuilderPayloadAndBlobs(ctx, sBlk.Block().Slot(), sBlk.Block().ProposerIndex(), parentGasLimit)
-			if err != nil {
-				builderGetPayloadMissCount.Inc()
-				log.WithError(err).Error("Could not get builder payload")
-			}
-		}
-
-		winningBid, bundle, err = setExecutionData(ctx, sBlk, local, builderBid, builderBoostFactor)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Could not set execution data: %v", err)
-		}
-	}
-
-	wg.Wait()
-
-	sr, err := vs.computeStateRoot(ctx, sBlk)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Could not compute state root: %v", err)
-	}
-	sBlk.SetStateRoot(sr)
-
-	return vs.constructGenericBeaconBlock(sBlk, bundle, winningBid)
+	return vs.BlockProducer.BuildBlockParallel(ctx, sBlk, head, skipMevBoost, builderBoostFactor)
 }
 
 // Deprecated: The gRPC API will remain the default and fully supported through v8 (expected in 2026) but will be eventually removed in favor of REST API.

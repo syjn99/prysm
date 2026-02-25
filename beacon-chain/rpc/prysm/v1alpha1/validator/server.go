@@ -22,6 +22,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core/blockproduction"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/startup"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/sync"
@@ -74,5 +75,6 @@ type Server struct {
 	CoreService             *core.Service
 	AttestationStateFetcher blockchain.AttestationStateFetcher
 	GraffitiInfo            *execution.GraffitiInfo
+	BlockProducer           *blockproduction.BlockProducer
 }
 
