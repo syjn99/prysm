@@ -10,7 +10,6 @@ import (
 	builderapi "github.com/OffchainLabs/prysm/v7/api/client/builder"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain/kzg"
 	mock "github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain/testing"
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/builder"
 	builderTest "github.com/OffchainLabs/prysm/v7/beacon-chain/builder/testing"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/cache"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/cache/depositsnapshot"
@@ -51,9 +50,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/testing/util"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	logTest "github.com/sirupsen/logrus/hooks/test"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -3151,171 +3148,6 @@ func TestProposer_DeleteAttsInPool_Aggregated(t *testing.T) {
 	assert.Equal(t, 0, len(atts), "Did not delete unaggregated attestation")
 }
 
-func TestProposer_PrepareBeaconProposer(t *testing.T) {
-	type args struct {
-		request *ethpb.PrepareBeaconProposerRequest
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr string
-	}{
-		{
-			name: "Happy Path",
-			args: args{
-				request: &ethpb.PrepareBeaconProposerRequest{
-					Recipients: []*ethpb.PrepareBeaconProposerRequest_FeeRecipientContainer{
-						{
-							FeeRecipient:   make([]byte, fieldparams.FeeRecipientLength),
-							ValidatorIndex: 1,
-						},
-					},
-				},
-			},
-			wantErr: "",
-		},
-		{
-			name: "invalid fee recipient length",
-			args: args{
-				request: &ethpb.PrepareBeaconProposerRequest{
-					Recipients: []*ethpb.PrepareBeaconProposerRequest_FeeRecipientContainer{
-						{
-							FeeRecipient:   make([]byte, fieldparams.BLSPubkeyLength),
-							ValidatorIndex: 1,
-						},
-					},
-				},
-			},
-			wantErr: "Invalid fee recipient address",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			db := dbutil.SetupDB(t)
-			ctx := t.Context()
-			proposerServer := &Server{
-				BeaconDB:               db,
-				TrackedValidatorsCache: cache.NewTrackedValidatorsCache(),
-			}
-			require.Equal(t, false, proposerServer.TrackedValidatorsCache.Validating())
-			_, err := proposerServer.PrepareBeaconProposer(ctx, tt.args.request)
-			if tt.wantErr != "" {
-				require.ErrorContains(t, tt.wantErr, err)
-				return
-			} else {
-				require.Equal(t, true, proposerServer.TrackedValidatorsCache.Validating())
-			}
-			require.NoError(t, err)
-			val, tracked := proposerServer.TrackedValidatorsCache.Validator(1)
-			require.Equal(t, true, tracked)
-			require.Equal(t, primitives.ExecutionAddress(tt.args.request.Recipients[0].FeeRecipient), val.FeeRecipient)
-
-		})
-	}
-}
-
-func TestProposer_PrepareBeaconProposerOverlapping(t *testing.T) {
-	hook := logTest.NewGlobal()
-	logrus.SetLevel(logrus.DebugLevel)
-
-	db := dbutil.SetupDB(t)
-	ctx := t.Context()
-	proposerServer := &Server{
-		BeaconDB:               db,
-		TrackedValidatorsCache: cache.NewTrackedValidatorsCache(),
-	}
-
-	// New validator
-	f := bytesutil.PadTo([]byte{0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF}, fieldparams.FeeRecipientLength)
-	req := &ethpb.PrepareBeaconProposerRequest{
-		Recipients: []*ethpb.PrepareBeaconProposerRequest_FeeRecipientContainer{
-			{FeeRecipient: f, ValidatorIndex: 1},
-		},
-	}
-	_, err := proposerServer.PrepareBeaconProposer(ctx, req)
-	require.NoError(t, err)
-	require.LogsContain(t, hook, "Updated fee recipient addresses")
-
-	// Same validator
-	hook.Reset()
-	_, err = proposerServer.PrepareBeaconProposer(ctx, req)
-	require.NoError(t, err)
-	require.LogsContain(t, hook, "Updated fee recipient addresses")
-
-	// Same validator with different fee recipient
-	hook.Reset()
-	f = bytesutil.PadTo([]byte{0x01, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF}, fieldparams.FeeRecipientLength)
-	req = &ethpb.PrepareBeaconProposerRequest{
-		Recipients: []*ethpb.PrepareBeaconProposerRequest_FeeRecipientContainer{
-			{FeeRecipient: f, ValidatorIndex: 1},
-		},
-	}
-	_, err = proposerServer.PrepareBeaconProposer(ctx, req)
-	require.NoError(t, err)
-	require.LogsContain(t, hook, "Updated fee recipient addresses")
-
-	// More than one validator
-	hook.Reset()
-	f = bytesutil.PadTo([]byte{0x01, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF}, fieldparams.FeeRecipientLength)
-	req = &ethpb.PrepareBeaconProposerRequest{
-		Recipients: []*ethpb.PrepareBeaconProposerRequest_FeeRecipientContainer{
-			{FeeRecipient: f, ValidatorIndex: 1},
-			{FeeRecipient: f, ValidatorIndex: 2},
-		},
-	}
-	_, err = proposerServer.PrepareBeaconProposer(ctx, req)
-	require.NoError(t, err)
-	require.LogsContain(t, hook, "Updated fee recipient addresses")
-
-	// Same validators
-	hook.Reset()
-	_, err = proposerServer.PrepareBeaconProposer(ctx, req)
-	require.NoError(t, err)
-	require.LogsContain(t, hook, "Updated fee recipient addresses")
-}
-
-func BenchmarkServer_PrepareBeaconProposer(b *testing.B) {
-	db := dbutil.SetupDB(b)
-	ctx := b.Context()
-	proposerServer := &Server{
-		BeaconDB:               db,
-		TrackedValidatorsCache: cache.NewTrackedValidatorsCache(),
-	}
-	f := bytesutil.PadTo([]byte{0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF, 0x01, 0xFF}, fieldparams.FeeRecipientLength)
-	recipients := make([]*ethpb.PrepareBeaconProposerRequest_FeeRecipientContainer, 0)
-	for i := range 10000 {
-		recipients = append(recipients, &ethpb.PrepareBeaconProposerRequest_FeeRecipientContainer{FeeRecipient: f, ValidatorIndex: primitives.ValidatorIndex(i)})
-	}
-
-	req := &ethpb.PrepareBeaconProposerRequest{
-		Recipients: recipients,
-	}
-
-	for b.Loop() {
-		_, err := proposerServer.PrepareBeaconProposer(ctx, req)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func TestProposer_SubmitValidatorRegistrations(t *testing.T) {
-	ctx := t.Context()
-	proposerServer := &Server{}
-	reg := &ethpb.SignedValidatorRegistrationsV1{}
-	_, err := proposerServer.SubmitValidatorRegistrations(ctx, reg)
-	require.ErrorContains(t, builder.ErrNoBuilder.Error(), err)
-	proposerServer = &Server{BlockBuilder: &builderTest.MockBuilderService{}}
-	_, err = proposerServer.SubmitValidatorRegistrations(ctx, reg)
-	require.ErrorContains(t, builder.ErrNoBuilder.Error(), err)
-	proposerServer = &Server{BlockBuilder: &builderTest.MockBuilderService{HasConfigured: true}}
-	_, err = proposerServer.SubmitValidatorRegistrations(ctx, reg)
-	require.NoError(t, err)
-	proposerServer = &Server{BlockBuilder: &builderTest.MockBuilderService{HasConfigured: true, ErrRegisterValidator: errors.New("bad")}}
-	_, err = proposerServer.SubmitValidatorRegistrations(ctx, reg)
-	require.ErrorContains(t, "bad", err)
-}
-
 func majorityVoteBoundaryTime(slot primitives.Slot) (uint64, uint64) {
 	s := params.BeaconConfig().SlotsPerEpoch.Mul(uint64(params.BeaconConfig().EpochsPerEth1VotingPeriod))
 	slotStartTime := uint64(mockExecution.GenesisTime) + uint64((slot - (slot % (s))).Mul(params.BeaconConfig().SecondsPerSlot))
@@ -3323,46 +3155,6 @@ func majorityVoteBoundaryTime(slot primitives.Slot) (uint64, uint64) {
 	latestValidTime := slotStartTime - params.BeaconConfig().SecondsPerETH1Block*params.BeaconConfig().Eth1FollowDistance
 
 	return earliestValidTime, latestValidTime
-}
-
-func TestProposer_GetFeeRecipientByPubKey(t *testing.T) {
-	db := dbutil.SetupDB(t)
-	ctx := t.Context()
-	numDeposits := uint64(64)
-	beaconState, _ := util.DeterministicGenesisState(t, numDeposits)
-	bsRoot, err := beaconState.HashTreeRoot(ctx)
-	require.NoError(t, err)
-	proposerServer := &Server{
-		BeaconDB:    db,
-		HeadFetcher: &mock.ChainService{Root: bsRoot[:], State: beaconState},
-	}
-	pubkey, err := hexutil.Decode("0xa057816155ad77931185101128655c0191bd0214c201ca48ed887f6c4c6adf334070efcd75140eada5ac83a92506dd7a")
-	require.NoError(t, err)
-	resp, err := proposerServer.GetFeeRecipientByPubKey(ctx, &ethpb.FeeRecipientByPubKeyRequest{
-		PublicKey: pubkey,
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, params.BeaconConfig().DefaultFeeRecipient.Hex(), hexutil.Encode(resp.FeeRecipient))
-	params.BeaconConfig().DefaultFeeRecipient = common.HexToAddress("0x046Fb65722E7b2455012BFEBf6177F1D2e9728D9")
-	resp, err = proposerServer.GetFeeRecipientByPubKey(ctx, &ethpb.FeeRecipientByPubKeyRequest{
-		PublicKey: beaconState.Validators()[0].PublicKey,
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, params.BeaconConfig().DefaultFeeRecipient.Hex(), common.BytesToAddress(resp.FeeRecipient).Hex())
-	index, err := proposerServer.ValidatorIndex(ctx, &ethpb.ValidatorIndexRequest{
-		PublicKey: beaconState.Validators()[0].PublicKey,
-	})
-	require.NoError(t, err)
-	err = proposerServer.BeaconDB.SaveFeeRecipientsByValidatorIDs(ctx, []primitives.ValidatorIndex{index.Index}, []common.Address{common.HexToAddress("0x055Fb65722E7b2455012BFEBf6177F1D2e9728D8")})
-	require.NoError(t, err)
-	resp, err = proposerServer.GetFeeRecipientByPubKey(ctx, &ethpb.FeeRecipientByPubKeyRequest{
-		PublicKey: beaconState.Validators()[0].PublicKey,
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, common.HexToAddress("0x055Fb65722E7b2455012BFEBf6177F1D2e9728D8").Hex(), common.BytesToAddress(resp.FeeRecipient).Hex())
 }
 
 func TestProposer_GetParentHeadState(t *testing.T) {
