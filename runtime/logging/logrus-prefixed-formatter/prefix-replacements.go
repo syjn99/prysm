@@ -17,7 +17,6 @@ var prefixReplacements = map[string]string{
 	"beacon-chain/rpc/eth/beacon":                     "rpc/beacon",
 	"beacon-chain/rpc/eth/validator":                  "beacon-api",
 	"beacon-chain/rpc/prysm/v1alpha1/beacon":          "rpc",
-	"beacon-chain/rpc/prysm/v1alpha1/validator":       "rpc/validator",
 	"beacon-chain/sync/checkpoint":                    "checkpoint-sync",
 	"config/features":                                 "flags",
 	"proto/prysm/v1alpha1":                            "protobuf",
