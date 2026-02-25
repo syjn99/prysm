@@ -45,6 +45,7 @@ func (vs *Server) ValidatorStatus(
 	ctx context.Context,
 	req *ethpb.ValidatorStatusRequest,
 ) (*ethpb.ValidatorStatusResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	headState, err := vs.HeadFetcher.HeadStateReadOnly(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Could not get head state")
@@ -62,6 +63,7 @@ func (vs *Server) MultipleValidatorStatus(
 	ctx context.Context,
 	req *ethpb.MultipleValidatorStatusRequest,
 ) (*ethpb.MultipleValidatorStatusResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	if vs.SyncChecker.Syncing() {
 		return nil, status.Errorf(codes.Unavailable, "Syncing to latest head, not ready to respond")
 	}
@@ -108,6 +110,7 @@ func (vs *Server) MultipleValidatorStatus(
 //
 // CheckDoppelGanger checks if the provided keys are currently active in the network.
 func (vs *Server) CheckDoppelGanger(ctx context.Context, req *ethpb.DoppelGangerRequest) (*ethpb.DoppelGangerResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	if vs.SyncChecker.Syncing() {
 		return nil, status.Errorf(codes.Unavailable, "Syncing to latest head, not ready to respond")
 	}
