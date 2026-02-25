@@ -10,6 +10,7 @@ import (
 
 	"github.com/OffchainLabs/prysm/v7/api"
 	"github.com/OffchainLabs/prysm/v7/api/server/structs"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core/blockproduction"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/rewards"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/shared"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
@@ -101,7 +102,11 @@ func (s *Server) ProduceBlockV3(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) produceBlockV3(ctx context.Context, w http.ResponseWriter, r *http.Request, v1alpha1req *eth.BlockRequest, requiredType blockType) {
 	isSSZ := httputil.RespondWithSsz(r)
-	v1alpha1resp, err := s.V1Alpha1Server.GetBeaconBlock(ctx, v1alpha1req)
+	builderBoostFactor := blockproduction.DefaultBuilderBoostFactor
+	if v1alpha1req.BuilderBoostFactor != nil {
+		builderBoostFactor = primitives.Gwei(v1alpha1req.BuilderBoostFactor.Value)
+	}
+	v1alpha1resp, err := s.BlockProducer.ProduceBlock(ctx, v1alpha1req.Slot, v1alpha1req.RandaoReveal, v1alpha1req.Graffiti, v1alpha1req.SkipMevBoost, builderBoostFactor)
 	if err != nil {
 		httputil.HandleError(w, err.Error(), http.StatusInternalServerError)
 		return

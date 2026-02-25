@@ -10,6 +10,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/synccommittee"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core/blockproduction"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/rewards"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/lookup"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/sync"
@@ -38,4 +39,5 @@ type Server struct {
 	BlockRewardFetcher     rewards.BlockRewardsFetcher
 	TrackedValidatorsCache *cache.TrackedValidatorsCache
 	PayloadIDCache         *cache.PayloadIDCache
+	BlockProducer          *blockproduction.BlockProducer
 }
