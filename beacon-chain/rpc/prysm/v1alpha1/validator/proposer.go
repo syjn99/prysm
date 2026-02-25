@@ -52,6 +52,7 @@ const (
 // GetBeaconBlock is called by a proposer during its assigned slot to request a block to sign
 // by passing in the slot and the signed randao reveal of the slot.
 func (vs *Server) GetBeaconBlock(ctx context.Context, req *ethpb.BlockRequest) (*ethpb.GenericBeaconBlock, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "ProposerServer.GetBeaconBlock")
 	defer span.End()
 	span.SetAttributes(trace.Int64Attribute("slot", int64(req.Slot)))
@@ -283,6 +284,7 @@ func (vs *Server) BuildBlockParallel(ctx context.Context, sBlk interfaces.Signed
 //
 // ProposeBeaconBlock handles the proposal of beacon blocks.
 func (vs *Server) ProposeBeaconBlock(ctx context.Context, req *ethpb.GenericSignedBeaconBlock) (*ethpb.ProposeResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	var (
 		blobSidecars       []*ethpb.BlobSidecar
 		dataColumnSidecars []blocks.RODataColumn
@@ -530,6 +532,7 @@ func (vs *Server) broadcastAndReceiveDataColumns(ctx context.Context, roSidecars
 func (vs *Server) PrepareBeaconProposer(
 	_ context.Context, request *ethpb.PrepareBeaconProposerRequest,
 ) (*emptypb.Empty, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	var validatorIndices []primitives.ValidatorIndex
 
 	for _, r := range request.Recipients {
@@ -573,6 +576,7 @@ func (vs *Server) PrepareBeaconProposer(
 //
 // GetFeeRecipientByPubKey returns a fee recipient from the beacon node's settings or db based on a given public key
 func (vs *Server) GetFeeRecipientByPubKey(ctx context.Context, request *ethpb.FeeRecipientByPubKeyRequest) (*ethpb.FeeRecipientByPubKeyResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "validator.GetFeeRecipientByPublicKey")
 	defer span.End()
 	if request == nil {
@@ -689,6 +693,7 @@ func (vs *Server) handleStateRootError(ctx context.Context, block interfaces.Sig
 //
 // SubmitValidatorRegistrations submits validator registrations.
 func (vs *Server) SubmitValidatorRegistrations(ctx context.Context, reg *ethpb.SignedValidatorRegistrationsV1) (*emptypb.Empty, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	if vs.BlockBuilder == nil || !vs.BlockBuilder.Configured() {
 		return &emptypb.Empty{}, status.Errorf(codes.InvalidArgument, "Could not register block builder: %v", builder.ErrNoBuilder)
 	}
