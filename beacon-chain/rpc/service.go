@@ -245,47 +245,14 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		GraffitiInfo:           s.cfg.GraffitiInfo,
 	}
 	validatorServer := &validatorv1alpha1.Server{
-		Ctx:                     s.ctx,
-		AttestationCache:        s.cfg.AttestationCache,
-		AttPool:                 s.cfg.AttestationsPool,
-		ExitPool:                s.cfg.ExitPool,
-		HeadFetcher:             s.cfg.HeadFetcher,
-		ForkFetcher:             s.cfg.ForkFetcher,
-		ForkchoiceFetcher:       s.cfg.ForkchoiceFetcher,
-		GenesisFetcher:          s.cfg.GenesisFetcher,
-		FinalizationFetcher:     s.cfg.FinalizationFetcher,
-		TimeFetcher:             s.cfg.GenesisTimeFetcher,
-		BlockFetcher:            s.cfg.ExecutionChainService,
-		DepositFetcher:          s.cfg.DepositFetcher,
-		ChainStartFetcher:       s.cfg.ChainStartFetcher,
-		Eth1InfoFetcher:         s.cfg.ExecutionChainService,
-		OptimisticModeFetcher:   s.cfg.OptimisticModeFetcher,
-		SyncChecker:             s.cfg.SyncService,
-		StateNotifier:           s.cfg.StateNotifier,
-		BlockNotifier:           s.cfg.BlockNotifier,
-		OperationNotifier:       s.cfg.OperationNotifier,
-		P2P:                     s.cfg.Broadcaster,
-		BlockReceiver:           s.cfg.BlockReceiver,
-		BlobReceiver:            s.cfg.BlobReceiver,
-		DataColumnReceiver:      s.cfg.DataColumnReceiver,
-		MockEth1Votes:           s.cfg.MockEth1Votes,
-		Eth1BlockFetcher:        s.cfg.ExecutionChainService,
-		PendingDepositsFetcher:  s.cfg.PendingDepositFetcher,
-		SlashingsPool:           s.cfg.SlashingsPool,
-		StateGen:                s.cfg.StateGen,
-		SyncCommitteePool:       s.cfg.SyncCommitteeObjectPool,
-		ReplayerBuilder:         ch,
-		ExecutionEngineCaller:   s.cfg.ExecutionEngineCaller,
-		BeaconDB:                s.cfg.BeaconDB,
-		BlockBuilder:            s.cfg.BlockBuilder,
-		BLSChangesPool:          s.cfg.BLSChangesPool,
-		ClockWaiter:             s.cfg.ClockWaiter,
-		CoreService:             coreService,
-		TrackedValidatorsCache:  s.cfg.TrackedValidatorsCache,
-		PayloadIDCache:          s.cfg.PayloadIDCache,
-		AttestationStateFetcher: s.cfg.AttestationReceiver,
-		GraffitiInfo:            s.cfg.GraffitiInfo,
-		BlockProducer:           blockProducer,
+		BlockNotifier:      s.cfg.BlockNotifier,
+		OperationNotifier:  s.cfg.OperationNotifier,
+		P2P:                s.cfg.Broadcaster,
+		BlockReceiver:      s.cfg.BlockReceiver,
+		BlobReceiver:       s.cfg.BlobReceiver,
+		DataColumnReceiver: s.cfg.DataColumnReceiver,
+		BlockBuilder:       s.cfg.BlockBuilder,
+		BlockProducer:      blockProducer,
 	}
 	s.validatorServer = validatorServer
 	nodeServer := &nodev1alpha1.Server{
@@ -354,7 +321,6 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		}
 		ethpbv1alpha1.RegisterDebugServer(s.grpcServer, debugServer)
 	}
-	ethpbv1alpha1.RegisterBeaconNodeValidatorServer(s.grpcServer, validatorServer)
 	// Register reflection service on gRPC server.
 	reflection.Register(s.grpcServer)
 
