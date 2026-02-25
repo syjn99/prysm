@@ -15,10 +15,10 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/node"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/rewards"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/validator"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core/blockproduction"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/lookup"
 	beaconprysm "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/beacon"
 	nodeprysm "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/node"
-	validatorv1alpha1 "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/v1alpha1/validator"
 	validatorprysm "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/validator"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen"
 	"github.com/OffchainLabs/prysm/v7/config/features"
@@ -83,16 +83,16 @@ func (s *Service) endpoints(
 	blocker lookup.Blocker,
 	stater lookup.Stater,
 	rewardFetcher rewards.BlockRewardsFetcher,
-	validatorServer *validatorv1alpha1.Server,
+	blockProducer *blockproduction.BlockProducer,
 	coreService *core.Service,
 	ch *stategen.CanonicalHistory,
 ) []endpoint {
 	endpoints := make([]endpoint, 0)
 	endpoints = append(endpoints, s.rewardsEndpoints(blocker, stater, rewardFetcher)...)
 	endpoints = append(endpoints, s.blobEndpoints(blocker)...)
-	endpoints = append(endpoints, s.validatorEndpoints(validatorServer, stater, coreService, rewardFetcher)...)
+	endpoints = append(endpoints, s.validatorEndpoints(blockProducer, stater, coreService, rewardFetcher)...)
 	endpoints = append(endpoints, s.nodeEndpoints()...)
-	endpoints = append(endpoints, s.beaconEndpoints(ch, stater, blocker, validatorServer, coreService)...)
+	endpoints = append(endpoints, s.beaconEndpoints(ch, stater, blocker, blockProducer, coreService)...)
 	endpoints = append(endpoints, s.configEndpoints()...)
 	endpoints = append(endpoints, s.eventsEndpoints()...)
 	endpoints = append(endpoints, s.prysmBeaconEndpoints(ch, stater, blocker, coreService)...)
@@ -194,7 +194,7 @@ func (s *Service) blobEndpoints(blocker lookup.Blocker) []endpoint {
 }
 
 func (s *Service) validatorEndpoints(
-	validatorServer *validatorv1alpha1.Server,
+	blockProducer *blockproduction.BlockProducer,
 	stater lookup.Stater,
 	coreService *core.Service,
 	rewardFetcher rewards.BlockRewardsFetcher,
@@ -208,7 +208,6 @@ func (s *Service) validatorEndpoints(
 		AttestationsPool:       s.cfg.AttestationsPool,
 		PeerManager:            s.cfg.PeerManager,
 		Broadcaster:            s.cfg.Broadcaster,
-		V1Alpha1Server:         validatorServer,
 		Stater:                 stater,
 		SyncCommitteePool:      s.cfg.SyncCommitteeObjectPool,
 		ChainInfoFetcher:       s.cfg.ChainInfoFetcher,
@@ -219,7 +218,7 @@ func (s *Service) validatorEndpoints(
 		PayloadIDCache:         s.cfg.PayloadIDCache,
 		CoreService:            coreService,
 		BlockRewardFetcher:     rewardFetcher,
-		BlockProducer:          validatorServer.BlockProducer,
+		BlockProducer:          blockProducer,
 	}
 
 	const namespace = "validator"
@@ -509,7 +508,7 @@ func (s *Service) beaconEndpoints(
 	ch *stategen.CanonicalHistory,
 	stater lookup.Stater,
 	blocker lookup.Blocker,
-	validatorServer *validatorv1alpha1.Server,
+	blockProducer *blockproduction.BlockProducer,
 	coreService *core.Service,
 ) []endpoint {
 	server := &beacon.Server{
@@ -531,7 +530,7 @@ func (s *Service) beaconEndpoints(
 		HeadFetcher:             s.cfg.HeadFetcher,
 		TimeFetcher:             s.cfg.GenesisTimeFetcher,
 		VoluntaryExitsPool:      s.cfg.ExitPool,
-		V1Alpha1ValidatorServer: validatorServer,
+		BlockProposer:           blockProducer,
 		SyncChecker:             s.cfg.SyncService,
 		ExecutionReconstructor:  s.cfg.ExecutionReconstructor,
 		BLSChangesPool:          s.cfg.BLSChangesPool,

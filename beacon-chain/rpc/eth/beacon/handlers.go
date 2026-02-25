@@ -879,7 +879,7 @@ func broadcastSidecarsIfSupported(ctx context.Context, s *Server, b interfaces.S
 }
 
 func (s *Server) proposeBlock(ctx context.Context, w http.ResponseWriter, blk *eth.GenericSignedBeaconBlock) {
-	_, err := s.V1Alpha1ValidatorServer.ProposeBeaconBlock(ctx, blk)
+	_, err := s.BlockProposer.ProposeBeaconBlock(ctx, blk)
 	if err != nil {
 		httputil.HandleError(w, err.Error(), http.StatusInternalServerError)
 		return

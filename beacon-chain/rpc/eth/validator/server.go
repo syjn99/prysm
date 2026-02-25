@@ -24,8 +24,8 @@ type BlockProducer interface {
 	ProduceBlock(ctx context.Context, slot primitives.Slot, randaoReveal []byte, graffiti []byte, skipMevBoost bool, builderBoostFactor primitives.Gwei) (*eth.GenericBeaconBlock, error)
 }
 
-// Server defines a server implementation of the gRPC Validator service,
-// providing RPC endpoints intended for validator clients.
+// Server defines a server implementation of the REST Validator service,
+// providing HTTP endpoints intended for validator clients.
 type Server struct {
 	HeadFetcher            blockchain.HeadFetcher
 	TimeFetcher            blockchain.TimeFetcher
@@ -37,7 +37,6 @@ type Server struct {
 	Stater                 lookup.Stater
 	OptimisticModeFetcher  blockchain.OptimisticModeFetcher
 	SyncCommitteePool      synccommittee.Pool
-	V1Alpha1Server         eth.BeaconNodeValidatorServer
 	ChainInfoFetcher       blockchain.ChainInfoFetcher
 	BeaconDB               db.HeadAccessDatabase
 	BlockBuilder           builder.BlockBuilder

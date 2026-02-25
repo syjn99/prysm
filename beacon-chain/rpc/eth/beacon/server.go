@@ -4,6 +4,8 @@
 package beacon
 
 import (
+	"context"
+
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/cache"
 	blockfeed "github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed/block"
@@ -21,6 +23,11 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/sync"
 	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 )
+
+// BlockProposer defines the interface for proposing (broadcasting) beacon blocks.
+type BlockProposer interface {
+	ProposeBeaconBlock(ctx context.Context, blk *eth.GenericSignedBeaconBlock) (*eth.ProposeResponse, error)
+}
 
 // Server defines a server implementation of the gRPC Beacon Chain service,
 // providing RPC endpoints to access data relevant to the Ethereum Beacon Chain.
@@ -42,7 +49,7 @@ type Server struct {
 	HeadFetcher             blockchain.HeadFetcher
 	TimeFetcher             blockchain.TimeFetcher
 	OptimisticModeFetcher   blockchain.OptimisticModeFetcher
-	V1Alpha1ValidatorServer eth.BeaconNodeValidatorServer
+	BlockProposer           BlockProposer
 	SyncChecker             sync.Checker
 	CanonicalHistory        *stategen.CanonicalHistory
 	ExecutionReconstructor  execution.Reconstructor

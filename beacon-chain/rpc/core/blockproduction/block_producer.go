@@ -87,6 +87,9 @@ type BlockProducer struct {
 	// Misc
 	MockEth1Votes bool
 	GraffitiInfo  *execution.GraffitiInfo
+
+	// Block proposal (broadcasting/receiving) deps
+	Proposer *BlockProposerDeps
 }
 
 func (b *BlockProducer) optimisticStatus(ctx context.Context) error {

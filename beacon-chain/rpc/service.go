@@ -33,7 +33,6 @@ import (
 	beaconv1alpha1 "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/v1alpha1/beacon"
 	debugv1alpha1 "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/v1alpha1/debug"
 	nodev1alpha1 "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/v1alpha1/node"
-	validatorv1alpha1 "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/v1alpha1/validator"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/startup"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen"
 	chainSync "github.com/OffchainLabs/prysm/v7/beacon-chain/sync"
@@ -68,7 +67,6 @@ type Service struct {
 	credentialError      error
 	connectedRPCClients  map[net.Addr]bool
 	clientConnectionLock sync.Mutex
-	validatorServer      *validatorv1alpha1.Server
 }
 
 // Config options for the beacon node RPC server.
@@ -243,18 +241,16 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		BlockBuilderClient:     s.cfg.BlockBuilder,
 		MockEth1Votes:          s.cfg.MockEth1Votes,
 		GraffitiInfo:           s.cfg.GraffitiInfo,
+		Proposer: &blockproduction.BlockProposerDeps{
+			P2P:                s.cfg.Broadcaster,
+			BlockReceiver:      s.cfg.BlockReceiver,
+			BlobReceiver:       s.cfg.BlobReceiver,
+			DataColumnReceiver: s.cfg.DataColumnReceiver,
+			BlockNotifier:      s.cfg.BlockNotifier,
+			OperationNotifier:  s.cfg.OperationNotifier,
+			BlockBuilder:       s.cfg.BlockBuilder,
+		},
 	}
-	validatorServer := &validatorv1alpha1.Server{
-		BlockNotifier:      s.cfg.BlockNotifier,
-		OperationNotifier:  s.cfg.OperationNotifier,
-		P2P:                s.cfg.Broadcaster,
-		BlockReceiver:      s.cfg.BlockReceiver,
-		BlobReceiver:       s.cfg.BlobReceiver,
-		DataColumnReceiver: s.cfg.DataColumnReceiver,
-		BlockBuilder:       s.cfg.BlockBuilder,
-		BlockProducer:      blockProducer,
-	}
-	s.validatorServer = validatorServer
 	nodeServer := &nodev1alpha1.Server{
 		LogsStreamer:          logs.NewStreamServer(),
 		StreamLogsBufferSize:  1000, // Enough to handle bursts of beacon node logs for gRPC streaming.
@@ -296,7 +292,7 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		CoreService:                 coreService,
 	}
 
-	endpoints := s.endpoints(s.cfg.EnableDebugRPCEndpoints, blocker, stater, rewardFetcher, validatorServer, coreService, ch)
+	endpoints := s.endpoints(s.cfg.EnableDebugRPCEndpoints, blocker, stater, rewardFetcher, blockProducer, coreService, ch)
 	for _, e := range endpoints {
 		for i := range e.methods {
 			s.cfg.Router.HandleFunc(

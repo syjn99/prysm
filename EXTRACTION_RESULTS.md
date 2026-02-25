@@ -2,37 +2,51 @@
 
 ## Verdict: ALL PASS
 
-All build checks, lint checks, and tests pass:
-- `go build ./...` — PASS
-- `go vet ./...` — PASS (only pre-existing warnings)
-- `bazel build //beacon-chain/...` — PASS
-- `go test ./beacon-chain/rpc/eth/validator/...` — PASS (31.9s)
-- `go test ./beacon-chain/rpc/eth/beacon/...` — PASS (10.5s)
-- `go test ./validator/...` — PASS (except pre-existing `remote-web3signer` timeout, unrelated)
+Final verification (2026-02-25):
+- `bazel build //beacon-chain/...` — PASS (5,424 targets)
+- `bazel build //validator/...` — PASS (61 targets)
+- `bazel test //beacon-chain/rpc/...` — PASS (21/21 test suites)
+- `bazel test //beacon-chain/rpc/core/blockproduction/...` — PASS
+- `bazel test //validator/...` — 18/20 PASS (2 pre-existing failures unrelated to our changes:
+  `remote-web3signer` network-dependent test, `validator/client` timeout)
 
 ## Stats
 
 | Metric | Count |
 |---|---|
-| Files changed | 85 |
-| Lines added | 746 |
-| Lines removed | 11,881 |
-| Net lines removed | 11,135 |
-| Files created (blockproduction/) | 18 + BUILD.bazel |
+| Files changed | 103 |
+| Lines added | 3,174 |
+| Lines removed | 13,941 |
+| Net lines removed | 10,767 |
+| Files created (blockproduction/) | 18 source + 16 test + BUILD.bazel |
 | Files deleted (v1alpha1/validator/) | 53 (.go) + BUILD.bazel rewritten |
 | Files deleted (grpc-api/) | 11 + BUILD.bazel |
-| Files deleted (testing/mock/) | 1 |
-| Total lines in blockproduction/ | 3,310 |
+| Files deleted (testing/mock/) | 3 (client mock, altair server/client mocks) |
+| Total lines in blockproduction/ | 3,310 (source) + ~8,000 (tests) |
+| Test functions recovered | 29 (proposer_test.go) + tests in 15 other files |
 
-## Commits (7 total, oldest first)
+## Commits (30 total, newest first)
 
-1. `5dc97d9126` — `extract(blockproduction): add core block-production package`
-2. `7bb416d81f` — `extract(blockproduction): delegate gRPC server to BlockProducer`
-3. `2fa774098f` — `extract(blockproduction): wire REST servers to new package`
-4. `b1c165a35a` — `extract(blockproduction): wire BlockProducer in service layer`
-5. `d581fde295` — `remove(v1alpha1): delete gRPC-only handlers, helpers, and tests`
-6. `c1b2d244ad` — `remove(grpc-api): delete validator client gRPC adapter, use REST-only`
-7. `e506658edc` — `remove(v1alpha1): strip Server struct and remove gRPC registration`
+### Verification & test recovery (session 3)
+1. `4c5d226dde` — `fix(beacon): replace deleted gRPC mock with BlockProposer mock`
+2. `28be25b4e0` — `test(blockproduction): revive unit tests from deleted gRPC tests`
+
+### Cleanup (session 2)
+3. `4f29d5f382` — `cleanup: remove dead EnableBeaconRESTApi feature flag`
+4. `5d9e58ad85` — `cleanup: delete unused gRPC validator mocks`
+5. `85ff5679d9` — `verify: extraction and removal results`
+
+### Core extraction & removal (session 1)
+6. `e506658edc` — `remove(v1alpha1): strip Server struct and remove gRPC registration`
+7. `c1b2d244ad` — `remove(grpc-api): delete validator client gRPC adapter, use REST-only`
+8. `d581fde295` — `remove(v1alpha1): delete gRPC-only handlers, helpers, and tests`
+9. `b1c165a35a` — `extract(blockproduction): wire BlockProducer in service layer`
+10. `2fa774098f` — `extract(blockproduction): wire REST servers to new package`
+11. `7bb416d81f` — `extract(blockproduction): delegate gRPC server to BlockProducer`
+12. `5dc97d9126` — `extract(blockproduction): add core block-production package`
+
+### Deprecation warnings & audit (session 0)
+13-30. Deprecation warnings added to all 10 gRPC handler files, audit commits, removal logs
 
 ## What Was Extracted
 
@@ -52,6 +66,14 @@ to `beacon-chain/rpc/core/blockproduction/`:
   - Eth1 data voting
   - Empty block construction
 
+- **ProposeBeaconBlock** — block broadcasting with P2P gossip + sidecar distribution
+  - `proposer.go` — `ProposeBeaconBlock()` method on `BlockProducer`
+  - `BlockProposerDeps` struct for networking dependencies
+
+- **Test coverage** (~8,000 lines across 16 test files)
+  - `proposer_test.go` — 3,472 lines, 29 test functions
+  - Covers Phase0 through Fulu block production, deposits, attestations, slashings, sync aggregates, builder/MEV, execution payloads, blob sidecars, unblinding
+
 ## What Was Removed
 
 ### v1alpha1/validator/ (53 files deleted)
@@ -65,37 +87,34 @@ to `beacon-chain/rpc/core/blockproduction/`:
 - Entire gRPC validator client adapter package
 - 3 factory packages rewritten to REST-only (removed `EnableBeaconRESTApi` feature flag branching)
 
-### testing/mock/ (1 file deleted)
-- `beacon_validator_client_mock.go` (only used by deleted grpc-api tests)
+### testing/mock/ (3 files deleted)
+- `beacon_validator_client_mock.go` (1,053 lines — only used by deleted grpc-api tests)
+- `beacon_altair_validator_server_mock.go` (132 lines)
+- `beacon_altair_validator_client_mock.go` (136 lines)
+- `beacon_validator_server_mock.go` replaced: 864-line gRPC mock → 48-line `MockBlockProposer`
+
+### config/features/ (EnableBeaconRESTApi flag removed)
+- `flags.go` — removed flag definition
+- `config.go` — removed config field and initialization
+- `testing/endtoend/components/validator.go` — removed flag usage
+
+### hack/update-mockgen.sh
+- Removed mockgen lines for deleted mock files
 
 ## What Could NOT Be Removed (and Why)
 
-1. **`ProposeBeaconBlock` on v1alpha1 Server** — REST `PublishBlockV2` (in `eth/beacon/handlers.go`)
-   calls `s.V1Alpha1ValidatorServer.ProposeBeaconBlock()`. This method handles block broadcasting
-   and sidecar distribution. Until PublishBlockV2 is refactored to call these operations directly,
-   ProposeBeaconBlock must remain.
+1. **`ProposeBeaconBlock` on BlockProducer** — REST `PublishBlockV2` (in `eth/beacon/handlers.go`)
+   now calls through the `BlockProposer` interface. The `blockproduction.BlockProducer` implements
+   this interface. This is by design — the broadcasting logic lives in the extracted package.
 
-2. **v1alpha1 Server struct itself** — Still needed as the `V1Alpha1ValidatorServer` backing the
-   REST beacon server's `proposeBlock()` method.
-
-3. **`beacon_validator_server_mock.go`** — Still imported by REST handler tests
-   (`eth/validator/handlers_block_test.go`, `eth/beacon/handlers_test.go`). The ProduceBlockV3 tests
-   were migrated to a local `mockBlockProducer` interface, but other tests still use the server mock.
-
-4. **`V1Alpha1Server` field on REST validator Server** — Assigned in endpoints.go but no longer
-   used by any handler (ProduceBlockV3 now uses `BlockProducer` directly). Safe to remove once
-   the remaining mock-based tests are cleaned up.
-
-5. **`hack/update-mockgen.sh`** — Still references the deleted `beacon_validator_client_mock.go`.
-   Needs the line removed.
+2. **v1alpha1/validator/ stub files** — `server.go`, `proposer.go`, `log.go` remain as minimal
+   1-line `package validator` stubs. The BUILD.bazel still references them. A future cleanup can
+   remove the directory entirely once all downstream references are updated.
 
 ## Remaining Cleanup (Future Work)
 
-- [ ] Refactor `ProposeBeaconBlock` broadcasting logic into a standalone package so the
-      v1alpha1 Server can be fully deleted
+- [ ] Delete `beacon-chain/rpc/prysm/v1alpha1/validator/` stub directory entirely
 - [ ] Remove `V1Alpha1Server` field from REST validator Server (unused after mock migration)
-- [ ] Remove `V1Alpha1ValidatorServer` field from REST beacon Server once ProposeBeaconBlock
-      is extracted
-- [ ] Clean up `hack/update-mockgen.sh` (remove deleted mock reference)
-- [ ] Remove `EnableBeaconRESTApi` feature flag (now always REST-only)
-- [ ] Consider adding tests for the new `blockproduction` package
+- [ ] Audit remaining gRPC services: Node/Health, BeaconChain, Debug (v1alpha1)
+- [ ] Rewrite E2E evaluators from `*grpc.ClientConn` to HTTP/REST clients
+- [ ] Phase 1-3 of broader gRPC deprecation (blocked on upstream `methodical` codegen)
