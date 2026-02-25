@@ -109,7 +109,7 @@ func (b *BlockProducer) optimisticStatus(ctx context.Context) error {
 func (b *BlockProducer) ProduceBlock(ctx context.Context, slot primitives.Slot, randaoReveal []byte, graffiti []byte, skipMevBoost bool, builderBoostFactor primitives.Gwei) (*ethpb.GenericBeaconBlock, error) {
 	ctx, span := trace.StartSpan(ctx, "BlockProducer.ProduceBlock")
 	defer span.End()
-	span.SetAttributes(trace.Int64Attribute("slot", int64(slot)))
+	span.SetAttributes(trace.Int64Attribute("slot", int64(slot))) // lint:ignore uintcast -- OK for tracing.
 
 	t, err := slots.StartTime(b.TimeFetcher.GenesisTime(), slot)
 	if err != nil {

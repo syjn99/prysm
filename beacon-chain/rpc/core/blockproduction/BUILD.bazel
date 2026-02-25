@@ -7,7 +7,7 @@ go_library(
         "attestations_electra.go",
         "bellatrix.go",
         "blob_sidecars.go",
-        "block_builder.go",
+        "block_producer.go",
         "builder.go",
         "capella.go",
         "deposits.go",
