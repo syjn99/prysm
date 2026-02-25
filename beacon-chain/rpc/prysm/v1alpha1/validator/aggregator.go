@@ -23,6 +23,7 @@ import (
 // The aggregator submits the selection proof to obtain the aggregated attestation
 // object to sign over.
 func (vs *Server) SubmitAggregateSelectionProof(ctx context.Context, req *ethpb.AggregateSelectionRequest) (*ethpb.AggregateSelectionResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "AggregatorServer.SubmitAggregateSelectionProof")
 	defer span.End()
 	span.SetAttributes(trace.Int64Attribute("slot", int64(req.Slot)))
@@ -64,6 +65,7 @@ func (vs *Server) SubmitAggregateSelectionProofElectra(
 	ctx context.Context,
 	req *ethpb.AggregateSelectionRequest,
 ) (*ethpb.AggregateSelectionElectraResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "AggregatorServer.SubmitAggregateSelectionProofElectra")
 	defer span.End()
 	span.SetAttributes(trace.Int64Attribute("slot", int64(req.Slot)))
@@ -157,6 +159,7 @@ func (vs *Server) SubmitSignedAggregateSelectionProof(
 	ctx context.Context,
 	req *ethpb.SignedAggregateSubmitRequest,
 ) (*ethpb.SignedAggregateSubmitResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	if err := vs.CoreService.SubmitSignedAggregateSelectionProof(ctx, req.SignedAggregateAndProof); err != nil {
 		return nil, status.Errorf(core.ErrorReasonToGRPC(err.Reason), "Could not submit aggregate: %v", err.Err)
 	}
@@ -171,6 +174,7 @@ func (vs *Server) SubmitSignedAggregateSelectionProofElectra(
 	ctx context.Context,
 	req *ethpb.SignedAggregateSubmitElectraRequest,
 ) (*ethpb.SignedAggregateSubmitResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	if err := vs.CoreService.SubmitSignedAggregateSelectionProof(ctx, req.SignedAggregateAndProof); err != nil {
 		return nil, status.Errorf(core.ErrorReasonToGRPC(err.Reason), "Could not submit aggregate: %v", err.Err)
 	}
