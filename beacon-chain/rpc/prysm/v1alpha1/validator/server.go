@@ -44,6 +44,7 @@ import (
 // and committees in which particular validators need to perform their responsibilities,
 // and more.
 type Server struct {
+	ethpb.UnimplementedBeaconNodeValidatorServer
 	Ctx                     context.Context
 	PayloadIDCache          *cache.PayloadIDCache
 	TrackedValidatorsCache  *cache.TrackedValidatorsCache
