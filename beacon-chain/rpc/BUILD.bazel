@@ -31,6 +31,7 @@ go_library(
         "//beacon-chain/operations/voluntaryexits:go_default_library",
         "//beacon-chain/p2p:go_default_library",
         "//beacon-chain/rpc/core:go_default_library",
+        "//beacon-chain/rpc/core/blockproduction:go_default_library",
         "//beacon-chain/rpc/eth/beacon:go_default_library",
         "//beacon-chain/rpc/eth/blob:go_default_library",
         "//beacon-chain/rpc/eth/config:go_default_library",

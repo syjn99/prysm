@@ -27,6 +27,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/core/blockproduction"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/rewards"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/lookup"
 	beaconv1alpha1 "github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/prysm/v1alpha1/beacon"
@@ -217,6 +218,32 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		ReplayerBuilder:       ch,
 		OptimisticModeFetcher: s.cfg.OptimisticModeFetcher,
 	}
+	blockProducer := &blockproduction.BlockProducer{
+		HeadFetcher:            s.cfg.HeadFetcher,
+		ForkchoiceFetcher:      s.cfg.ForkchoiceFetcher,
+		TimeFetcher:            s.cfg.GenesisTimeFetcher,
+		FinalizationFetcher:    s.cfg.FinalizationFetcher,
+		OptimisticModeFetcher:  s.cfg.OptimisticModeFetcher,
+		SyncChecker:            s.cfg.SyncService,
+		Eth1InfoFetcher:        s.cfg.ExecutionChainService,
+		Eth1BlockFetcher:       s.cfg.ExecutionChainService,
+		ChainStartFetcher:      s.cfg.ChainStartFetcher,
+		ExecutionEngineCaller:  s.cfg.ExecutionEngineCaller,
+		PayloadIDCache:         s.cfg.PayloadIDCache,
+		TrackedValidatorsCache: s.cfg.TrackedValidatorsCache,
+		AttestationCache:       s.cfg.AttestationCache,
+		AttPool:                s.cfg.AttestationsPool,
+		SlashingsPool:          s.cfg.SlashingsPool,
+		ExitPool:               s.cfg.ExitPool,
+		SyncCommitteePool:      s.cfg.SyncCommitteeObjectPool,
+		BLSChangesPool:         s.cfg.BLSChangesPool,
+		DepositFetcher:         s.cfg.DepositFetcher,
+		PendingDepositsFetcher: s.cfg.PendingDepositFetcher,
+		StateGen:               s.cfg.StateGen,
+		BlockBuilderClient:     s.cfg.BlockBuilder,
+		MockEth1Votes:          s.cfg.MockEth1Votes,
+		GraffitiInfo:           s.cfg.GraffitiInfo,
+	}
 	validatorServer := &validatorv1alpha1.Server{
 		Ctx:                     s.ctx,
 		AttestationCache:        s.cfg.AttestationCache,
@@ -258,6 +285,7 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		PayloadIDCache:          s.cfg.PayloadIDCache,
 		AttestationStateFetcher: s.cfg.AttestationReceiver,
 		GraffitiInfo:            s.cfg.GraffitiInfo,
+		BlockProducer:           blockProducer,
 	}
 	s.validatorServer = validatorServer
 	nodeServer := &nodev1alpha1.Server{

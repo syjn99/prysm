@@ -219,6 +219,7 @@ func (s *Service) validatorEndpoints(
 		PayloadIDCache:         s.cfg.PayloadIDCache,
 		CoreService:            coreService,
 		BlockRewardFetcher:     rewardFetcher,
+		BlockProducer:          validatorServer.BlockProducer,
 	}
 
 	const namespace = "validator"
