@@ -3,21 +3,17 @@ package validator
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	builderapi "github.com/OffchainLabs/prysm/v7/api/client/builder"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain"
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/builder"
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/cache"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed"
 	blockfeed "github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed/block"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/feed/operation"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/peerdas"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/transition"
-	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	"github.com/OffchainLabs/prysm/v7/config/params"
@@ -29,9 +25,6 @@ import (
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	emptypb "github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -542,90 +535,6 @@ func (vs *Server) broadcastAndReceiveDataColumns(ctx context.Context, roSidecars
 	return nil
 }
 
-// Deprecated: The gRPC API will remain the default and fully supported through v8 (expected in 2026) but will be eventually removed in favor of REST API.
-//
-// PrepareBeaconProposer caches and updates the fee recipient for the given proposer.
-func (vs *Server) PrepareBeaconProposer(
-	_ context.Context, request *ethpb.PrepareBeaconProposerRequest,
-) (*emptypb.Empty, error) {
-	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
-	var validatorIndices []primitives.ValidatorIndex
-
-	for _, r := range request.Recipients {
-		recipient := hexutil.Encode(r.FeeRecipient)
-		if !common.IsHexAddress(recipient) {
-			return nil, status.Errorf(codes.InvalidArgument, "Invalid fee recipient address: %v", recipient)
-		}
-		// Use default address if the burn address is return
-		feeRecipient := primitives.ExecutionAddress(r.FeeRecipient)
-		if feeRecipient == primitives.ExecutionAddress([20]byte{}) {
-			feeRecipient = primitives.ExecutionAddress(params.BeaconConfig().DefaultFeeRecipient)
-			if feeRecipient == primitives.ExecutionAddress([20]byte{}) {
-				log.WithField("validatorIndex", r.ValidatorIndex).Warn("Fee recipient is the burn address")
-			}
-		}
-		val := cache.TrackedValidator{
-			Active:       true, // TODO: either check or add the field in the request
-			Index:        r.ValidatorIndex,
-			FeeRecipient: feeRecipient,
-		}
-		vs.TrackedValidatorsCache.Set(val)
-		validatorIndices = append(validatorIndices, r.ValidatorIndex)
-	}
-
-	if len(validatorIndices) == 0 {
-		return &emptypb.Empty{}, nil
-
-	}
-
-	log := log.WithField("validatorCount", len(validatorIndices))
-	if logrus.GetLevel() >= logrus.TraceLevel {
-		log = log.WithField("validatorIndices", validatorIndices)
-	}
-
-	log.Debug("Updated fee recipient addresses")
-
-	return &emptypb.Empty{}, nil
-}
-
-// Deprecated: The gRPC API will remain the default and fully supported through v8 (expected in 2026) but will be eventually removed in favor of REST API.
-//
-// GetFeeRecipientByPubKey returns a fee recipient from the beacon node's settings or db based on a given public key
-func (vs *Server) GetFeeRecipientByPubKey(ctx context.Context, request *ethpb.FeeRecipientByPubKeyRequest) (*ethpb.FeeRecipientByPubKeyResponse, error) {
-	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
-	ctx, span := trace.StartSpan(ctx, "validator.GetFeeRecipientByPublicKey")
-	defer span.End()
-	if request == nil {
-		return nil, status.Errorf(codes.InvalidArgument, "request was empty")
-	}
-
-	resp, err := vs.ValidatorIndex(ctx, &ethpb.ValidatorIndexRequest{PublicKey: request.PublicKey})
-	if err != nil {
-		if strings.Contains(err.Error(), "Could not find validator index") {
-			return &ethpb.FeeRecipientByPubKeyResponse{
-				FeeRecipient: params.BeaconConfig().DefaultFeeRecipient.Bytes(),
-			}, nil
-		} else {
-			log.WithError(err).Error("An error occurred while retrieving validator index")
-			return nil, err
-		}
-	}
-	address, err := vs.BeaconDB.FeeRecipientByValidatorID(ctx, resp.GetIndex())
-	if err != nil {
-		if errors.Is(err, kv.ErrNotFoundFeeRecipient) {
-			return &ethpb.FeeRecipientByPubKeyResponse{
-				FeeRecipient: params.BeaconConfig().DefaultFeeRecipient.Bytes(),
-			}, nil
-		} else {
-			log.WithError(err).Error("An error occurred while retrieving fee recipient from db")
-			return nil, status.Errorf(codes.Internal, "error=%s", err)
-		}
-	}
-	return &ethpb.FeeRecipientByPubKeyResponse{
-		FeeRecipient: address.Bytes(),
-	}, nil
-}
-
 // computeStateRoot computes the state root after a block has been processed through a state transition and
 // returns it to the validator client.
 func (vs *Server) computeStateRoot(ctx context.Context, block interfaces.SignedBeaconBlock) ([]byte, error) {
@@ -703,22 +612,6 @@ func (vs *Server) handleStateRootError(ctx context.Context, block interfaces.Sig
 	}
 	// recursive call to compute state root again
 	return vs.computeStateRoot(ctx, block)
-}
-
-// Deprecated: The gRPC API will remain the default and fully supported through v8 (expected in 2026) but will be eventually removed in favor of REST API.
-//
-// SubmitValidatorRegistrations submits validator registrations.
-func (vs *Server) SubmitValidatorRegistrations(ctx context.Context, reg *ethpb.SignedValidatorRegistrationsV1) (*emptypb.Empty, error) {
-	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
-	if vs.BlockBuilder == nil || !vs.BlockBuilder.Configured() {
-		return &emptypb.Empty{}, status.Errorf(codes.InvalidArgument, "Could not register block builder: %v", builder.ErrNoBuilder)
-	}
-
-	if err := vs.BlockBuilder.RegisterValidator(ctx, reg.Messages); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "Could not register block builder: %v", err)
-	}
-
-	return &emptypb.Empty{}, nil
 }
 
 func blobsAndProofs(req *ethpb.GenericSignedBeaconBlock) ([][]byte, [][]byte, error) {
