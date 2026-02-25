@@ -27,6 +27,7 @@ import (
 // GetAttestationData requests that the beacon node produce an attestation data object,
 // which the validator acting as an attester will then sign.
 func (vs *Server) GetAttestationData(ctx context.Context, req *ethpb.AttestationDataRequest) (*ethpb.AttestationData, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "AttesterServer.RequestAttestation")
 	defer span.End()
 	span.SetAttributes(
@@ -49,6 +50,7 @@ func (vs *Server) GetAttestationData(ctx context.Context, req *ethpb.Attestation
 // ProposeAttestation is a function called by an attester to vote
 // on a block via an attestation object as defined in the Ethereum specification.
 func (vs *Server) ProposeAttestation(ctx context.Context, att *ethpb.Attestation) (*ethpb.AttestResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "AttesterServer.ProposeAttestation")
 	defer span.End()
 
@@ -82,6 +84,7 @@ func (vs *Server) ProposeAttestation(ctx context.Context, att *ethpb.Attestation
 // ProposeAttestationElectra is a function called by an attester to vote
 // on a block via an attestation object as defined in the Ethereum specification.
 func (vs *Server) ProposeAttestationElectra(ctx context.Context, singleAtt *ethpb.SingleAttestation) (*ethpb.AttestResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "AttesterServer.ProposeAttestationElectra")
 	defer span.End()
 
@@ -124,6 +127,7 @@ func (vs *Server) ProposeAttestationElectra(ctx context.Context, singleAtt *ethp
 //
 // SubscribeCommitteeSubnets subscribes to the committee ID subnet given subscribe request.
 func (vs *Server) SubscribeCommitteeSubnets(ctx context.Context, req *ethpb.CommitteeSubnetsSubscribeRequest) (*emptypb.Empty, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	ctx, span := trace.StartSpan(ctx, "AttesterServer.SubscribeCommitteeSubnets")
 	defer span.End()
 
