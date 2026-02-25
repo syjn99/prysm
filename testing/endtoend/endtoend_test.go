@@ -6,18 +6,23 @@ package endtoend
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
+	"net/http"
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/OffchainLabs/prysm/v7/api/client/beacon"
+	"github.com/OffchainLabs/prysm/v7/api/server/structs"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/transition"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/config/params"
@@ -26,7 +31,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/genesis"
 	"github.com/OffchainLabs/prysm/v7/io/file"
 	enginev1 "github.com/OffchainLabs/prysm/v7/proto/engine/v1"
-	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/testing/assert"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/components"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/components/eth1"
@@ -38,10 +42,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -129,11 +129,81 @@ func (r *testRunner) scenarioRunner() {
 	r.runBase([]runEvent{r.scenarioRun})
 }
 
-func (r *testRunner) waitExtra(ctx context.Context, e primitives.Epoch, conn *grpc.ClientConn, extra primitives.Epoch) error {
+// beaconNodeGenesisTime fetches the genesis time from the beacon node at the given base URL.
+// It calls GET /eth/v1/beacon/genesis and parses the unix timestamp from the response.
+func beaconNodeGenesisTime(baseURL string) (time.Time, error) {
+	resp, err := http.Get(baseURL + "/eth/v1/beacon/genesis") // #nosec G107
+	if err != nil {
+		return time.Time{}, errors.Wrap(err, "failed to request genesis from beacon node")
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return time.Time{}, fmt.Errorf("genesis request returned status %d: %s", resp.StatusCode, body)
+	}
+	result := &structs.GetGenesisResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+		return time.Time{}, errors.Wrap(err, "failed to decode genesis response")
+	}
+	sec, err := strconv.ParseInt(result.Data.GenesisTime, 10, 64)
+	if err != nil {
+		return time.Time{}, errors.Wrap(err, "failed to parse genesis_time from response")
+	}
+	return time.Unix(sec, 0), nil
+}
+
+// beaconNodeChainHeadEpoch fetches the current head epoch from the given beacon node base URL.
+// It calls GET /prysm/v1/beacon/chain_head and returns the head epoch as a primitives.Epoch.
+func beaconNodeChainHeadEpoch(baseURL string) (primitives.Epoch, error) {
+	resp, err := http.Get(baseURL + "/prysm/v1/beacon/chain_head") // #nosec G107
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to request chain head from beacon node")
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("chain head request returned status %d: %s", resp.StatusCode, body)
+	}
+	ch := &structs.ChainHead{}
+	if err := json.NewDecoder(resp.Body).Decode(ch); err != nil {
+		return 0, errors.Wrap(err, "failed to decode chain head response")
+	}
+	epoch, err := strconv.ParseUint(ch.HeadEpoch, 10, 64)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse head_epoch from chain head response")
+	}
+	return primitives.Epoch(epoch), nil
+}
+
+// beaconNodeHeadBlockRoot fetches the head block root from the given beacon node base URL.
+// It calls GET /prysm/v1/beacon/chain_head and returns the HeadBlockRoot string.
+func beaconNodeHeadBlockRoot(baseURL string) (string, error) {
+	resp, err := http.Get(baseURL + "/prysm/v1/beacon/chain_head") // #nosec G107
+	if err != nil {
+		return "", errors.Wrap(err, "failed to request chain head from beacon node")
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("chain head request returned status %d: %s", resp.StatusCode, body)
+	}
+	ch := &structs.ChainHead{}
+	if err := json.NewDecoder(resp.Body).Decode(ch); err != nil {
+		return "", errors.Wrap(err, "failed to decode chain head response")
+	}
+	return ch.HeadBlockRoot, nil
+}
+
+func (r *testRunner) waitExtra(ctx context.Context, e primitives.Epoch, conn *e2etypes.NodeConnection, extra primitives.Epoch) error {
 	spe := uint64(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
 	dl := time.Now().Add(time.Second * time.Duration(uint64(extra)*spe))
 
-	beaconClient := eth.NewBeaconChainClient(conn)
 	ctx, cancel := context.WithDeadline(ctx, dl)
 	defer cancel()
 	for {
@@ -141,19 +211,22 @@ func (r *testRunner) waitExtra(ctx context.Context, e primitives.Epoch, conn *gr
 		case <-ctx.Done():
 			return errors.Wrapf(ctx.Err(), "context deadline/cancel while waiting for epoch %d", e)
 		default:
-			chainHead, err := beaconClient.GetChainHead(ctx, &emptypb.Empty{})
+			headEpoch, err := beaconNodeChainHeadEpoch(conn.BaseURL)
 			if err != nil {
-				log.Warnf("while querying connection %s for chain head got error=%s", conn.Target(), err.Error())
+				log.Warnf("while querying %s for chain head got error=%s", conn.BaseURL, err.Error())
+				time.Sleep(time.Second)
+				continue
 			}
-			if chainHead.HeadEpoch > e {
+			if headEpoch > e {
 				// no need to wait, other nodes should be caught up
 				return nil
 			}
-			if chainHead.HeadEpoch == e {
+			if headEpoch == e {
 				// wait until halfway into the epoch to give other nodes time to catch up
 				time.Sleep(time.Second * time.Duration(spe/2))
 				return nil
 			}
+			time.Sleep(time.Second)
 		}
 	}
 }
@@ -190,7 +263,7 @@ func (r *testRunner) postStartConfigure() {
 }
 
 // runEvaluators executes assigned evaluators.
-func (r *testRunner) runEvaluators(ec *e2etypes.EvaluationContext, conns []*grpc.ClientConn, tickingStartTime time.Time) error {
+func (r *testRunner) runEvaluators(ec *e2etypes.EvaluationContext, conns []*e2etypes.NodeConnection, tickingStartTime time.Time) error {
 	t, config := r.t, r.config
 	secondsPerEpoch := uint64(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
 	ticker := helpers.NewEpochTicker(tickingStartTime, secondsPerEpoch)
@@ -262,12 +335,10 @@ func (r *testRunner) testTxGeneration(ctx context.Context, g *errgroup.Group, ke
 	})
 }
 
-func (r *testRunner) waitForMatchingHead(ctx context.Context, timeout time.Duration, check, ref *grpc.ClientConn) error {
+func (r *testRunner) waitForMatchingHead(ctx context.Context, timeout time.Duration, checkURL, refURL string) error {
 	start := time.Now()
 	dctx, cancel := context.WithDeadline(ctx, start.Add(timeout))
 	defer cancel()
-	checkClient := eth.NewBeaconChainClient(check)
-	refClient := eth.NewBeaconChainClient(ref)
 	for {
 		select {
 		case <-dctx.Done():
@@ -275,27 +346,25 @@ func (r *testRunner) waitForMatchingHead(ctx context.Context, timeout time.Durat
 			elapsed := time.Since(start)
 			return fmt.Errorf("deadline exceeded after %s waiting for known good block to appear in checkpoint-synced node", elapsed)
 		default:
-			cResp, err := checkClient.GetChainHead(ctx, &emptypb.Empty{})
+			checkRoot, err := beaconNodeHeadBlockRoot(checkURL)
 			if err != nil {
-				errStatus, ok := status.FromError(err)
-				// in the happy path we expect NotFound results until the node has synced
-				if ok && errStatus.Code() == codes.NotFound {
-					continue
-				}
-				return fmt.Errorf("error requesting head from 'check' beacon node")
+				// in the happy path we expect errors until the node has synced
+				time.Sleep(time.Second)
+				continue
 			}
-			rResp, err := refClient.GetChainHead(ctx, &emptypb.Empty{})
+			refRoot, err := beaconNodeHeadBlockRoot(refURL)
 			if err != nil {
-				return errors.Wrap(err, "unexpected error requesting head block root from 'ref' beacon node")
+				return fmt.Errorf("unexpected error requesting head block root from 'ref' beacon node: %w", err)
 			}
-			if bytesutil.ToBytes32(cResp.HeadBlockRoot) == bytesutil.ToBytes32(rResp.HeadBlockRoot) {
+			if checkRoot == refRoot && checkRoot != "" {
 				return nil
 			}
+			time.Sleep(time.Second)
 		}
 	}
 }
 
-func (r *testRunner) testCheckpointSync(ctx context.Context, g *errgroup.Group, i int, conns []*grpc.ClientConn, bnAPI, enr, minerEnr string) error {
+func (r *testRunner) testCheckpointSync(ctx context.Context, g *errgroup.Group, i int, conns []*e2etypes.NodeConnection, bnAPI, enr, minerEnr string) error {
 	matchTimeout := 5 * time.Minute
 	ethNode := eth1.NewNode(i, minerEnr)
 	g.Go(func() error {
@@ -340,12 +409,13 @@ func (r *testRunner) testCheckpointSync(ctx context.Context, g *errgroup.Group, 
 	if err := helpers.ComponentsStarted(ctx, []e2etypes.ComponentRunner{cpsyncer}); err != nil {
 		return fmt.Errorf("checkpoint sync beacon node not ready: %w", err)
 	}
-	c, err := grpc.Dial(fmt.Sprintf("127.0.0.1:%d", e2e.TestParams.Ports.PrysmBeaconNodeRPCPort+i), grpc.WithInsecure())
-	require.NoError(r.t, err, "Failed to dial")
 
-	// this is so that the syncEvaluators checks can run on the checkpoint sync'd node
-	conns = append(conns, c)
-	err = r.waitForMatchingHead(ctx, matchTimeout, c, conns[0])
+	// Append a NodeConnection for the checkpoint-synced node so syncEvaluators can query it.
+	syncNodeURL := fmt.Sprintf("http://127.0.0.1:%d", e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort+i)
+	syncConn := &e2etypes.NodeConnection{BaseURL: syncNodeURL, Client: conns[0].Client}
+	conns = append(conns, syncConn)
+
+	err = r.waitForMatchingHead(ctx, matchTimeout, syncNodeURL, conns[0].BaseURL)
 	if err != nil {
 		return err
 	}
@@ -361,7 +431,7 @@ func (r *testRunner) testCheckpointSync(ctx context.Context, g *errgroup.Group, 
 
 // testBeaconChainSync creates another beacon node, and tests whether it can sync to head using previous nodes.
 func (r *testRunner) testBeaconChainSync(ctx context.Context, g *errgroup.Group,
-	conns []*grpc.ClientConn, tickingStartTime time.Time, bootnodeEnr, minerEnr string) error {
+	conns []*e2etypes.NodeConnection, tickingStartTime time.Time, bootnodeEnr, minerEnr string) error {
 	t, config := r.t, r.config
 	index := e2e.TestParams.BeaconNodeCount + e2e.TestParams.LighthouseBeaconNodeCount
 	ethNode := eth1.NewNode(index, minerEnr)
@@ -385,8 +455,10 @@ func (r *testRunner) testBeaconChainSync(ctx context.Context, g *errgroup.Group,
 	if err := helpers.ComponentsStarted(ctx, []e2etypes.ComponentRunner{syncBeaconNode}); err != nil {
 		return fmt.Errorf("sync beacon node not ready: %w", err)
 	}
-	syncConn, err := grpc.Dial(fmt.Sprintf("127.0.0.1:%d", e2e.TestParams.Ports.PrysmBeaconNodeRPCPort+index), grpc.WithInsecure())
-	require.NoError(t, err, "Failed to dial")
+
+	// Append a NodeConnection for the newly started sync node.
+	syncNodeURL := fmt.Sprintf("http://127.0.0.1:%d", e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort+index)
+	syncConn := &e2etypes.NodeConnection{BaseURL: syncNodeURL, Client: conns[0].Client}
 	conns = append(conns, syncConn)
 
 	// Sleep a second for every 4 blocks that need to be synced for the newly started node.
@@ -511,16 +583,13 @@ func (r *testRunner) defaultEndToEndRun() error {
 	}
 	r.testDepositsAndTx(ctx, g, keypath, []e2etypes.ComponentRunner{beaconNodes})
 
-	// Create GRPC connection to beacon nodes.
-	conns, closeConns, err := helpers.NewLocalConnections(ctx, e2e.TestParams.BeaconNodeCount)
-	require.NoError(t, err, "Cannot create local connections")
-	defer closeConns()
+	// Obtain NodeConnections for all beacon nodes (replaces gRPC connection creation).
+	conns := helpers.BeaconNodeConnections(e2e.TestParams.BeaconNodeCount)
 
-	// Calculate genesis time.
-	nodeClient := eth.NewNodeClient(conns[0])
-	genesis, err := nodeClient.GetGenesis(t.Context(), &emptypb.Empty{})
+	// Calculate genesis time via REST API.
+	genesisTime, err := beaconNodeGenesisTime(conns[0].BaseURL)
 	require.NoError(t, err)
-	tickingStartTime := helpers.EpochTickerStartTime(genesis)
+	tickingStartTime := helpers.EpochTickerStartTime(genesisTime)
 
 	ec := e2etypes.NewEvaluationContext(r.depositor.History())
 	// Run assigned evaluators.
@@ -552,10 +621,9 @@ func (r *testRunner) defaultEndToEndRun() error {
 		}
 	}
 	if config.TestCheckpointSync {
-		httpEndpoints := helpers.BeaconAPIHostnames(e2e.TestParams.BeaconNodeCount)
 		menr := eth1Miner.ENR()
 		benr := bootNode.ENR()
-		if err := r.testCheckpointSync(ctx, g, index, conns, httpEndpoints[0], benr, menr); err != nil {
+		if err := r.testCheckpointSync(ctx, g, index, conns, conns[0].BaseURL, benr, menr); err != nil {
 			return errors.Wrap(err, "checkpoint sync test failed")
 		}
 	}
@@ -610,16 +678,13 @@ func (r *testRunner) scenarioRun() error {
 
 	r.testTxGeneration(ctx, r.comHandler.group, keypath, []e2etypes.ComponentRunner{})
 
-	// Create GRPC connection to beacon nodes.
-	conns, closeConns, err := helpers.NewLocalConnections(ctx, e2e.TestParams.BeaconNodeCount)
-	require.NoError(t, err, "Cannot create local connections")
-	defer closeConns()
+	// Obtain NodeConnections for all beacon nodes (replaces gRPC connection creation).
+	conns := helpers.BeaconNodeConnections(e2e.TestParams.BeaconNodeCount)
 
-	// Calculate genesis time.
-	nodeClient := eth.NewNodeClient(conns[0])
-	genesis, err := nodeClient.GetGenesis(t.Context(), &emptypb.Empty{})
+	// Calculate genesis time via REST API.
+	genesisTime, err := beaconNodeGenesisTime(conns[0].BaseURL)
 	require.NoError(t, err)
-	tickingStartTime := helpers.EpochTickerStartTime(genesis)
+	tickingStartTime := helpers.EpochTickerStartTime(genesisTime)
 
 	ec := e2etypes.NewEvaluationContext(r.depositor.History())
 	// Run assigned evaluators.
@@ -630,7 +695,7 @@ func (r *testRunner) addEvent(ev func() error) {
 	r.comHandler.group.Go(ev)
 }
 
-func (r *testRunner) executeProvidedEvaluators(ec *e2etypes.EvaluationContext, currentEpoch uint64, conns []*grpc.ClientConn, evals []e2etypes.Evaluator) {
+func (r *testRunner) executeProvidedEvaluators(ec *e2etypes.EvaluationContext, currentEpoch uint64, conns []*e2etypes.NodeConnection, evals []e2etypes.Evaluator) {
 	wg := new(sync.WaitGroup)
 	for _, eval := range evals {
 		// Fix reference to evaluator as it will be running
@@ -659,7 +724,7 @@ func (r *testRunner) executeProvidedEvaluators(ec *e2etypes.EvaluationContext, c
 // After the proxy has been sending `SYNCING` responses to the beacon node, we
 // will test this with our optimistic sync evaluator to ensure everything works
 // as expected.
-func (r *testRunner) multiScenarioMulticlient(ec *e2etypes.EvaluationContext, epoch uint64, conns []*grpc.ClientConn) bool {
+func (r *testRunner) multiScenarioMulticlient(ec *e2etypes.EvaluationContext, epoch uint64, conns []*e2etypes.NodeConnection) bool {
 	type ForkchoiceUpdatedResponse struct {
 		Status    *enginev1.PayloadStatus  `json:"payloadStatus"`
 		PayloadId *enginev1.PayloadIDBytes `json:"payloadId"`
@@ -727,7 +792,7 @@ func (r *testRunner) multiScenarioMulticlient(ec *e2etypes.EvaluationContext, ep
 		return true
 	case optimisticEndEpoch:
 		evs := []e2etypes.Evaluator{ev.OptimisticSyncEnabled}
-		r.executeProvidedEvaluators(ec, epoch, []*grpc.ClientConn{conns[0]}, evs)
+		r.executeProvidedEvaluators(ec, epoch, []*e2etypes.NodeConnection{conns[0]}, evs)
 		// Disable Interceptor
 		component, err := r.comHandler.eth1Proxy.ComponentAtIndex(0)
 		require.NoError(r.t, err)
@@ -754,7 +819,7 @@ func (r *testRunner) multiScenarioMulticlient(ec *e2etypes.EvaluationContext, ep
 	return false
 }
 
-func (r *testRunner) eeOffline(_ *e2etypes.EvaluationContext, epoch uint64, _ []*grpc.ClientConn) bool {
+func (r *testRunner) eeOffline(_ *e2etypes.EvaluationContext, epoch uint64, _ []*e2etypes.NodeConnection) bool {
 	switch epoch {
 	case 9:
 		require.NoError(r.t, r.comHandler.eth1Miner.Pause())
@@ -780,7 +845,7 @@ func (r *testRunner) eeOffline(_ *e2etypes.EvaluationContext, epoch uint64, _ []
 // After the proxy has been sending `SYNCING` responses to the beacon node, we
 // will test this with our optimistic sync evaluator to ensure everything works
 // as expected.
-func (r *testRunner) multiScenario(ec *e2etypes.EvaluationContext, epoch uint64, conns []*grpc.ClientConn) bool {
+func (r *testRunner) multiScenario(ec *e2etypes.EvaluationContext, epoch uint64, conns []*e2etypes.NodeConnection) bool {
 	lastForkEpoch := params.LastForkEpoch()
 	freezeStartEpoch := lastForkEpoch + 1
 	freezeEndEpoch := lastForkEpoch + 2
@@ -829,7 +894,7 @@ func (r *testRunner) multiScenario(ec *e2etypes.EvaluationContext, epoch uint64,
 		return true
 	case optimisticEndEpoch:
 		evs := []e2etypes.Evaluator{ev.OptimisticSyncEnabled}
-		r.executeProvidedEvaluators(ec, epoch, []*grpc.ClientConn{conns[0]}, evs)
+		r.executeProvidedEvaluators(ec, epoch, []*e2etypes.NodeConnection{conns[0]}, evs)
 		// Disable Interceptor
 		component, err := r.comHandler.eth1Proxy.ComponentAtIndex(0)
 		require.NoError(r.t, err)
@@ -849,6 +914,6 @@ func (r *testRunner) multiScenario(ec *e2etypes.EvaluationContext, epoch uint64,
 }
 
 // All Epochs are valid.
-func defaultInterceptor(_ *e2etypes.EvaluationContext, _ uint64, _ []*grpc.ClientConn) bool {
+func defaultInterceptor(_ *e2etypes.EvaluationContext, _ uint64, _ []*e2etypes.NodeConnection) bool {
 	return false
 }

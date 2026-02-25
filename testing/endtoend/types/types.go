@@ -4,6 +4,7 @@ package types
 
 import (
 	"context"
+	"net/http"
 	"os"
 
 	"github.com/OffchainLabs/prysm/v7/api"
@@ -11,8 +12,14 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 )
+
+// NodeConnection wraps an HTTP client and base URL for a beacon node.
+// Evaluators use this instead of raw URL strings or *grpc.ClientConn.
+type NodeConnection struct {
+	BaseURL string
+	Client  *http.Client
+}
 
 type E2EConfigOpt func(*E2EConfig)
 
@@ -113,7 +120,7 @@ type E2EConfig struct {
 	Seed                    int64
 	TracingSinkEndpoint     string
 	Evaluators              []Evaluator
-	EvalInterceptor         func(*EvaluationContext, uint64, []*grpc.ClientConn) bool
+	EvalInterceptor         func(*EvaluationContext, uint64, []*NodeConnection) bool
 	BeaconFlags             []string
 	ValidatorFlags          []string
 	PeerIDs                 []string
@@ -149,8 +156,7 @@ func GenesisFork() int {
 type Evaluator struct {
 	Name   string
 	Policy func(currentEpoch primitives.Epoch) bool
-	// Evaluation accepts one or many/all conns, depending on what is needed by the set of evaluators.
-	Evaluation func(ec *EvaluationContext, conn ...*grpc.ClientConn) error
+	Evaluation func(ec *EvaluationContext, conns ...*NodeConnection) error
 }
 
 // DepositBatch represents a group of deposits that are sent together during an e2e run.

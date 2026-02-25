@@ -5,15 +5,12 @@ import (
 	"time"
 
 	"github.com/OffchainLabs/prysm/v7/config/params"
-	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
-	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/policies"
 	e2etypes "github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 )
 
 var streamDeadline = 1 * time.Minute
@@ -102,96 +99,45 @@ var FuluForkTransition = e2etypes.Evaluator{
 	Evaluation: fuluForkOccurs,
 }
 
-func altairForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
-
+func altairForkOccurs(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	conn := conns[0]
-	client := ethpb.NewBeaconNodeValidatorClient(conn)
-
 	ctx, cancel := context.WithTimeout(context.Background(), streamDeadline)
 	defer cancel()
 
-	stream, err := client.StreamBlocksAltair(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true})
-	if err != nil {
-		return errors.Wrap(err, "failed to get stream")
-	}
 	fSlot, err := slots.EpochStart(params.BeaconConfig().AltairForkEpoch)
 	if err != nil {
 		return err
 	}
 
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return errors.New("context canceled prematurely")
-	}
-	res, err := stream.Recv()
+	blk, err := pollForBlock(ctx, conn, fSlot)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed waiting for altair block")
 	}
-	if res == nil || res.Block == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-	if res.GetPhase0Block() == nil && res.GetAltairBlock() == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-	if res.GetPhase0Block() != nil {
-		return errors.New("phase 0 block returned after altair fork has occurred")
-	}
-	blk, err := blocks.NewSignedBeaconBlock(res.GetAltairBlock())
-	if err != nil {
-		return err
-	}
-
-	if err := blocks.BeaconBlockIsNil(blk); err != nil {
-		return err
+	if blk.Version() < version.Altair {
+		return errors.Errorf("expected altair or later block, got version %s", version.String(blk.Version()))
 	}
 	if blk.Block().Slot() < fSlot {
 		return errors.Errorf("wanted a block >= %d but received %d", fSlot, blk.Block().Slot())
 	}
-
 	return nil
 }
 
-func bellatrixForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
+func bellatrixForkOccurs(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	conn := conns[0]
-	client := ethpb.NewBeaconNodeValidatorClient(conn)
-
 	ctx, cancel := context.WithTimeout(context.Background(), streamDeadline)
 	defer cancel()
 
-	stream, err := client.StreamBlocksAltair(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true})
-	if err != nil {
-		return errors.Wrap(err, "failed to get stream")
-	}
 	fSlot, err := slots.EpochStart(params.BeaconConfig().BellatrixForkEpoch)
 	if err != nil {
 		return err
 	}
 
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return errors.New("context canceled prematurely")
-	}
-	res, err := stream.Recv()
+	blk, err := pollForBlock(ctx, conn, fSlot)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed waiting for bellatrix block")
 	}
-	if res == nil || res.Block == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-	if res.GetPhase0Block() == nil && res.GetAltairBlock() == nil && res.GetBellatrixBlock() == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-	if res.GetPhase0Block() != nil {
-		return errors.New("phase 0 block returned after bellatrix fork has occurred")
-	}
-	if res.GetAltairBlock() != nil {
-		return errors.New("altair block returned after bellatrix fork has occurred")
-	}
-	blk, err := blocks.NewSignedBeaconBlock(res.GetBellatrixBlock())
-	if err != nil {
-		return err
-	}
-
-	if err := blocks.BeaconBlockIsNil(blk); err != nil {
-		return err
+	if blk.Version() < version.Bellatrix {
+		return errors.Errorf("expected bellatrix or later block, got version %s", version.String(blk.Version()))
 	}
 	if blk.Block().Slot() < fSlot {
 		return errors.Errorf("wanted a block >= %d but received %d", fSlot, blk.Block().Slot())
@@ -199,44 +145,22 @@ func bellatrixForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientCon
 	return nil
 }
 
-func capellaForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
+func capellaForkOccurs(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	conn := conns[0]
-	client := ethpb.NewBeaconNodeValidatorClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), streamDeadline)
 	defer cancel()
-	stream, err := client.StreamBlocksAltair(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true})
-	if err != nil {
-		return errors.Wrap(err, "failed to get stream")
-	}
+
 	fSlot, err := slots.EpochStart(params.BeaconConfig().CapellaForkEpoch)
 	if err != nil {
 		return err
 	}
 
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return errors.New("context canceled prematurely")
-	}
-	res, err := stream.Recv()
+	blk, err := pollForBlock(ctx, conn, fSlot)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed waiting for capella block")
 	}
-	if res == nil || res.Block == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-
-	if res.GetBlock() == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-	if res.GetCapellaBlock() == nil {
-		return errors.Errorf("non-capella block returned after the fork with type %T", res.Block)
-	}
-	blk, err := blocks.NewSignedBeaconBlock(res.GetCapellaBlock())
-	if err != nil {
-		return err
-	}
-
-	if err := blocks.BeaconBlockIsNil(blk); err != nil {
-		return err
+	if blk.Version() < version.Capella {
+		return errors.Errorf("expected capella or later block, got version %s", version.String(blk.Version()))
 	}
 	if blk.Block().Slot() < fSlot {
 		return errors.Errorf("wanted a block at slot >= %d but received %d", fSlot, blk.Block().Slot())
@@ -244,44 +168,22 @@ func capellaForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn)
 	return nil
 }
 
-func denebForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
+func denebForkOccurs(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	conn := conns[0]
-	client := ethpb.NewBeaconNodeValidatorClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), streamDeadline)
 	defer cancel()
-	stream, err := client.StreamBlocksAltair(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true})
-	if err != nil {
-		return errors.Wrap(err, "failed to get stream")
-	}
+
 	fSlot, err := slots.EpochStart(params.BeaconConfig().DenebForkEpoch)
 	if err != nil {
 		return err
 	}
 
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return errors.New("context canceled prematurely")
-	}
-	res, err := stream.Recv()
+	blk, err := pollForBlock(ctx, conn, fSlot)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed waiting for deneb block")
 	}
-	if res == nil || res.Block == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-
-	if res.GetBlock() == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-	if res.GetDenebBlock() == nil {
-		return errors.Errorf("non-deneb block returned after the fork with type %T", res.Block)
-	}
-	blk, err := blocks.NewSignedBeaconBlock(res.GetDenebBlock())
-	if err != nil {
-		return err
-	}
-
-	if err := blocks.BeaconBlockIsNil(blk); err != nil {
-		return err
+	if blk.Version() < version.Deneb {
+		return errors.Errorf("expected deneb or later block, got version %s", version.String(blk.Version()))
 	}
 	if blk.Block().Slot() < fSlot {
 		return errors.Errorf("wanted a block at slot >= %d but received %d", fSlot, blk.Block().Slot())
@@ -289,44 +191,22 @@ func denebForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) e
 	return nil
 }
 
-func electraForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
+func electraForkOccurs(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	conn := conns[0]
-	client := ethpb.NewBeaconNodeValidatorClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), streamDeadline)
 	defer cancel()
-	stream, err := client.StreamBlocksAltair(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true})
-	if err != nil {
-		return errors.Wrap(err, "failed to get stream")
-	}
+
 	fSlot, err := slots.EpochStart(params.BeaconConfig().ElectraForkEpoch)
 	if err != nil {
 		return err
 	}
 
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return errors.New("context canceled prematurely")
-	}
-	res, err := stream.Recv()
+	blk, err := pollForBlock(ctx, conn, fSlot)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed waiting for electra block")
 	}
-	if res == nil || res.Block == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-
-	if res.GetBlock() == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-	if res.GetElectraBlock() == nil {
-		return errors.Errorf("non-electra block returned after the fork with type %T", res.Block)
-	}
-	blk, err := blocks.NewSignedBeaconBlock(res.GetElectraBlock())
-	if err != nil {
-		return err
-	}
-
-	if err := blocks.BeaconBlockIsNil(blk); err != nil {
-		return err
+	if blk.Version() < version.Electra {
+		return errors.Errorf("expected electra or later block, got version %s", version.String(blk.Version()))
 	}
 	if blk.Block().Slot() < fSlot {
 		return errors.Errorf("wanted a block at slot >= %d but received %d", fSlot, blk.Block().Slot())
@@ -334,56 +214,25 @@ func electraForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn)
 	return nil
 }
 
-func fuluForkOccurs(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
+func fuluForkOccurs(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	conn := conns[0]
-	client := ethpb.NewBeaconNodeValidatorClient(conn)
-
 	ctx, cancel := context.WithTimeout(context.Background(), streamDeadline)
 	defer cancel()
-
-	stream, err := client.StreamBlocksAltair(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true})
-	if err != nil {
-		return errors.Wrap(err, "failed to get stream")
-	}
 
 	fSlot, err := slots.EpochStart(params.BeaconConfig().FuluForkEpoch)
 	if err != nil {
 		return err
 	}
 
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return errors.New("context canceled prematurely")
-	}
-
-	res, err := stream.Recv()
+	blk, err := pollForBlock(ctx, conn, fSlot)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed waiting for fulu block")
 	}
-
-	if res == nil || res.Block == nil {
-		return errors.New("nil block returned by beacon node")
+	if blk.Version() < version.Fulu {
+		return errors.Errorf("expected fulu or later block, got version %s", version.String(blk.Version()))
 	}
-
-	if res.GetBlock() == nil {
-		return errors.New("nil block returned by beacon node")
-	}
-
-	if res.GetFuluBlock() == nil {
-		return errors.Errorf("non-fulu block returned after the fork with type %T", res.Block)
-	}
-
-	blk, err := blocks.NewSignedBeaconBlock(res.GetFuluBlock())
-	if err != nil {
-		return err
-	}
-
-	if err := blocks.BeaconBlockIsNil(blk); err != nil {
-		return err
-	}
-
 	if blk.Block().Slot() < fSlot {
 		return errors.Errorf("wanted a block at slot >= %d but received %d", fSlot, blk.Block().Slot())
 	}
-
 	return nil
 }

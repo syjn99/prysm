@@ -15,7 +15,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 )
 
 // OptimisticSyncEnabled checks that the node is in an optimistic state.
@@ -25,7 +24,7 @@ var OptimisticSyncEnabled = types.Evaluator{
 	Evaluation: optimisticSyncEnabled,
 }
 
-func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*grpc.ClientConn) error {
+func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*types.NodeConnection) error {
 	for nodeIndex := range conns {
 		path := fmt.Sprintf("http://localhost:%d/eth/v1/beacon/blinded_blocks/head", params.TestParams.Ports.PrysmBeaconNodeHTTPPort+nodeIndex)
 		resp := structs.GetBlockV2Response{}
