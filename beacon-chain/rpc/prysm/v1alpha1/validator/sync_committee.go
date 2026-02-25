@@ -18,6 +18,7 @@ import (
 func (vs *Server) GetSyncMessageBlockRoot(
 	ctx context.Context, _ *emptypb.Empty,
 ) (*ethpb.SyncMessageBlockRootResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	// An optimistic validator MUST NOT participate in sync committees
 	// (i.e., sign across the DOMAIN_SYNC_COMMITTEE, DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF or DOMAIN_CONTRIBUTION_AND_PROOF domains).
 	if err := vs.optimisticStatus(ctx); err != nil {
@@ -39,6 +40,7 @@ func (vs *Server) GetSyncMessageBlockRoot(
 // SubmitSyncMessage submits the sync committee message to the network.
 // It also saves the sync committee message into the pending pool for block inclusion.
 func (vs *Server) SubmitSyncMessage(ctx context.Context, msg *ethpb.SyncCommitteeMessage) (*emptypb.Empty, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	if err := vs.CoreService.SubmitSyncMessage(ctx, msg); err != nil {
 		return &emptypb.Empty{}, status.Errorf(core.ErrorReasonToGRPC(err.Reason), "error=%s", err.Err)
 	}
@@ -52,6 +54,7 @@ func (vs *Server) SubmitSyncMessage(ctx context.Context, msg *ethpb.SyncCommitte
 func (vs *Server) GetSyncSubcommitteeIndex(
 	ctx context.Context, req *ethpb.SyncSubcommitteeIndexRequest,
 ) (*ethpb.SyncSubcommitteeIndexResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	index, exists := vs.HeadFetcher.HeadPublicKeyToValidatorIndex(bytesutil.ToBytes48(req.PublicKey))
 	if !exists {
 		return nil, errors.New("public key does not exist in state")
@@ -70,6 +73,7 @@ func (vs *Server) GetSyncSubcommitteeIndex(
 func (vs *Server) GetSyncCommitteeContribution(
 	ctx context.Context, req *ethpb.SyncCommitteeContributionRequest,
 ) (*ethpb.SyncCommitteeContribution, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	// An optimistic validator MUST NOT participate in sync committees
 	// (i.e., sign across the DOMAIN_SYNC_COMMITTEE, DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF or DOMAIN_CONTRIBUTION_AND_PROOF domains).
 	if err := vs.optimisticStatus(ctx); err != nil {
@@ -113,6 +117,7 @@ func (vs *Server) GetSyncCommitteeContribution(
 func (vs *Server) SubmitSignedContributionAndProof(
 	ctx context.Context, s *ethpb.SignedContributionAndProof,
 ) (*emptypb.Empty, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	err := vs.CoreService.SubmitSignedContributionAndProof(ctx, s)
 	if err != nil {
 		return &emptypb.Empty{}, status.Errorf(core.ErrorReasonToGRPC(err.Reason), "error=%s", err.Err)
@@ -128,6 +133,7 @@ func (vs *Server) AggregatedSigAndAggregationBits(
 	ctx context.Context,
 	req *ethpb.AggregatedSigAndAggregationBitsRequest,
 ) (*ethpb.AggregatedSigAndAggregationBitsResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	sig, aggregatedBits, err := vs.CoreService.AggregatedSigAndAggregationBits(ctx, req)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
