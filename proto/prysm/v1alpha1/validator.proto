@@ -59,30 +59,6 @@ service BeaconNodeValidator {
     };
   }
 
-  // GetDutiesV2 Retrieves validator duties for the requested validators.
-  //
-  // The duties consist of:
-  //   Proposer - the validator that creates a beacon chain block.
-  //   Attester — a validator that is part of a committee that needs to sign off
-  //   on a beacon chain
-  //   Sync Committee - a special group of validators that ensure lightclients and effectively sync with Ethereum
-  //   and continues in this role for 256 epochs if selected
-  // The server returns a list of duties which are the actions should be
-  // performed by validators for a given epoch. Validator duties should be
-  // polled every epoch, but due to chain reorg of >MIN_SEED_LOOKAHEAD could
-  // occur, the validator duties could chain. For complete safety, it is
-  // recommended to poll at every slot to ensure validator is fully aware of any
-  // sudden chain reorg.
-  //
-  // GetDutiesV2 differs from GetDuties through the removal of the full committee list in favor of adding
-  // committee_length and validator_committee_index fields which significantly saves on marshalling
-  rpc GetDutiesV2(DutiesRequest) returns (DutiesV2Response) {
-    option deprecated = true;
-    option (google.api.http) = {
-      get : "/eth/v1alpha1/validator/dutiesV2"
-    };
-  }
-
   // DomainData fetches the current BLS signature domain version information
   // from the running beacon node's state. This information is used when
   // validators sign blocks and attestations appropriately based on their duty.
@@ -104,22 +80,6 @@ service BeaconNodeValidator {
     option deprecated = true;
     option (google.api.http) = {
       get : "/eth/v1alpha1/validator/chainstart/stream"
-    };
-  }
-
-  // WaitForActivation checks if a validator public key exists in the active
-  // validator registry of the current beacon state. If the validator is NOT yet
-  // active, it starts a server-side stream which updates the client whenever
-  // the validator becomes active in the beacon node's state.
-  //
-  // The input to this endpoint is a list of validator public keys, and the
-  // corresponding stream will respond until at least a single corresponding
-  // validator to those keys is activated.
-  rpc WaitForActivation(ValidatorActivationRequest)
-      returns (stream ValidatorActivationResponse) {
-    option deprecated = true;
-    option (google.api.http) = {
-      get : "/eth/v1alpha1/validator/activation/stream"
     };
   }
 
@@ -391,17 +351,6 @@ service BeaconNodeValidator {
     };
   }
 
-  // Server-side stream of all slots of valid blocks as they are received by
-  // the beacon chain node.
-  // DEPRECATED: This endpoint is superseded by the /eth/v1/events Beacon API
-  // endpoint
-  rpc StreamSlots(StreamSlotsRequest) returns (stream StreamSlotsResponse) {
-    option deprecated = true;
-    option (google.api.http) = {
-      get : "/eth/v1alpha1/validator/blocks/stream_slots"
-    };
-  }
-
   // Server-side stream of all signed blocks as they are received by
   // the beacon chain node.
   // DEPRECATED: This endpoint is superseded by the /eth/v1/events Beacon API
@@ -423,22 +372,6 @@ service BeaconNodeValidator {
     };
   }
 
-  rpc AssignValidatorToSubnet(AssignValidatorToSubnetRequest)
-      returns (google.protobuf.Empty) {
-    option deprecated = true;
-    option (google.api.http) = {
-      post : "/eth/v1alpha1/validator/blocks/assign_validator_to_subnet"
-      body : "*"
-    };
-  }
-
-  rpc AggregatedSigAndAggregationBits(AggregatedSigAndAggregationBitsRequest)
-      returns (AggregatedSigAndAggregationBitsResponse) {
-    option deprecated = true;
-    option (google.api.http) = {
-      get : "/eth/v1alpha1/validator/blocks/aggregated_sig_and_aggregation_bits"
-    };
-  }
 }
 
 // SyncMessageBlockRootResponse for beacon chain validator to retrieve and
@@ -496,19 +429,6 @@ message SyncSubcommitteeIndexResponse {
             "primitives.CommitteeIndex" ];
 }
 
-// DEPRECATED: This endpoint StreamSlots is superseded by the /eth/v1/events
-// Beacon API endpoint
-message StreamSlotsResponse {
-  option deprecated = true;
-
-  uint64 slot = 1 [
-    (ethereum.eth.ext.cast_type) =
-        "github.com/OffchainLabs/prysm/v7/consensus-types/primitives.Slot"
-  ];
-  bytes previous_duty_dependent_root = 2 [ (ethereum.eth.ext.ssz_size) = "32" ];
-  bytes current_duty_dependent_root = 3 [ (ethereum.eth.ext.ssz_size) = "32" ];
-}
-
 // DEPRECATED: This endpoint StreamBlocks is superseded by the /eth/v1/events
 // Beacon API endpoint
 message StreamBlocksResponse {
@@ -559,33 +479,6 @@ message DomainResponse {
   bytes signature_domain = 1;
 }
 
-message ValidatorActivationRequest {
-  option deprecated = true;
-
-  // A list of 48 byte validator public keys.
-  repeated bytes public_keys = 1 [ (ethereum.eth.ext.ssz_size) = "?,48" ];
-}
-
-message ValidatorActivationResponse {
-  option deprecated = true;
-
-  message Status {
-    // A 48 byte validator public key.
-    bytes public_key = 1;
-
-    // A wrapper representing a validator's status object.
-    ValidatorStatusResponse status = 2;
-
-    // The validators index in the beacon state.
-    uint64 index = 3 [ (ethereum.eth.ext.cast_type) =
-                           "github.com/OffchainLabs/prysm/v7/consensus-types/"
-                           "primitives.ValidatorIndex" ];
-  }
-  // A list of validator statuses mapped 1-to-1 with the public keys
-  // in the request.
-  repeated Status statuses = 1;
-}
-
 message ChainStartResponse {
   option deprecated = true;
 
@@ -597,15 +490,6 @@ message ChainStartResponse {
 
   // 32 byte hash tree root of the genesis validator set.
   bytes genesis_validators_root = 3 [ (ethereum.eth.ext.ssz_size) = "32" ];
-}
-
-message SyncedResponse {
-  // A boolean specifying whether or not the beacon node is synced and ready for
-  // the validator.
-  bool synced = 1;
-
-  // The genesis time of the beacon chain.
-  uint64 genesis_time = 2;
 }
 
 message ValidatorIndexRequest {
@@ -763,63 +647,6 @@ message DutiesResponse {
 
     // The number of committees in the duty's slot.
     uint64 committees_at_slot = 9;
-  }
-}
-
-message DutiesV2Response {
-  option deprecated = true;
-
-  repeated Duty current_epoch_duties = 1;
-
-  repeated Duty next_epoch_duties = 2;
-
-  bytes previous_duty_dependent_root = 3 [ (ethereum.eth.ext.ssz_size) = "32" ];
-  bytes current_duty_dependent_root = 4 [ (ethereum.eth.ext.ssz_size) = "32" ];
-
-  message Duty {
-    // The length of the committee
-    uint64 committee_length = 1;
-
-    // The index of the committee which the given validator has an assignment
-    uint64 committee_index = 2
-    [ (ethereum.eth.ext.cast_type) =
-    "github.com/OffchainLabs/prysm/v7/consensus-types/"
-        "primitives.CommitteeIndex" ];
-
-    // The number of committees in the duty's slot.
-    uint64 committees_at_slot = 3;
-
-    // The validator's index in the given committee
-    uint64 validator_committee_index = 4;
-
-    // Slot at which a validator must attest.
-    uint64 attester_slot = 5 [
-      (ethereum.eth.ext.cast_type) =
-          "github.com/OffchainLabs/prysm/v7/consensus-types/primitives.Slot"
-    ];
-
-    // Slots at which a validator must propose a beacon chain block.
-    repeated uint64 proposer_slots = 6 [
-      (ethereum.eth.ext.cast_type) =
-          "github.com/OffchainLabs/prysm/v7/consensus-types/primitives.Slot"
-    ];
-
-    // 48 byte BLS public key for the validator who's assigned to perform a
-    // duty.
-    bytes public_key = 7 [ (ethereum.eth.ext.ssz_size) = "48" ];
-
-    // The current status of the validator assigned to perform the duty.
-    ValidatorStatus status = 8;
-
-    // The index of the validator in the beacon state.
-    uint64 validator_index = 9
-    [ (ethereum.eth.ext.cast_type) =
-    "github.com/OffchainLabs/prysm/v7/consensus-types/"
-        "primitives.ValidatorIndex" ];
-
-    // Whether the validator belongs in the sync committee and has to perform
-    // sync committee duty.
-    bool is_sync_committee = 10;
   }
 }
 
@@ -1057,15 +884,6 @@ message DoppelGangerResponse {
   repeated ValidatorResponse responses = 1;
 }
 
-// Request to only return slots with blocks that where verified by the beacon
-// node. DEPRECATED: This endpoint StreamSlots is superseded by the
-// /eth/v1/events Beacon API endpoint.
-message StreamSlotsRequest {
-  option deprecated = true;
-
-  bool verified_only = 1;
-}
-
 // Request to only return blocks that is verified by the beacon node.
 // DEPRECATED: This endpoint StreamBlocks is superseded by the /eth/v1/events
 // Beacon API endpoint
@@ -1106,16 +924,6 @@ message FeeRecipientByPubKeyResponse {
   bytes fee_recipient = 1 [ (ethereum.eth.ext.ssz_size) = "20" ];
 }
 
-message AssignValidatorToSubnetRequest {
-  option deprecated = true;
-
-  bytes public_key = 1 [
-    (ethereum.eth.ext.ssz_size) = "48",
-    (ethereum.eth.ext.spec_name) = "pubkey"
-  ];
-  ValidatorStatus status = 2;
-}
-
 message AggregatedSigAndAggregationBitsRequest {
   option deprecated = true;
 
@@ -1128,9 +936,3 @@ message AggregatedSigAndAggregationBitsRequest {
   bytes block_root = 4 [ (ethereum.eth.ext.ssz_size) = "32" ];
 }
 
-message AggregatedSigAndAggregationBitsResponse {
-  option deprecated = true;
-
-  bytes aggregated_sig = 1;
-  bytes bits = 2;
-}
