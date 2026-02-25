@@ -16,6 +16,7 @@ import (
 //
 // ProposeExit proposes an exit for a validator.
 func (vs *Server) ProposeExit(ctx context.Context, req *ethpb.SignedVoluntaryExit) (*ethpb.ProposeExitResponse, error) {
+	log.Warn("This gRPC endpoint is deprecated and will be removed. Please migrate to the Beacon REST API.")
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "nil request")
 	}
