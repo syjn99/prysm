@@ -47,6 +47,22 @@ const (
 	defaultBuilderBoostFactor = primitives.Gwei(100)
 )
 
+var errOptimisticMode = fmt.Errorf("the node is currently optimistic and cannot serve validators")
+
+func (vs *Server) optimisticStatus(ctx context.Context) error {
+	if slots.ToEpoch(vs.TimeFetcher.CurrentSlot()) < params.BeaconConfig().BellatrixForkEpoch {
+		return nil
+	}
+	optimistic, err := vs.OptimisticModeFetcher.IsOptimistic(ctx)
+	if err != nil {
+		return status.Errorf(codes.Internal, "Could not determine if the node is a optimistic node: %v", err)
+	}
+	if !optimistic {
+		return nil
+	}
+	return status.Errorf(codes.Unavailable, "error=%v", errOptimisticMode)
+}
+
 // Deprecated: The gRPC API will remain the default and fully supported through v8 (expected in 2026) but will be eventually removed in favor of REST API.
 //
 // GetBeaconBlock is called by a proposer during its assigned slot to request a block to sign
