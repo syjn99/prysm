@@ -10,7 +10,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/network/httputil"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
-	"github.com/OffchainLabs/prysm/v7/testing/endtoend/params"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/policies"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
@@ -25,10 +24,10 @@ var OptimisticSyncEnabled = types.Evaluator{
 }
 
 func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*types.NodeConnection) error {
-	for nodeIndex := range conns {
-		path := fmt.Sprintf("http://localhost:%d/eth/v1/beacon/blinded_blocks/head", params.TestParams.Ports.PrysmBeaconNodeHTTPPort+nodeIndex)
+	for _, conn := range conns {
+		path := conn.BaseURL + "/eth/v1/beacon/blinded_blocks/head"
 		resp := structs.GetBlockV2Response{}
-		httpResp, err := http.Get(path) // #nosec G107 -- path can't be constant because it depends on port param and node index
+		httpResp, err := conn.Client.Get(path)
 		if err != nil {
 			return err
 		}
@@ -52,9 +51,9 @@ func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*types.NodeConne
 			return err
 		}
 		for i := startSlot; i <= primitives.Slot(headSlot); i++ {
-			path = fmt.Sprintf("http://localhost:%d/eth/v1/beacon/blinded_blocks/%d", params.TestParams.Ports.PrysmBeaconNodeHTTPPort+nodeIndex, i)
+			path = fmt.Sprintf("%s/eth/v1/beacon/blinded_blocks/%d", conn.BaseURL, i)
 			resp = structs.GetBlockV2Response{}
-			httpResp, err = http.Get(path) // #nosec G107 -- path can't be constant because it depends on port param and node index
+			httpResp, err = conn.Client.Get(path)
 			if err != nil {
 				return err
 			}

@@ -15,7 +15,7 @@ import (
 )
 
 // NodeConnection wraps an HTTP client and base URL for a beacon node.
-// Evaluators use this instead of raw URL strings or *grpc.ClientConn.
+// Evaluators use this to make REST API calls to beacon nodes.
 type NodeConnection struct {
 	BaseURL string
 	Client  *http.Client
