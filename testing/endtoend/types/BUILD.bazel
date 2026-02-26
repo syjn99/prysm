@@ -12,6 +12,7 @@ go_library(
     visibility = ["//testing/endtoend:__subpackages__"],
     deps = [
         "//api:go_default_library",
+        "//api/rest:go_default_library",
         "//config/params:go_default_library",
         "//consensus-types/primitives:go_default_library",
         "//runtime/version:go_default_library",
