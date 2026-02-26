@@ -43,7 +43,6 @@ type ports struct {
 	Eth1AuthRPCPort                 int
 	Eth1WSPort                      int
 	Eth1ProxyPort                   int
-	PrysmBeaconNodeRPCPort          int
 	PrysmBeaconNodeUDPPort          int
 	PrysmBeaconNodeQUICPort         int
 	PrysmBeaconNodeTCPPort          int
@@ -139,13 +138,12 @@ const (
 	eth1AuthRPCPort = eth1Port + 3*portSpan
 	eth1ProxyPort   = eth1Port + 4*portSpan
 
-	prysmBeaconNodeRPCPort     = 4150
-	prysmBeaconNodeUDPPort     = prysmBeaconNodeRPCPort + portSpan
-	prysmBeaconNodeQUICPort    = prysmBeaconNodeRPCPort + 2*portSpan
-	prysmBeaconNodeTCPPort     = prysmBeaconNodeRPCPort + 3*portSpan
-	prysmBeaconNodeHTTPPort    = prysmBeaconNodeRPCPort + 4*portSpan
-	prysmBeaconNodeMetricsPort = prysmBeaconNodeRPCPort + 5*portSpan
-	prysmBeaconNodePprofPort   = prysmBeaconNodeRPCPort + 6*portSpan
+	prysmBeaconNodeUDPPort     = 4200
+	prysmBeaconNodeQUICPort    = prysmBeaconNodeUDPPort + 2*portSpan
+	prysmBeaconNodeTCPPort     = prysmBeaconNodeUDPPort + 3*portSpan
+	prysmBeaconNodeHTTPPort    = prysmBeaconNodeUDPPort + 4*portSpan
+	prysmBeaconNodeMetricsPort = prysmBeaconNodeUDPPort + 5*portSpan
+	prysmBeaconNodePprofPort   = prysmBeaconNodeUDPPort + 6*portSpan
 
 	lighthouseBeaconNodeP2PPort     = 5150
 	lighthouseBeaconNodeHTTPPort    = lighthouseBeaconNodeP2PPort + portSpan
@@ -320,10 +318,6 @@ func initializeStandardPorts(shardCount, shardIndex int, ports *ports, existingR
 	if err != nil {
 		return err
 	}
-	beaconNodeRPCPort, err := port(prysmBeaconNodeRPCPort, shardCount, shardIndex, existingRegistrations)
-	if err != nil {
-		return err
-	}
 	beaconNodeUDPPort, err := port(prysmBeaconNodeUDPPort, shardCount, shardIndex, existingRegistrations)
 	if err != nil {
 		return err
@@ -367,7 +361,6 @@ func initializeStandardPorts(shardCount, shardIndex int, ports *ports, existingR
 	ports.Eth1AuthRPCPort = eth1AuthPort
 	ports.Eth1WSPort = eth1WSPort
 	ports.Eth1ProxyPort = eth1ProxyPort
-	ports.PrysmBeaconNodeRPCPort = beaconNodeRPCPort
 	ports.PrysmBeaconNodeUDPPort = beaconNodeUDPPort
 	ports.PrysmBeaconNodeQUICPort = beaconNodeQUICPort
 	ports.PrysmBeaconNodeTCPPort = beaconNodeTCPPort
