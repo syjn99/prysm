@@ -211,9 +211,9 @@ func (r *testRunner) waitExtra(ctx context.Context, e primitives.Epoch, conn *e2
 		case <-ctx.Done():
 			return errors.Wrapf(ctx.Err(), "context deadline/cancel while waiting for epoch %d", e)
 		default:
-			headEpoch, err := beaconNodeChainHeadEpoch(conn.BaseURL)
+			headEpoch, err := beaconNodeChainHeadEpoch(conn.Host())
 			if err != nil {
-				log.Warnf("while querying %s for chain head got error=%s", conn.BaseURL, err.Error())
+				log.Warnf("while querying %s for chain head got error=%s", conn.Host(), err.Error())
 				time.Sleep(time.Second)
 				continue
 			}
@@ -412,10 +412,10 @@ func (r *testRunner) testCheckpointSync(ctx context.Context, g *errgroup.Group, 
 
 	// Append a NodeConnection for the checkpoint-synced node so syncEvaluators can query it.
 	syncNodeURL := fmt.Sprintf("http://127.0.0.1:%d", e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort+i)
-	syncConn := &e2etypes.NodeConnection{BaseURL: syncNodeURL, Client: conns[0].Client}
+	syncConn := helpers.NewNodeConnection(syncNodeURL)
 	conns = append(conns, syncConn)
 
-	err = r.waitForMatchingHead(ctx, matchTimeout, syncNodeURL, conns[0].BaseURL)
+	err = r.waitForMatchingHead(ctx, matchTimeout, syncNodeURL, conns[0].Host())
 	if err != nil {
 		return err
 	}
@@ -458,7 +458,7 @@ func (r *testRunner) testBeaconChainSync(ctx context.Context, g *errgroup.Group,
 
 	// Append a NodeConnection for the newly started sync node.
 	syncNodeURL := fmt.Sprintf("http://127.0.0.1:%d", e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort+index)
-	syncConn := &e2etypes.NodeConnection{BaseURL: syncNodeURL, Client: conns[0].Client}
+	syncConn := helpers.NewNodeConnection(syncNodeURL)
 	conns = append(conns, syncConn)
 
 	// Sleep a second for every 4 blocks that need to be synced for the newly started node.
@@ -587,7 +587,7 @@ func (r *testRunner) defaultEndToEndRun() error {
 	conns := helpers.BeaconNodeConnections(e2e.TestParams.BeaconNodeCount)
 
 	// Calculate genesis time via REST API.
-	genesisTime, err := beaconNodeGenesisTime(conns[0].BaseURL)
+	genesisTime, err := beaconNodeGenesisTime(conns[0].Host())
 	require.NoError(t, err)
 	tickingStartTime := helpers.EpochTickerStartTime(genesisTime)
 
@@ -623,7 +623,7 @@ func (r *testRunner) defaultEndToEndRun() error {
 	if config.TestCheckpointSync {
 		menr := eth1Miner.ENR()
 		benr := bootNode.ENR()
-		if err := r.testCheckpointSync(ctx, g, index, conns, conns[0].BaseURL, benr, menr); err != nil {
+		if err := r.testCheckpointSync(ctx, g, index, conns, conns[0].Host(), benr, menr); err != nil {
 			return errors.Wrap(err, "checkpoint sync test failed")
 		}
 	}
@@ -682,7 +682,7 @@ func (r *testRunner) scenarioRun() error {
 	conns := helpers.BeaconNodeConnections(e2e.TestParams.BeaconNodeCount)
 
 	// Calculate genesis time via REST API.
-	genesisTime, err := beaconNodeGenesisTime(conns[0].BaseURL)
+	genesisTime, err := beaconNodeGenesisTime(conns[0].Host())
 	require.NoError(t, err)
 	tickingStartTime := helpers.EpochTickerStartTime(genesisTime)
 

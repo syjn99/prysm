@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OffchainLabs/prysm/v7/api/rest"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	e2e "github.com/OffchainLabs/prysm/v7/testing/endtoend/params"
 	e2etypes "github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
@@ -285,28 +286,22 @@ func writeURLRespAtPath(url, fp string) error {
 	return nil
 }
 
-// BeaconNodeURLs returns HTTP base URLs for the given number of beacon nodes.
-// Each URL is like "http://127.0.0.1:<port>" using the PrysmBeaconNodeHTTPPort.
-func BeaconNodeURLs(numNodes int) []string {
-	urls := make([]string, numNodes)
-	for i := range urls {
-		port := e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort + i
-		urls[i] = fmt.Sprintf("http://127.0.0.1:%d", port)
+// NewNodeConnection creates a single NodeConnection for the given host URL.
+func NewNodeConnection(host string) *e2etypes.NodeConnection {
+	client := http.Client{Timeout: 30 * time.Second}
+	return &e2etypes.NodeConnection{
+		Handler: rest.NewHandler(client, host),
 	}
-	return urls
 }
 
 // BeaconNodeConnections returns NodeConnection instances for the given number of beacon nodes.
 // A shared HTTP client with a 30-second timeout is used across all connections.
 func BeaconNodeConnections(numNodes int) []*e2etypes.NodeConnection {
-	client := &http.Client{Timeout: 30 * time.Second}
 	conns := make([]*e2etypes.NodeConnection, numNodes)
 	for i := range conns {
 		port := e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort + i
-		conns[i] = &e2etypes.NodeConnection{
-			BaseURL: fmt.Sprintf("http://127.0.0.1:%d", port),
-			Client:  client,
-		}
+		host := fmt.Sprintf("http://127.0.0.1:%d", port)
+		conns[i] = NewNodeConnection(host)
 	}
 	return conns
 }

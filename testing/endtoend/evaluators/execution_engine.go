@@ -1,6 +1,7 @@
 package evaluators
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -25,20 +26,8 @@ var OptimisticSyncEnabled = types.Evaluator{
 
 func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*types.NodeConnection) error {
 	for _, conn := range conns {
-		path := conn.BaseURL + "/eth/v1/beacon/blinded_blocks/head"
 		resp := structs.GetBlockV2Response{}
-		httpResp, err := conn.Client.Get(path)
-		if err != nil {
-			return err
-		}
-		if httpResp.StatusCode != http.StatusOK {
-			e := httputil.DefaultJsonError{}
-			if err = json.NewDecoder(httpResp.Body).Decode(&e); err != nil {
-				return err
-			}
-			return fmt.Errorf("%s (status code %d)", e.Message, e.Code)
-		}
-		if err = json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+		if err := conn.Get(context.Background(), "/eth/v1/beacon/blinded_blocks/head", &resp); err != nil {
 			return err
 		}
 		headSlot, err := retrieveHeadSlot(&resp)
@@ -51,24 +40,14 @@ func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*types.NodeConne
 			return err
 		}
 		for i := startSlot; i <= primitives.Slot(headSlot); i++ {
-			path = fmt.Sprintf("%s/eth/v1/beacon/blinded_blocks/%d", conn.BaseURL, i)
+			path := fmt.Sprintf("/eth/v1/beacon/blinded_blocks/%d", i)
 			resp = structs.GetBlockV2Response{}
-			httpResp, err = conn.Client.Get(path)
-			if err != nil {
-				return err
-			}
-			if httpResp.StatusCode == http.StatusNotFound {
-				// Continue in the event of non-existent blocks.
-				continue
-			}
-			if httpResp.StatusCode != http.StatusOK {
-				e := httputil.DefaultJsonError{}
-				if err = json.NewDecoder(httpResp.Body).Decode(&e); err != nil {
-					return err
+			if err := conn.Get(context.Background(), path, &resp); err != nil {
+				var jsonErr *httputil.DefaultJsonError
+				if errors.As(err, &jsonErr) && jsonErr.Code == http.StatusNotFound {
+					// Continue in the event of non-existent blocks.
+					continue
 				}
-				return fmt.Errorf("%s (status code %d)", e.Message, e.Code)
-			}
-			if err = json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
 				return err
 			}
 			if !resp.ExecutionOptimistic {

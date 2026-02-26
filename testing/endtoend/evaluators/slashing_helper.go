@@ -1,11 +1,9 @@
 package evaluators
 
 import (
+	"context"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 
 	"github.com/OffchainLabs/go-bitfield"
@@ -168,23 +166,10 @@ func (h *doubleAttestationHelper) getSlashableAttestation(idx uint64) (*eth.Atte
 //
 // and returns the Validators field of the matching entry.
 func getBeaconCommittee(conn *e2etypes.NodeConnection, slot primitives.Slot, committeeIndex primitives.CommitteeIndex) ([]primitives.ValidatorIndex, error) {
-	url := fmt.Sprintf(
-		"%s/eth/v1/beacon/states/head/committees?slot=%d&index=%d",
-		conn.BaseURL, slot, committeeIndex,
-	)
-	resp, err := conn.Client.Get(url)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get beacon committees")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("beacon committees request failed with status %d: %s", resp.StatusCode, body)
-	}
-
+	path := fmt.Sprintf("/eth/v1/beacon/states/head/committees?slot=%d&index=%d", slot, committeeIndex)
 	result := &structs.GetCommitteesResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-		return nil, errors.Wrap(err, "failed to decode beacon committees response")
+	if err := conn.Get(context.Background(), path, result); err != nil {
+		return nil, errors.Wrap(err, "failed to get beacon committees")
 	}
 
 	for _, c := range result.Data {

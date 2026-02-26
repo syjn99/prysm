@@ -1,6 +1,6 @@
 // Package evaluators contains REST helper functions for E2E evaluators.
-// These replace the former gRPC client calls with standard HTTP/REST calls
-// to the Beacon API and Prysm-specific REST API.
+// These delegate to rest.Handler (embedded in NodeConnection) for all HTTP
+// communication, replacing the former ad-hoc getJSON / postJSON plumbing.
 package evaluators
 
 import (
@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
+	"github.com/OffchainLabs/prysm/v7/network/httputil"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	e2etypes "github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
@@ -28,49 +28,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// getJSON performs a GET request and JSON-decodes the response into result.
-func getJSON(conn *e2etypes.NodeConnection, path string, result any) error {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", conn.BaseURL+path, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := conn.Client.Do(req)
-	if err != nil {
-		return errors.Wrapf(err, "GET %s failed", path)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("GET %s returned status %d: %s", path, resp.StatusCode, body)
-	}
-	return json.NewDecoder(resp.Body).Decode(result)
-}
-
-// postJSON performs a POST request with a JSON body and decodes the response into result.
+// postJSON marshals body to JSON and POSTs it via rest.Handler, decoding the response into result.
 // If result is nil, the response body is discarded.
 func postJSON(conn *e2etypes.NodeConnection, path string, body any, result any) error {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal request body")
 	}
-	req, err := http.NewRequestWithContext(context.Background(), "POST", conn.BaseURL+path, bytes.NewReader(jsonBody))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := conn.Client.Do(req)
-	if err != nil {
-		return errors.Wrapf(err, "POST %s failed", path)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("POST %s returned status %d: %s", path, resp.StatusCode, respBody)
-	}
-	if result != nil {
-		return json.NewDecoder(resp.Body).Decode(result)
-	}
-	return nil
+	return conn.Post(context.Background(), path, nil, bytes.NewBuffer(jsonBody), result)
 }
 
 // --- Domain helpers ---
@@ -78,7 +43,7 @@ func postJSON(conn *e2etypes.NodeConnection, path string, body any, result any) 
 // getChainHead fetches the chain head from the Prysm-specific REST endpoint.
 func getChainHead(conn *e2etypes.NodeConnection) (*structs.ChainHead, error) {
 	result := &structs.ChainHead{}
-	if err := getJSON(conn, "/prysm/v1/beacon/chain_head", result); err != nil {
+	if err := conn.Get(context.Background(), "/prysm/v1/beacon/chain_head", result); err != nil {
 		return nil, errors.Wrap(err, "failed to get chain head")
 	}
 	return result, nil
@@ -87,7 +52,7 @@ func getChainHead(conn *e2etypes.NodeConnection) (*structs.ChainHead, error) {
 // getGenesis fetches genesis info from the standard Beacon API.
 func getGenesis(conn *e2etypes.NodeConnection) (*structs.Genesis, error) {
 	result := &structs.GetGenesisResponse{}
-	if err := getJSON(conn, "/eth/v1/beacon/genesis", result); err != nil {
+	if err := conn.Get(context.Background(), "/eth/v1/beacon/genesis", result); err != nil {
 		return nil, errors.Wrap(err, "failed to get genesis")
 	}
 	return result.Data, nil
@@ -109,7 +74,7 @@ func getGenesisTime(conn *e2etypes.NodeConnection) (time.Time, error) {
 // getSyncStatus fetches sync status from the standard Beacon API.
 func getSyncStatus(conn *e2etypes.NodeConnection) (*structs.SyncStatusResponseData, error) {
 	result := &structs.SyncStatusResponse{}
-	if err := getJSON(conn, "/eth/v1/node/syncing", result); err != nil {
+	if err := conn.Get(context.Background(), "/eth/v1/node/syncing", result); err != nil {
 		return nil, errors.Wrap(err, "failed to get sync status")
 	}
 	return result.Data, nil
@@ -118,7 +83,7 @@ func getSyncStatus(conn *e2etypes.NodeConnection) (*structs.SyncStatusResponseDa
 // getNodePeers fetches peers from the standard Beacon API.
 func getNodePeers(conn *e2etypes.NodeConnection) (*structs.GetPeersResponse, error) {
 	result := &structs.GetPeersResponse{}
-	if err := getJSON(conn, "/eth/v1/node/peers", result); err != nil {
+	if err := conn.Get(context.Background(), "/eth/v1/node/peers", result); err != nil {
 		return nil, errors.Wrap(err, "failed to get peers")
 	}
 	return result, nil
@@ -127,7 +92,7 @@ func getNodePeers(conn *e2etypes.NodeConnection) (*structs.GetPeersResponse, err
 // getNodeVersion fetches the node version from the standard Beacon API.
 func getNodeVersion(conn *e2etypes.NodeConnection) (string, error) {
 	result := &structs.GetVersionResponse{}
-	if err := getJSON(conn, "/eth/v1/node/version", result); err != nil {
+	if err := conn.Get(context.Background(), "/eth/v1/node/version", result); err != nil {
 		return "", errors.Wrap(err, "failed to get node version")
 	}
 	return result.Data.Version, nil
@@ -151,7 +116,7 @@ func getValidators(conn *e2etypes.NodeConnection, stateID string, statuses []str
 	}
 	path := sb.String()
 	result := &structs.GetValidatorsResponse{}
-	if err := getJSON(conn, path, result); err != nil {
+	if err := conn.Get(context.Background(), path, result); err != nil {
 		return nil, errors.Wrap(err, "failed to get validators")
 	}
 	return result, nil
@@ -161,7 +126,7 @@ func getValidators(conn *e2etypes.NodeConnection, stateID string, statuses []str
 func getValidator(conn *e2etypes.NodeConnection, stateID, validatorID string) (*structs.GetValidatorResponse, error) {
 	path := fmt.Sprintf("/eth/v1/beacon/states/%s/validators/%s", stateID, validatorID)
 	result := &structs.GetValidatorResponse{}
-	if err := getJSON(conn, path, result); err != nil {
+	if err := conn.Get(context.Background(), path, result); err != nil {
 		return nil, errors.Wrap(err, "failed to get validator")
 	}
 	return result, nil
@@ -171,7 +136,7 @@ func getValidator(conn *e2etypes.NodeConnection, stateID, validatorID string) (*
 func getValidatorBalances(conn *e2etypes.NodeConnection, stateID string) (*structs.GetValidatorBalancesResponse, error) {
 	path := fmt.Sprintf("/eth/v1/beacon/states/%s/validator_balances", stateID)
 	result := &structs.GetValidatorBalancesResponse{}
-	if err := getJSON(conn, path, result); err != nil {
+	if err := conn.Get(context.Background(), path, result); err != nil {
 		return nil, errors.Wrap(err, "failed to get validator balances")
 	}
 	return result, nil
@@ -180,7 +145,7 @@ func getValidatorBalances(conn *e2etypes.NodeConnection, stateID string) (*struc
 // getValidatorParticipation fetches validator participation from the Prysm-specific REST endpoint.
 func getValidatorParticipation(conn *e2etypes.NodeConnection) (*structs.GetValidatorParticipationResponse, error) {
 	result := &structs.GetValidatorParticipationResponse{}
-	if err := getJSON(conn, "/prysm/v1/validators/head/participation", result); err != nil {
+	if err := conn.Get(context.Background(), "/prysm/v1/validators/head/participation", result); err != nil {
 		return nil, errors.Wrap(err, "failed to get validator participation")
 	}
 	return result, nil
@@ -188,37 +153,24 @@ func getValidatorParticipation(conn *e2etypes.NodeConnection) (*structs.GetValid
 
 // getBlockSSZ fetches a block as SSZ and returns it as a ReadOnlySignedBeaconBlock.
 func getBlockSSZ(conn *e2etypes.NodeConnection, blockID string) (interfaces.ReadOnlySignedBeaconBlock, error) {
-	url := fmt.Sprintf("%s/eth/v2/beacon/blocks/%s", conn.BaseURL, blockID)
-	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+	path := fmt.Sprintf("/eth/v2/beacon/blocks/%s", blockID)
+	body, headers, err := conn.GetSSZ(context.Background(), path)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/octet-stream")
-	resp, err := conn.Client.Do(req)
-	if err != nil {
+		var jsonErr *httputil.DefaultJsonError
+		if errors.As(err, &jsonErr) && jsonErr.Code == http.StatusNotFound {
+			return nil, nil // missed slot
+		}
 		return nil, errors.Wrap(err, "failed to get block SSZ")
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil // missed slot
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("block SSZ request for %s failed with status %d: %s", blockID, resp.StatusCode, body)
-	}
-	sszBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read block SSZ body")
-	}
-	ver := resp.Header.Get("Eth-Consensus-Version")
-	return unmarshalBlockSSZ(ver, sszBytes)
+	ver := headers.Get("Eth-Consensus-Version")
+	return unmarshalBlockSSZ(ver, body)
 }
 
 // getBlock fetches a block as JSON from the standard Beacon API.
 func getBlock(conn *e2etypes.NodeConnection, blockID string) (*structs.GetBlockV2Response, error) {
 	path := fmt.Sprintf("/eth/v2/beacon/blocks/%s", blockID)
 	result := &structs.GetBlockV2Response{}
-	if err := getJSON(conn, path, result); err != nil {
+	if err := conn.Get(context.Background(), path, result); err != nil {
 		return nil, errors.Wrap(err, "failed to get block")
 	}
 	return result, nil
@@ -228,7 +180,7 @@ func getBlock(conn *e2etypes.NodeConnection, blockID string) (*structs.GetBlockV
 func getBeaconState(conn *e2etypes.NodeConnection, stateID string) (*structs.GetBeaconStateV2Response, error) {
 	path := fmt.Sprintf("/eth/v2/debug/beacon/states/%s", stateID)
 	result := &structs.GetBeaconStateV2Response{}
-	if err := getJSON(conn, path, result); err != nil {
+	if err := conn.Get(context.Background(), path, result); err != nil {
 		return nil, errors.Wrap(err, "failed to get beacon state")
 	}
 	return result, nil
@@ -311,22 +263,12 @@ func getHeadBlock(conn *e2etypes.NodeConnection) (interfaces.ReadOnlySignedBeaco
 
 // getBeaconStateSSZ fetches a beacon state as SSZ bytes from the debug endpoint.
 func getBeaconStateSSZ(conn *e2etypes.NodeConnection, stateID string) ([]byte, error) {
-	url := fmt.Sprintf("%s/eth/v2/debug/beacon/states/%s", conn.BaseURL, stateID)
-	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/octet-stream")
-	resp, err := conn.Client.Do(req)
+	path := fmt.Sprintf("/eth/v2/debug/beacon/states/%s", stateID)
+	body, _, err := conn.GetSSZ(context.Background(), path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get beacon state SSZ")
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("beacon state SSZ request failed with status %d: %s", resp.StatusCode, body)
-	}
-	return io.ReadAll(resp.Body)
+	return body, nil
 }
 
 // submitVoluntaryExit submits a signed voluntary exit via REST.
@@ -340,32 +282,24 @@ func submitAttestation(conn *e2etypes.NodeConnection, att *ethpb.Attestation) er
 	return postJSON(conn, "/eth/v1/beacon/pool/attestations", []*structs.Attestation{jsonAtt}, nil)
 }
 
-// publishBlock publishes a signed beacon block via REST.
+// publishBlock publishes a signed beacon block via REST using SSZ encoding.
 func publishBlock(conn *e2etypes.NodeConnection, blk interfaces.ReadOnlySignedBeaconBlock) error {
 	sszBytes, err := blk.MarshalSSZ()
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal block to SSZ")
 	}
-	url := conn.BaseURL + "/eth/v2/beacon/blocks"
-	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(sszBytes))
-	if err != nil {
-		return err
+	headers := map[string]string{
+		"Eth-Consensus-Version": version.String(blk.Version()),
 	}
-	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("Eth-Consensus-Version", version.String(blk.Version()))
-	resp, err := conn.Client.Do(req)
-	if err != nil {
-		return errors.Wrap(err, "failed to publish block")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	return nil
+	_, _, err = conn.PostSSZ(context.Background(), "/eth/v2/beacon/blocks", headers, bytes.NewBuffer(sszBytes))
+	return err
 }
 
 // getAttestationData fetches attestation data from the REST API.
 func getAttestationData(conn *e2etypes.NodeConnection, slot primitives.Slot, committeeIndex primitives.CommitteeIndex) (*structs.AttestationData, error) {
 	path := fmt.Sprintf("/eth/v1/validator/attestation_data?slot=%d&committee_index=%d", slot, committeeIndex)
 	result := &structs.GetAttestationDataResponse{}
-	if err := getJSON(conn, path, result); err != nil {
+	if err := conn.Get(context.Background(), path, result); err != nil {
 		return nil, errors.Wrap(err, "failed to get attestation data")
 	}
 	return result.Data, nil
@@ -375,7 +309,7 @@ func getAttestationData(conn *e2etypes.NodeConnection, slot primitives.Slot, com
 func getProposerDuties(conn *e2etypes.NodeConnection, epoch primitives.Epoch) (*structs.GetProposerDutiesResponse, error) {
 	path := fmt.Sprintf("/eth/v1/validator/duties/proposer/%d", epoch)
 	result := &structs.GetProposerDutiesResponse{}
-	if err := getJSON(conn, path, result); err != nil {
+	if err := conn.Get(context.Background(), path, result); err != nil {
 		return nil, errors.Wrap(err, "failed to get proposer duties")
 	}
 	return result, nil

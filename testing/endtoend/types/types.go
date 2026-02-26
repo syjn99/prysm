@@ -4,21 +4,20 @@ package types
 
 import (
 	"context"
-	"net/http"
 	"os"
 
 	"github.com/OffchainLabs/prysm/v7/api"
+	"github.com/OffchainLabs/prysm/v7/api/rest"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/sirupsen/logrus"
 )
 
-// NodeConnection wraps an HTTP client and base URL for a beacon node.
+// NodeConnection wraps a rest.Handler for a beacon node.
 // Evaluators use this to make REST API calls to beacon nodes.
 type NodeConnection struct {
-	BaseURL string
-	Client  *http.Client
+	rest.Handler
 }
 
 type E2EConfigOpt func(*E2EConfig)
