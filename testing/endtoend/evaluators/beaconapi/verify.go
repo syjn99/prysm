@@ -19,7 +19,6 @@ import (
 	e2etypes "github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 )
 
 // MultiClientVerifyIntegrity tests Beacon API endpoints.
@@ -37,7 +36,7 @@ const (
 	v3PathTemplate = "http://localhost:%d/eth/v3"
 )
 
-func verify(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
+func verify(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	for beaconNodeIdx := range conns {
 		if err := run(beaconNodeIdx); err != nil {
 			return err
