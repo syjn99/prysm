@@ -197,6 +197,11 @@ func (v *ValidatorNode) Start(ctx context.Context) error {
 		// Point any extra validator clients to a node we know is running.
 		beaconRPCPort = e2e.TestParams.Ports.PrysmBeaconNodeRPCPort
 	}
+	beaconRestApiPort := e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort + index
+	if beaconRestApiPort >= e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort+e2e.TestParams.BeaconNodeCount {
+		// Point any extra validator clients to a node we know is running.
+		beaconRestApiPort = e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort
+	}
 
 	logFile, err := helpers.DeleteAndCreateFile(e2e.TestParams.LogPath, fmt.Sprintf(e2e.ValidatorLogFileName, index))
 	if err != nil {
@@ -229,6 +234,7 @@ func (v *ValidatorNode) Start(ctx context.Context) error {
 		fmt.Sprintf("--%s=%d", flags.MonitoringPortFlag.Name, e2e.TestParams.Ports.ValidatorMetricsPort+index),
 		fmt.Sprintf("--%s=%d", flags.HTTPServerPort.Name, e2e.TestParams.Ports.ValidatorHTTPPort+index),
 		fmt.Sprintf("--%s=localhost:%d", flags.BeaconRPCProviderFlag.Name, beaconRPCPort),
+		fmt.Sprintf("--%s=http://localhost:%d", flags.BeaconRESTApiProviderFlag.Name, beaconRestApiPort),
 
 		fmt.Sprintf("--%s=%s", flags.GRPCHeadersFlag.Name, "dummy=value,foo=bar"), // Sending random headers shouldn't break anything.
 		fmt.Sprintf("--%s=%s", cmdshared.VerbosityFlag.Name, "debug"),
@@ -236,18 +242,6 @@ func (v *ValidatorNode) Start(ctx context.Context) error {
 		fmt.Sprintf("--%s=%s", cmdshared.ChainConfigFileFlag.Name, cfgPath),
 		"--" + cmdshared.ForceClearDB.Name,
 		"--" + cmdshared.AcceptTosFlag.Name,
-	}
-
-	if v.config.UseBeaconRestApi {
-		beaconRestApiPort := e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort + index
-		if beaconRestApiPort >= e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort+e2e.TestParams.BeaconNodeCount {
-			// Point any extra validator clients to a node we know is running.
-			beaconRestApiPort = e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort
-		}
-
-		args = append(args,
-			fmt.Sprintf("--%s=http://localhost:%d", flags.BeaconRESTApiProviderFlag.Name, beaconRestApiPort),
-			fmt.Sprintf("--%s", features.EnableBeaconRESTApi.Name))
 	}
 
 	// Only apply e2e flags to the current branch. New flags may not exist in previous release.
