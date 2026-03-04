@@ -12,9 +12,10 @@
 - `fork` = syjn99/prysm — push all branches here
 - Default branch: `develop`
 - Jun opens upstream PRs manually after review
+- **NEVER force push** — always use new commits
 
 ## Skills (use these instead of raw commands)
-- `/precheck` — gofmt, goimports, gazelle, build
+- `/precheck` — gofmt, goimports, gazelle, hack scripts, build
 - `/test` — unit tests with baseline comparison
 - `/e2e` — end-to-end tests
 - `/pr` — full PR workflow (precheck → test → e2e → commit → push)
@@ -34,11 +35,14 @@
 - `config/` — Network configs
 - `consensus-types/` — Consensus types
 - `testing/endtoend/` — E2E tests
-- `hack/` — Dev scripts (update-go-pbs.sh, update-go-ssz.sh, check_gazelle.sh)
+- `hack/` — Dev scripts (update-go-pbs.sh, update-go-ssz.sh, update-mockgen.sh, check_gazelle.sh)
 
-## Task Tracking
-See `~/.openclaw/workspace-coding/PRYSM_TODOS.md` for issue triage and work log.
+## External References
+> ⚠️ The following paths are machine-specific (Jun's local setup).
+> If using on another machine, update these paths accordingly.
 
-## Test Baseline
-See `~/.openclaw/workspace-coding/prysm-baseline-tests.json` for known test failures on develop.
-Compare your test results against this to distinguish pre-existing vs new failures.
+- **Task tracking:** `~/.openclaw/workspace-coding/PRYSM_TODOS.md`
+- **Test baseline:** `~/.openclaw/workspace-coding/prysm-baseline-tests.json`
+
+These files live in the OpenClaw workspace directory and are NOT part of the Prysm repo.
+On a different machine, create equivalent files or adjust the paths in the skill definitions.

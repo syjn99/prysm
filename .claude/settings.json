@@ -46,7 +46,6 @@
       "Bash(mkdir *)",
       "Bash(cp *)",
       "Bash(rsync *)",
-      "Bash(bash *)",
       "Bash(cat *)",
       "Bash(grep *)",
       "Bash(echo *)",
