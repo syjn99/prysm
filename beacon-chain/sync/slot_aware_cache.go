@@ -29,8 +29,6 @@ func newSlotAwareCache(size int) *slotAwareCache {
 
 // Get retrieves a value from the cache.
 func (c *slotAwareCache) Get(key string) (any, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	return c.cache.Get(key)
 }
 

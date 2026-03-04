@@ -3,10 +3,9 @@ package peerdas
 import (
 	"encoding/binary"
 	"maps"
-	"sync"
 
+	lruwrpr "github.com/OffchainLabs/prysm/v7/cache/lru"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 )
 
@@ -22,19 +21,11 @@ const (
 	nodeInfoCachKeySize = 32 + 8
 )
 
-var (
-	nodeInfoCacheMut sync.Mutex
-	nodeInfoCache    *lru.Cache
-)
+var nodeInfoCache = lruwrpr.New(nodeInfoCacheSize)
 
 // Info returns the peerDAS information for a given nodeID and custodyGroupCount.
 // It returns a boolean indicating if the peer info was already in the cache and an error if any.
 func Info(nodeID enode.ID, custodyGroupCount uint64) (*info, bool, error) {
-	// Create a new cache if it doesn't exist.
-	if err := createInfoCacheIfNeeded(); err != nil {
-		return nil, false, errors.Wrap(err, "create cache if needed")
-	}
-
 	// Compute the key.
 	key := computeInfoCacheKey(nodeID, custodyGroupCount)
 
@@ -80,23 +71,6 @@ func Info(nodeID enode.ID, custodyGroupCount uint64) (*info, bool, error) {
 	nodeInfoCache.Add(key, result)
 
 	return result, false, nil
-}
-
-// createInfoCacheIfNeeded creates a new cache if it doesn't exist.
-func createInfoCacheIfNeeded() error {
-	nodeInfoCacheMut.Lock()
-	defer nodeInfoCacheMut.Unlock()
-
-	if nodeInfoCache == nil {
-		c, err := lru.New(nodeInfoCacheSize)
-		if err != nil {
-			return errors.Wrap(err, "lru new")
-		}
-
-		nodeInfoCache = c
-	}
-
-	return nil
 }
 
 // computeInfoCacheKey returns a unique key for a node and its custodyGroupCount.

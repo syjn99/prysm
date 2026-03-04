@@ -53,9 +53,6 @@ func (s *subnetIDs) AddAttesterSubnetID(slot primitives.Slot, subnetID uint64) {
 
 // GetAttesterSubnetIDs gets the subnet IDs for subscribed subnets for attesters of the slot.
 func (s *subnetIDs) GetAttesterSubnetIDs(slot primitives.Slot) []uint64 {
-	s.attesterLock.RLock()
-	defer s.attesterLock.RUnlock()
-
 	val, exists := s.attester.Get(slot)
 	if !exists {
 		return nil
@@ -81,9 +78,6 @@ func (s *subnetIDs) AddAggregatorSubnetID(slot primitives.Slot, subnetID uint64)
 
 // GetAggregatorSubnetIDs gets the subnet IDs for subscribing subnet for aggregator of the slot.
 func (s *subnetIDs) GetAggregatorSubnetIDs(slot primitives.Slot) []uint64 {
-	s.aggregatorLock.RLock()
-	defer s.aggregatorLock.RUnlock()
-
 	val, exists := s.aggregator.Get(slot)
 	if !exists {
 		return []uint64{}
@@ -94,9 +88,6 @@ func (s *subnetIDs) GetAggregatorSubnetIDs(slot primitives.Slot) []uint64 {
 // GetPersistentSubnets retrieves the persistent subnet and expiration time of that validator's
 // subscription.
 func (s *subnetIDs) GetPersistentSubnets() ([]uint64, bool, time.Time) {
-	s.subnetsLock.RLock()
-	defer s.subnetsLock.RUnlock()
-
 	id, duration, ok := s.persistentSubnets.GetWithExpiration(subnetKey)
 	if !ok {
 		return []uint64{}, ok, time.Time{}
@@ -125,9 +116,6 @@ func (s *subnetIDs) GetAllSubnets() []uint64 {
 // AddPersistentCommittee adds the relevant committee for that particular validator along with its
 // expiration period.
 func (s *subnetIDs) AddPersistentCommittee(comIndex []uint64, duration time.Duration) {
-	s.subnetsLock.Lock()
-	defer s.subnetsLock.Unlock()
-
 	s.persistentSubnets.Set(subnetKey, comIndex, duration)
 }
 

@@ -3,8 +3,6 @@
 package cache
 
 import (
-	"sync"
-
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	lruwrpr "github.com/OffchainLabs/prysm/v7/cache/lru"
 	lru "github.com/hashicorp/golang-lru"
@@ -33,7 +31,6 @@ var (
 // BalanceCache is a struct with 1 LRU cache for looking up balance by epoch.
 type BalanceCache struct {
 	cache *lru.Cache
-	lock  sync.RWMutex
 }
 
 // NewEffectiveBalanceCache creates a new effective balance cache for storing/accessing total balance by epoch.
@@ -45,8 +42,6 @@ func NewEffectiveBalanceCache() *BalanceCache {
 
 // Clear resets the SyncCommitteeCache to its initial state
 func (c *BalanceCache) Clear() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	c.cache = lruwrpr.New(maxBalanceCacheSize)
 }
 
@@ -56,9 +51,6 @@ func (c *BalanceCache) AddTotalEffectiveBalance(st state.ReadOnlyBeaconState, ba
 	if err != nil {
 		return err
 	}
-
-	c.lock.Lock()
-	defer c.lock.Unlock()
 
 	_ = c.cache.Add(key, balance)
 	return nil
@@ -70,9 +62,6 @@ func (c *BalanceCache) Get(st state.ReadOnlyBeaconState) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-
-	c.lock.RLock()
-	defer c.lock.RUnlock()
 
 	value, exists := c.cache.Get(key)
 	if !exists {
