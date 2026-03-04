@@ -1,48 +1,65 @@
-# CLAUDE.md - Prysm Development Guide
+# Prysm – Ethereum Consensus Layer Client
+
+Module: `github.com/OffchainLabs/prysm/v7` | Go 1.25.1 | Branch: `develop`
 
 > ⚠️ **NEVER commit this file or the `.claude/` directory. Both are excluded via `.git/info/exclude`.**
+> ⚠️ **NEVER force push.**
 
-## Project
-- **Repo:** OffchainLabs/prysm (Ethereum consensus client, Go)
-- **Build:** Bazel (primary) — `bazel build //...`
-- **Module:** `github.com/OffchainLabs/prysm/v7`
+## Architecture
+
+Executables (`cmd/`): `beacon-chain`, `validator`, `prysmctl`, `client-stats`
+
+- `beacon-chain/core/` – State transitions per fork (Phase0→Altair→Bellatrix→Capella→Deneb→Electra→Fulu→Gloas)
+- `beacon-chain/blockchain/` – Block processing, fork choice, execution engine
+- `beacon-chain/state/` – BeaconState: copy-on-write, ReadOnly/WriteOnly interfaces
+- `beacon-chain/db/` – BoltDB + filesystem (blobs, data columns)
+- `beacon-chain/p2p/`, `sync/` – libp2p networking, gossipsub
+- `validator/` – Key mgmt, slashing protection, duties
+- `api/` – REST + gRPC | `proto/` – Protobuf defs | `consensus-types/` – Wrapped read-only interfaces
+- `config/params/` – Chain params | `config/features/` – Feature flags
 
 ## Git Rules
+
 - `origin` = OffchainLabs/prysm — **NEVER push here. NEVER open PRs here.**
 - `fork` = syjn99/prysm — push all branches here
 - Default branch: `develop`
 - Jun opens upstream PRs manually after review
-- **NEVER force push** — always use new commits
 
 ## Skills (use these instead of raw commands)
+
 - `/precheck` — gofmt, goimports, gazelle, hack scripts, build
 - `/test` — unit tests with baseline comparison
 - `/e2e` — end-to-end tests
 - `/pr` — full PR workflow (precheck → test → e2e → commit → push)
 
-## Code Style
-- Follow existing Go conventions
-- Table-driven tests preferred
-- `gofmt` / `goimports` required
-- Update BUILD.bazel when adding new Go files (gazelle)
+## Patterns
 
-## Key Directories
-- `beacon-chain/` — Core beacon node
-- `validator/` — Validator client
-- `proto/` — Protobuf definitions
-- `api/` — REST API server
-- `cmd/` — CLI entrypoints
-- `config/` — Network configs
-- `consensus-types/` — Consensus types
-- `testing/endtoend/` — E2E tests
-- `hack/` — Dev scripts (update-go-pbs.sh, update-go-ssz.sh, update-mockgen.sh, check_gazelle.sh)
+- **Service Registry**: `runtime.ServiceRegistry` – lifecycle Start/Stop/Status
+- **Functional Options**: `WithXxx` for DI (e.g. `blockchain.WithDatabase(db)`)
+- **Interface Segregation**: ReadOnly/WriteOnly sub-interfaces; use narrowest type
+- **Fork detection**: `block.Version()`, `state.Version()`; per-fork sub-packages in `core/`
+- **State immutability**: Copy-on-write; call `state.Copy()` before mutating shared state
+- Use `interfaces.ReadOnlySignedBeaconBlock` etc. over concrete proto types
+
+## Build Tags
+
+`develop` (required for `go test`), `minimal`/`mainnet` (config size), `fuzz`, `debug` (E2E)
+
+## Testing
+
+- `testing/assert/` (non-fatal), `testing/require/` (fatal) – custom helpers, not testify
+- `DeepSSZEqual` for proto/SSZ comparison
+- Spec tests: `testing/spectest/{mainnet,minimal}/` – tag-gated
+- E2E: `testing/endtoend/` – multi-node in-process
+
+## Nogo Analyzers
+
+20+ custom analyzers in `tools/analyzers/` enforced by Bazel. Key rules: `cryptorand` (no math/rand), `errcheck`, `logcapitalization` (lowercase logs), `nopanic` (no panics), `featureconfig`, `recursivelock`. Build fails on violations.
 
 ## External References
+
 > ⚠️ The following paths are machine-specific (Jun's local setup).
-> If using on another machine, update these paths accordingly.
+> On a different machine, update these paths accordingly.
 
 - **Task tracking:** `~/.openclaw/workspace-coding/PRYSM_TODOS.md`
 - **Test baseline:** `~/.openclaw/workspace-coding/prysm-baseline-tests.json`
-
-These files live in the OpenClaw workspace directory and are NOT part of the Prysm repo.
-On a different machine, create equivalent files or adjust the paths in the skill definitions.
