@@ -3,7 +3,6 @@
 Module: `github.com/OffchainLabs/prysm/v7` | Go 1.25.1 | Branch: `develop`
 
 > ⚠️ **NEVER commit this file or the `.claude/` directory. Both are excluded via `.git/info/exclude`.**
-> ⚠️ **NEVER force push.**
 
 ## Architecture
 
@@ -18,14 +17,7 @@ Executables (`cmd/`): `beacon-chain`, `validator`, `prysmctl`, `client-stats`
 - `api/` – REST + gRPC | `proto/` – Protobuf defs | `consensus-types/` – Wrapped read-only interfaces
 - `config/params/` – Chain params | `config/features/` – Feature flags
 
-## Git Rules
-
-- `origin` = OffchainLabs/prysm — **NEVER push here. NEVER open PRs here.**
-- `fork` = syjn99/prysm — push all branches here
-- Default branch: `develop`
-- Jun opens upstream PRs manually after review
-
-## Skills (use these instead of raw commands)
+## Skills
 
 - `/precheck` — gofmt, goimports, gazelle, hack scripts, build
 - `/test` — unit tests with baseline comparison
@@ -55,11 +47,3 @@ Executables (`cmd/`): `beacon-chain`, `validator`, `prysmctl`, `client-stats`
 ## Nogo Analyzers
 
 20+ custom analyzers in `tools/analyzers/` enforced by Bazel. Key rules: `cryptorand` (no math/rand), `errcheck`, `logcapitalization` (lowercase logs), `nopanic` (no panics), `featureconfig`, `recursivelock`. Build fails on violations.
-
-## External References
-
-> ⚠️ The following paths are machine-specific (Jun's local setup).
-> On a different machine, update these paths accordingly.
-
-- **Task tracking:** `~/.openclaw/workspace-coding/PRYSM_TODOS.md`
-- **Test baseline:** `~/.openclaw/workspace-coding/prysm-baseline-tests.json`
