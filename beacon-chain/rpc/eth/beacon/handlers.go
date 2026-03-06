@@ -1112,11 +1112,11 @@ func (s *Server) GetCommittees(w http.ResponseWriter, r *http.Request) {
 	ctx, span := trace.StartSpan(r.Context(), "beacon.GetCommittees")
 	defer span.End()
 
-	stateId := r.PathValue("state_id")
-	if stateId == "" {
-		httputil.HandleError(w, "state_id is required in URL params", http.StatusBadRequest)
+	meta, ok := s.getStateMeta(ctx, w, r)
+	if !ok {
 		return
 	}
+	st := meta.State
 
 	rawEpoch, e, ok := shared.UintFromQuery(w, r, "epoch", false)
 	if !ok {
@@ -1128,12 +1128,6 @@ func (s *Server) GetCommittees(w http.ResponseWriter, r *http.Request) {
 	}
 	rawSlot, sl, ok := shared.UintFromQuery(w, r, "slot", false)
 	if !ok {
-		return
-	}
-
-	st, err := s.Stater.State(ctx, []byte(stateId))
-	if err != nil {
-		shared.WriteStateFetchError(w, err)
 		return
 	}
 
@@ -1194,19 +1188,7 @@ func (s *Server) GetCommittees(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	isOptimistic, err := helpers.IsOptimistic(ctx, []byte(stateId), s.OptimisticModeFetcher, s.Stater, s.ChainInfoFetcher, s.BeaconDB)
-	if err != nil {
-		helpers.HandleIsOptimisticError(w, err)
-		return
-	}
-
-	blockRoot, err := st.LatestBlockHeader().HashTreeRoot()
-	if err != nil {
-		httputil.HandleError(w, "Could not calculate root of latest block header: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	isFinalized := s.FinalizationFetcher.IsFinalized(ctx, blockRoot)
-	httputil.WriteJson(w, &structs.GetCommitteesResponse{Data: committees, ExecutionOptimistic: isOptimistic, Finalized: isFinalized})
+	httputil.WriteJson(w, &structs.GetCommitteesResponse{Data: committees, ExecutionOptimistic: meta.IsOptimistic, Finalized: meta.IsFinalized})
 }
 
 // GetBlockHeaders retrieves block headers matching given query. By default it will fetch current head slot blocks.

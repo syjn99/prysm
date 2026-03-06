@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/OffchainLabs/prysm/v7/api/server/middleware"
 	"github.com/OffchainLabs/prysm/v7/api/server/structs"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/helpers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/rpc/eth/shared"
@@ -31,32 +32,17 @@ func (s *Server) GetValidators(w http.ResponseWriter, r *http.Request) {
 	ctx, span := trace.StartSpan(r.Context(), "beacon.GetValidators")
 	defer span.End()
 
-	stateId := r.PathValue("state_id")
-	if stateId == "" {
-		httputil.HandleError(w, "state_id is required in URL params", http.StatusBadRequest)
+	meta, ok := s.getStateMeta(ctx, w, r)
+	if !ok {
 		return
 	}
-	st, err := s.Stater.State(ctx, []byte(stateId))
-	if err != nil {
-		shared.WriteStateFetchError(w, err)
-		return
-	}
-
-	isOptimistic, err := helpers.IsOptimistic(ctx, []byte(stateId), s.OptimisticModeFetcher, s.Stater, s.ChainInfoFetcher, s.BeaconDB)
-	if err != nil {
-		helpers.HandleIsOptimisticError(w, err)
-		return
-	}
-	blockRoot, err := st.LatestBlockHeader().HashTreeRoot()
-	if err != nil {
-		httputil.HandleError(w, "Could not calculate root of latest block header: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	isFinalized := s.FinalizationFetcher.IsFinalized(ctx, blockRoot)
+	st := meta.State
+	isOptimistic := meta.IsOptimistic
+	isFinalized := meta.IsFinalized
 
 	var req structs.GetValidatorsRequest
 	if r.Method == http.MethodPost {
-		err = json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
 		switch {
 		case errors.Is(err, io.EOF):
 			httputil.HandleError(w, "No data submitted", http.StatusBadRequest)
@@ -180,22 +166,18 @@ func (s *Server) GetValidator(w http.ResponseWriter, r *http.Request) {
 	ctx, span := trace.StartSpan(r.Context(), "beacon.GetValidator")
 	defer span.End()
 
-	stateId := r.PathValue("state_id")
-	if stateId == "" {
-		httputil.HandleError(w, "state_id is required in URL params", http.StatusBadRequest)
+	meta, ok := s.getStateMeta(ctx, w, r)
+	if !ok {
 		return
 	}
+	st := meta.State
+
 	valId := r.PathValue("validator_id")
 	if valId == "" {
 		httputil.HandleError(w, "validator_id is required in URL params", http.StatusBadRequest)
 		return
 	}
 
-	st, err := s.Stater.State(ctx, []byte(stateId))
-	if err != nil {
-		shared.WriteStateFetchError(w, err)
-		return
-	}
 	ids, ok := decodeIds(w, st, []string{valId}, false /* ignore unknown */)
 	if !ok {
 		return
@@ -220,22 +202,10 @@ func (s *Server) GetValidator(w http.ResponseWriter, r *http.Request) {
 	}
 	container := valContainerFromReadOnlyVal(readOnlyVals[0], ids[0], bal, valSubStatus)
 
-	isOptimistic, err := helpers.IsOptimistic(ctx, []byte(stateId), s.OptimisticModeFetcher, s.Stater, s.ChainInfoFetcher, s.BeaconDB)
-	if err != nil {
-		helpers.HandleIsOptimisticError(w, err)
-		return
-	}
-	blockRoot, err := st.LatestBlockHeader().HashTreeRoot()
-	if err != nil {
-		httputil.HandleError(w, "Could not calculate root of latest block header: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	isFinalized := s.FinalizationFetcher.IsFinalized(ctx, blockRoot)
-
 	resp := &structs.GetValidatorResponse{
 		Data:                container,
-		ExecutionOptimistic: isOptimistic,
-		Finalized:           isFinalized,
+		ExecutionOptimistic: meta.IsOptimistic,
+		Finalized:           meta.IsFinalized,
 	}
 	httputil.WriteJson(w, resp)
 }
@@ -245,34 +215,19 @@ func (s *Server) GetValidatorBalances(w http.ResponseWriter, r *http.Request) {
 	ctx, span := trace.StartSpan(r.Context(), "beacon.GetValidatorBalances")
 	defer span.End()
 
-	stateId := r.PathValue("state_id")
-	if stateId == "" {
-		httputil.HandleError(w, "state_id is required in URL params", http.StatusBadRequest)
+	meta, ok := s.getStateMeta(ctx, w, r)
+	if !ok {
 		return
 	}
-	st, err := s.Stater.State(ctx, []byte(stateId))
-	if err != nil {
-		shared.WriteStateFetchError(w, err)
-		return
-	}
-
-	isOptimistic, err := helpers.IsOptimistic(ctx, []byte(stateId), s.OptimisticModeFetcher, s.Stater, s.ChainInfoFetcher, s.BeaconDB)
-	if err != nil {
-		helpers.HandleIsOptimisticError(w, err)
-		return
-	}
-	blockRoot, err := st.LatestBlockHeader().HashTreeRoot()
-	if err != nil {
-		httputil.HandleError(w, "Could not calculate root of latest block header: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	isFinalized := s.FinalizationFetcher.IsFinalized(ctx, blockRoot)
+	st := meta.State
+	isOptimistic := meta.IsOptimistic
+	isFinalized := meta.IsFinalized
 
 	var rawIds []string
 	if r.Method == http.MethodGet {
 		rawIds = r.URL.Query()["id"]
 	} else {
-		err = json.NewDecoder(r.Body).Decode(&rawIds)
+		err := json.NewDecoder(r.Body).Decode(&rawIds)
 		switch {
 		case errors.Is(err, io.EOF):
 			httputil.HandleError(w, "No data submitted", http.StatusBadRequest)
@@ -470,6 +425,41 @@ func (s *Server) getValidatorIdentitiesJSON(
 		Finalized:           isFinalized,
 	}
 	httputil.WriteJson(w, resp)
+}
+
+// getStateMeta returns the precomputed StateMeta from middleware context if available,
+// otherwise computes it inline. This centralizes the IsOptimistic/IsFinalized logic.
+func (s *Server) getStateMeta(ctx context.Context, w http.ResponseWriter, r *http.Request) (*middleware.StateMeta, bool) {
+	if meta, ok := middleware.StateMetaFromContext(ctx); ok {
+		return meta, true
+	}
+
+	stateId := r.PathValue("state_id")
+	if stateId == "" {
+		httputil.HandleError(w, "state_id is required in URL params", http.StatusBadRequest)
+		return nil, false
+	}
+	st, err := s.Stater.State(ctx, []byte(stateId))
+	if err != nil {
+		shared.WriteStateFetchError(w, err)
+		return nil, false
+	}
+	isOptimistic, err := helpers.IsOptimistic(ctx, []byte(stateId), s.OptimisticModeFetcher, s.Stater, s.ChainInfoFetcher, s.BeaconDB)
+	if err != nil {
+		helpers.HandleIsOptimisticError(w, err)
+		return nil, false
+	}
+	blockRoot, err := st.LatestBlockHeader().HashTreeRoot()
+	if err != nil {
+		httputil.HandleError(w, "Could not calculate root of latest block header: "+err.Error(), http.StatusInternalServerError)
+		return nil, false
+	}
+	isFinalized := s.FinalizationFetcher.IsFinalized(ctx, blockRoot)
+	return &middleware.StateMeta{
+		IsOptimistic: isOptimistic,
+		IsFinalized:  isFinalized,
+		State:        st,
+	}, true
 }
 
 // decodeIds takes in a list of validator ID strings (as either a pubkey or a validator index)

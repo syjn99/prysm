@@ -722,11 +722,14 @@ func TestGetValidator(t *testing.T) {
 		assert.StringContains(t, "state_id is required in URL params", e.Message)
 	})
 	t.Run("validator ID required", func(t *testing.T) {
+		chainService := &chainMock.ChainService{}
 		s := Server{
 			Stater: &testutil.MockStater{
 				BeaconState: st,
 			},
-			HeadFetcher: &chainMock.ChainService{},
+			HeadFetcher:           chainService,
+			OptimisticModeFetcher: chainService,
+			FinalizationFetcher:   chainService,
 		}
 
 		request := httptest.NewRequest(http.MethodGet, "http://example.com/eth/v1/beacon/states/{state_id}/validators/{validator_id}", nil)
@@ -742,11 +745,14 @@ func TestGetValidator(t *testing.T) {
 		assert.StringContains(t, "validator_id is required in URL params", e.Message)
 	})
 	t.Run("unknown index", func(t *testing.T) {
+		chainService := &chainMock.ChainService{}
 		s := Server{
 			Stater: &testutil.MockStater{
 				BeaconState: st,
 			},
-			HeadFetcher: &chainMock.ChainService{},
+			HeadFetcher:           chainService,
+			OptimisticModeFetcher: chainService,
+			FinalizationFetcher:   chainService,
 		}
 
 		request := httptest.NewRequest(http.MethodGet, "http://example.com/eth/v1/beacon/states/{state_id}/validators/{validator_id}", nil)
@@ -763,11 +769,14 @@ func TestGetValidator(t *testing.T) {
 		assert.StringContains(t, "Invalid validator index", e.Message)
 	})
 	t.Run("unknown pubkey", func(t *testing.T) {
+		chainService := &chainMock.ChainService{}
 		s := Server{
 			Stater: &testutil.MockStater{
 				BeaconState: st,
 			},
-			HeadFetcher: &chainMock.ChainService{},
+			HeadFetcher:           chainService,
+			OptimisticModeFetcher: chainService,
+			FinalizationFetcher:   chainService,
 		}
 
 		request := httptest.NewRequest(http.MethodGet, "http://example.com/eth/v1/beacon/states/{state_id}/validators/{validator_id}", nil)

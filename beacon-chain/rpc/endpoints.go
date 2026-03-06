@@ -540,6 +540,14 @@ func (s *Service) beaconEndpoints(
 		AttestationStateFetcher: s.cfg.AttestationReceiver,
 	}
 
+	stateMetaCfg := &stateMetaConfig{
+		Stater:                stater,
+		OptimisticModeFetcher: s.cfg.OptimisticModeFetcher,
+		ChainInfoFetcher:      s.cfg.ChainInfoFetcher,
+		BeaconDB:              s.cfg.BeaconDB,
+		FinalizationFetcher:   s.cfg.FinalizationFetcher,
+	}
+
 	const namespace = "beacon"
 	return []endpoint{
 		{
@@ -548,6 +556,7 @@ func (s *Service) beaconEndpoints(
 			middleware: []middleware.Middleware{
 				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
 				middleware.AcceptEncodingHeaderHandler(),
+				stateMetaHandler(stateMetaCfg),
 			},
 			handler: server.GetCommittees,
 			methods: []string{http.MethodGet},
@@ -817,6 +826,7 @@ func (s *Service) beaconEndpoints(
 				middleware.ContentTypeHandler([]string{api.JsonMediaType}),
 				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
 				middleware.AcceptEncodingHeaderHandler(),
+				stateMetaHandler(stateMetaCfg),
 			},
 			handler: server.GetValidators,
 			methods: []string{http.MethodGet, http.MethodPost},
@@ -827,6 +837,7 @@ func (s *Service) beaconEndpoints(
 			middleware: []middleware.Middleware{
 				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
 				middleware.AcceptEncodingHeaderHandler(),
+				stateMetaHandler(stateMetaCfg),
 			},
 			handler: server.GetValidator,
 			methods: []string{http.MethodGet},
@@ -838,6 +849,7 @@ func (s *Service) beaconEndpoints(
 				middleware.ContentTypeHandler([]string{api.JsonMediaType}),
 				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
 				middleware.AcceptEncodingHeaderHandler(),
+				stateMetaHandler(stateMetaCfg),
 			},
 			handler: server.GetValidatorBalances,
 			methods: []string{http.MethodGet, http.MethodPost},
