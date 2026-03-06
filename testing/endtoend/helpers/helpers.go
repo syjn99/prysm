@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OffchainLabs/prysm/v7/api/rest"
 	"github.com/OffchainLabs/prysm/v7/config/params"
-	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	e2e "github.com/OffchainLabs/prysm/v7/testing/endtoend/params"
 	e2etypes "github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
@@ -27,7 +27,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -287,36 +286,24 @@ func writeURLRespAtPath(url, fp string) error {
 	return nil
 }
 
-// NewLocalConnection creates and returns GRPC connection on a given localhost port.
-func NewLocalConnection(ctx context.Context, port int) (*grpc.ClientConn, error) {
-	endpoint := fmt.Sprintf("127.0.0.1:%d", port)
-	dialOpts := []grpc.DialOption{
-		grpc.WithInsecure(),
+// NewNodeConnection creates a single NodeConnection for the given host URL.
+func NewNodeConnection(host string) *e2etypes.NodeConnection {
+	client := http.Client{Timeout: 30 * time.Second}
+	return &e2etypes.NodeConnection{
+		Handler: rest.NewHandler(client, host),
 	}
-	conn, err := grpc.DialContext(ctx, endpoint, dialOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return conn, nil
 }
 
-// NewLocalConnections returns number of GRPC connections, along with function to close all of them.
-func NewLocalConnections(ctx context.Context, numConns int) ([]*grpc.ClientConn, func(), error) {
-	conns := make([]*grpc.ClientConn, numConns)
+// BeaconNodeConnections returns NodeConnection instances for the given number of beacon nodes.
+// A shared HTTP client with a 30-second timeout is used across all connections.
+func BeaconNodeConnections(numNodes int) []*e2etypes.NodeConnection {
+	conns := make([]*e2etypes.NodeConnection, numNodes)
 	for i := range conns {
-		conn, err := NewLocalConnection(ctx, e2e.TestParams.Ports.PrysmBeaconNodeRPCPort+i)
-		if err != nil {
-			return nil, nil, err
-		}
-		conns[i] = conn
+		port := e2e.TestParams.Ports.PrysmBeaconNodeHTTPPort + i
+		host := fmt.Sprintf("http://127.0.0.1:%d", port)
+		conns[i] = NewNodeConnection(host)
 	}
-	return conns, func() {
-		for _, conn := range conns {
-			if err := conn.Close(); err != nil {
-				log.Error(err)
-			}
-		}
-	}, nil
+	return conns
 }
 
 // BeaconAPIHostnames constructs a hostname:port string for the
@@ -342,13 +329,12 @@ func ComponentsStarted(ctx context.Context, comps []e2etypes.ComponentRunner) er
 	return nil
 }
 
-// EpochTickerStartTime calculates the best time to start epoch ticker for a given genesis.
-func EpochTickerStartTime(genesis *eth.Genesis) time.Time {
+// EpochTickerStartTime calculates the best time to start epoch ticker for a given genesis time.
+func EpochTickerStartTime(genesisTime time.Time) time.Time {
 	epochSeconds := uint64(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
 	epochSecondsHalf := time.Duration(int64(epochSeconds*1000)/2) * time.Millisecond
 	// Adding a half slot here to ensure the requests are in the middle of an epoch.
 	middleOfEpoch := epochSecondsHalf + slots.DivideSlotBy(2 /* half a slot */)
-	genesisTime := time.Unix(genesis.GenesisTime.Seconds, 0)
 	// Offsetting the ticker from genesis so it ticks in the middle of an epoch, in order to keep results consistent.
 	return genesisTime.Add(middleOfEpoch)
 }

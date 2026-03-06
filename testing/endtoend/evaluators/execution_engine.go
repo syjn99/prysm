@@ -1,6 +1,7 @@
 package evaluators
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,12 +11,10 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/network/httputil"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
-	"github.com/OffchainLabs/prysm/v7/testing/endtoend/params"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/policies"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 )
 
 // OptimisticSyncEnabled checks that the node is in an optimistic state.
@@ -25,22 +24,10 @@ var OptimisticSyncEnabled = types.Evaluator{
 	Evaluation: optimisticSyncEnabled,
 }
 
-func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*grpc.ClientConn) error {
-	for nodeIndex := range conns {
-		path := fmt.Sprintf("http://localhost:%d/eth/v1/beacon/blinded_blocks/head", params.TestParams.Ports.PrysmBeaconNodeHTTPPort+nodeIndex)
+func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*types.NodeConnection) error {
+	for _, conn := range conns {
 		resp := structs.GetBlockV2Response{}
-		httpResp, err := http.Get(path) // #nosec G107 -- path can't be constant because it depends on port param and node index
-		if err != nil {
-			return err
-		}
-		if httpResp.StatusCode != http.StatusOK {
-			e := httputil.DefaultJsonError{}
-			if err = json.NewDecoder(httpResp.Body).Decode(&e); err != nil {
-				return err
-			}
-			return fmt.Errorf("%s (status code %d)", e.Message, e.Code)
-		}
-		if err = json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
+		if err := conn.Get(context.Background(), "/eth/v1/beacon/blinded_blocks/head", &resp); err != nil {
 			return err
 		}
 		headSlot, err := retrieveHeadSlot(&resp)
@@ -53,24 +40,14 @@ func optimisticSyncEnabled(_ *types.EvaluationContext, conns ...*grpc.ClientConn
 			return err
 		}
 		for i := startSlot; i <= primitives.Slot(headSlot); i++ {
-			path = fmt.Sprintf("http://localhost:%d/eth/v1/beacon/blinded_blocks/%d", params.TestParams.Ports.PrysmBeaconNodeHTTPPort+nodeIndex, i)
+			path := fmt.Sprintf("/eth/v1/beacon/blinded_blocks/%d", i)
 			resp = structs.GetBlockV2Response{}
-			httpResp, err = http.Get(path) // #nosec G107 -- path can't be constant because it depends on port param and node index
-			if err != nil {
-				return err
-			}
-			if httpResp.StatusCode == http.StatusNotFound {
-				// Continue in the event of non-existent blocks.
-				continue
-			}
-			if httpResp.StatusCode != http.StatusOK {
-				e := httputil.DefaultJsonError{}
-				if err = json.NewDecoder(httpResp.Body).Decode(&e); err != nil {
-					return err
+			if err := conn.Get(context.Background(), path, &resp); err != nil {
+				var jsonErr *httputil.DefaultJsonError
+				if errors.As(err, &jsonErr) && jsonErr.Code == http.StatusNotFound {
+					// Continue in the event of non-existent blocks.
+					continue
 				}
-				return fmt.Errorf("%s (status code %d)", e.Message, e.Code)
-			}
-			if err = json.NewDecoder(httpResp.Body).Decode(&resp); err != nil {
 				return err
 			}
 			if !resp.ExecutionOptimistic {

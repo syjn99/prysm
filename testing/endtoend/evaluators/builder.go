@@ -1,19 +1,14 @@
 package evaluators
 
 import (
-	"context"
-
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/ssz"
-	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/policies"
 	e2etypes "github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // BuilderIsActive checks that the builder is indeed producing the respective payloads
@@ -31,15 +26,14 @@ var BuilderIsActive = e2etypes.Evaluator{
 // occasional builder timeouts or failures.
 const maxNonBuilderBlocks = 2
 
-func builderActive(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) error {
+func builderActive(_ *e2etypes.EvaluationContext, conns ...*e2etypes.NodeConnection) error {
 	conn := conns[0]
-	client := ethpb.NewNodeClient(conn)
-	beaconClient := ethpb.NewBeaconChainClient(conn)
-	genesis, err := client.GetGenesis(context.Background(), &emptypb.Empty{})
+
+	genesisTime, err := getGenesisTime(conn)
 	if err != nil {
 		return errors.Wrap(err, "failed to get genesis data")
 	}
-	currSlot := slots.CurrentSlot(genesis.GenesisTime.AsTime())
+	currSlot := slots.CurrentSlot(genesisTime)
 	currEpoch := slots.ToEpoch(currSlot)
 	lowestBound := primitives.Epoch(0)
 	if currEpoch >= 1 {
@@ -57,17 +51,12 @@ func builderActive(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) err
 	nonBuilderBlocks := 0
 	builderBlocks := 0
 
-	blockCtrs, err := beaconClient.ListBeaconBlocks(context.Background(), &ethpb.ListBlocksRequest{QueryFilter: &ethpb.ListBlocksRequest_Epoch{Epoch: lowestBound}})
+	blks, err := getBlocksForEpoch(conn, lowestBound)
 	if err != nil {
 		return errors.Wrap(err, "failed to get beacon blocks")
 	}
-	for _, ctr := range blockCtrs.BlockContainers {
-		b, err := syncCompatibleBlockFromCtr(ctr)
-		if err != nil {
-			return errors.Wrapf(err, "block type doesn't exist for block at epoch %d", lowestBound)
-		}
-
-		if b.IsNil() {
+	for _, b := range blks {
+		if b == nil || b.IsNil() {
 			return errors.New("nil block provided")
 		}
 		forkStartSlot, err := slots.EpochStart(params.BeaconConfig().BellatrixForkEpoch)
@@ -106,16 +95,12 @@ func builderActive(_ *e2etypes.EvaluationContext, conns ...*grpc.ClientConn) err
 		}
 		return nil
 	}
-	blockCtrs, err = beaconClient.ListBeaconBlocks(context.Background(), &ethpb.ListBlocksRequest{QueryFilter: &ethpb.ListBlocksRequest_Epoch{Epoch: currEpoch}})
+	blks, err = getBlocksForEpoch(conn, currEpoch)
 	if err != nil {
 		return errors.Wrap(err, "failed to get validator participation")
 	}
-	for _, ctr := range blockCtrs.BlockContainers {
-		b, err := syncCompatibleBlockFromCtr(ctr)
-		if err != nil {
-			return errors.Wrapf(err, "block type doesn't exist for block at epoch %d", lowestBound)
-		}
-		if b.IsNil() {
+	for _, b := range blks {
+		if b == nil || b.IsNil() {
 			return errors.New("nil block provided")
 		}
 		forkStartSlot, err := slots.EpochStart(params.BeaconConfig().BellatrixForkEpoch)

@@ -7,12 +7,18 @@ import (
 	"os"
 
 	"github.com/OffchainLabs/prysm/v7/api"
+	"github.com/OffchainLabs/prysm/v7/api/rest"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 )
+
+// NodeConnection wraps a rest.Handler for a beacon node.
+// Evaluators use this to make REST API calls to beacon nodes.
+type NodeConnection struct {
+	rest.Handler
+}
 
 type E2EConfigOpt func(*E2EConfig)
 
@@ -44,12 +50,6 @@ func WithCheckpointSync() E2EConfigOpt {
 func WithValidatorCrossClient() E2EConfigOpt {
 	return func(cfg *E2EConfig) {
 		cfg.UseValidatorCrossClient = true
-	}
-}
-
-func WithValidatorRESTApi() E2EConfigOpt {
-	return func(cfg *E2EConfig) {
-		cfg.UseBeaconRestApi = true
 	}
 }
 
@@ -105,7 +105,6 @@ type E2EConfig struct {
 	TestDeposits            bool
 	UseFixedPeerIDs         bool
 	UseValidatorCrossClient bool
-	UseBeaconRestApi        bool
 	UseBuilder              bool
 	UseLargeBlobs           bool // Use large blob transactions (6 blobs per tx) for BPO testing
 	EpochsToRun             uint64
@@ -113,7 +112,7 @@ type E2EConfig struct {
 	Seed                    int64
 	TracingSinkEndpoint     string
 	Evaluators              []Evaluator
-	EvalInterceptor         func(*EvaluationContext, uint64, []*grpc.ClientConn) bool
+	EvalInterceptor         func(*EvaluationContext, uint64, []*NodeConnection) bool
 	BeaconFlags             []string
 	ValidatorFlags          []string
 	PeerIDs                 []string
@@ -150,7 +149,7 @@ type Evaluator struct {
 	Name   string
 	Policy func(currentEpoch primitives.Epoch) bool
 	// Evaluation accepts one or many/all conns, depending on what is needed by the set of evaluators.
-	Evaluation func(ec *EvaluationContext, conn ...*grpc.ClientConn) error
+	Evaluation func(ec *EvaluationContext, conns ...*NodeConnection) error
 }
 
 // DepositBatch represents a group of deposits that are sent together during an e2e run.

@@ -1,16 +1,13 @@
 package evaluators
 
 import (
-	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
-	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/policies"
 	"github.com/OffchainLabs/prysm/v7/testing/endtoend/types"
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // FinalizationOccurs is an evaluator to make sure finalization is performing as it should.
@@ -23,15 +20,20 @@ var FinalizationOccurs = func(epoch primitives.Epoch) types.Evaluator {
 	}
 }
 
-func finalizationOccurs(_ *types.EvaluationContext, conns ...*grpc.ClientConn) error {
-	conn := conns[0]
-	client := eth.NewBeaconChainClient(conn)
-	chainHead, err := client.GetChainHead(context.Background(), &emptypb.Empty{})
+func finalizationOccurs(_ *types.EvaluationContext, conns ...*types.NodeConnection) error {
+	chainHead, err := getChainHead(conns[0])
 	if err != nil {
 		return errors.Wrap(err, "failed to get chain head")
 	}
-	currentEpoch := chainHead.HeadEpoch
-	finalizedEpoch := chainHead.FinalizedEpoch
+
+	currentEpoch, err := chainHeadEpoch(chainHead)
+	if err != nil {
+		return err
+	}
+	finalizedEpoch, err := chainHeadFinalizedEpoch(chainHead)
+	if err != nil {
+		return err
+	}
 
 	expectedFinalizedEpoch := currentEpoch - 2
 	if expectedFinalizedEpoch != finalizedEpoch {
@@ -41,8 +43,18 @@ func finalizationOccurs(_ *types.EvaluationContext, conns ...*grpc.ClientConn) e
 			finalizedEpoch,
 		)
 	}
-	previousJustifiedEpoch := chainHead.PreviousJustifiedEpoch
-	currentJustifiedEpoch := chainHead.JustifiedEpoch
+
+	previousJustifiedRaw, err := strconv.ParseUint(chainHead.PreviousJustifiedEpoch, 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse previous justified epoch")
+	}
+	currentJustifiedRaw, err := strconv.ParseUint(chainHead.JustifiedEpoch, 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse justified epoch")
+	}
+	previousJustifiedEpoch := primitives.Epoch(previousJustifiedRaw)
+	currentJustifiedEpoch := primitives.Epoch(currentJustifiedRaw)
+
 	if previousJustifiedEpoch+1 != currentJustifiedEpoch {
 		return fmt.Errorf(
 			"there should be no gaps between current and previous justified epochs, received current %d and previous %d",
