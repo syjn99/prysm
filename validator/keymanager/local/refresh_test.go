@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -167,5 +168,43 @@ func TestListenForAccountChanges_ReloadsOnFileChange(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timed out waiting for accounts reload after keystore file change")
 		}
+	}
+}
+
+func TestStartAccountsChangeListener_OnlyOneListenerRuns(t *testing.T) {
+	password := "Passw03rdz293**%#2"
+	accountsDir := t.TempDir()
+	privKey, err := bls.RandKey()
+	require.NoError(t, err)
+	encoded := encodeAccountsKeystoreFile(t, []bls.SecretKey{privKey}, password)
+	require.NoError(t, os.MkdirAll(filepath.Join(accountsDir, AccountsPath), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(accountsDir, AccountsPath, AccountsKeystoreFileName), encoded, 0600))
+
+	km := &Keymanager{
+		wallet: &mock.Wallet{
+			InnerAccountsDir: accountsDir,
+			Files:            make(map[string]map[string][]byte),
+			WalletPassword:   password,
+		},
+		accountsStore:       &accountStore{},
+		accountsChangedFeed: new(event.Feed),
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	km.startAccountsChangeListener(ctx)
+	require.Equal(t, true, km.listeningForChanges.Load())
+	// Starting again while a listener runs is a no-op.
+	km.startAccountsChangeListener(ctx)
+	require.Equal(t, true, km.listeningForChanges.Load())
+
+	// Once the listener exits, the guard re-arms so a listener can be started again.
+	cancel()
+	deadline := time.Now().Add(10 * time.Second)
+	for km.listeningForChanges.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("listener did not exit after context cancellation")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

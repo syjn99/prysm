@@ -18,6 +18,23 @@ import (
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
+// startAccountsChangeListener spawns listenForAccountChanges, guarding against
+// more than one listener running at a time: NewKeymanager starts one when
+// configured to listen for changes, and SaveStoreAndReInitialize starts one
+// after writing the accounts file for the first time. The guard re-arms when
+// the listener exits, e.g. when it started before the accounts file existed.
+// A start racing a just-exiting listener can be dropped; that window only
+// exists if the accounts file is created concurrently with keymanager setup.
+func (km *Keymanager) startAccountsChangeListener(ctx context.Context) {
+	if !km.listeningForChanges.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer km.listeningForChanges.Store(false)
+		km.listenForAccountChanges(ctx)
+	}()
+}
+
 // Listen for changes to the all-accounts.keystore.json file in our wallet
 // to load in new keys we observe into our keymanager. This uses the fsnotify
 // library to listen for file-system changes and debounces these events to

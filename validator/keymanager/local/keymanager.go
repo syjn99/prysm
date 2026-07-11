@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/OffchainLabs/prysm/v7/async/event"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
@@ -15,7 +16,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/monitoring/tracing/trace"
 	validatorpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1/validator-client"
 	"github.com/OffchainLabs/prysm/v7/runtime/interop"
-	"github.com/OffchainLabs/prysm/v7/validator/accounts/iface"
 	"github.com/OffchainLabs/prysm/v7/validator/accounts/petnames"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/google/uuid"
@@ -39,17 +39,35 @@ const (
 	AccountsKeystoreFileName = "all-accounts.keystore.json"
 )
 
+// AccountStore defines the persistence backend for the accounts keystore file.
+// It is the narrow slice of wallet functionality the local keymanager depends
+// on; any wallet implementation satisfies it.
+type AccountStore interface {
+	// AccountsDir is the directory containing the accounts keystore file.
+	AccountsDir() string
+	// Password encrypts and decrypts the accounts keystore file.
+	Password() string
+	// ReadFileAtPath reads fileName under filePath, relative to the accounts
+	// directory. The returned error contains "no files found" when the file
+	// is absent.
+	ReadFileAtPath(ctx context.Context, filePath string, fileName string) ([]byte, error)
+	// WriteFileAtPath writes fileName under filePath, relative to the accounts
+	// directory, reporting whether the file already existed.
+	WriteFileAtPath(ctx context.Context, filePath string, fileName string, data []byte) (bool, error)
+}
+
 // Keymanager implementation for local keystores utilizing EIP-2335.
 type Keymanager struct {
-	wallet              iface.Wallet
+	wallet              AccountStore
 	accountsStore       *accountStore
 	accountsChangedFeed *event.Feed
+	listeningForChanges atomic.Bool
 }
 
 // SetupConfig includes configuration values for initializing
 // a keymanager, such as passwords, the wallet, and more.
 type SetupConfig struct {
-	Wallet           iface.Wallet
+	Wallet           AccountStore
 	ListenForChanges bool
 }
 
@@ -100,7 +118,7 @@ func NewKeymanager(ctx context.Context, cfg *SetupConfig) (*Keymanager, error) {
 	if cfg.ListenForChanges {
 		// We begin a goroutine to listen for file changes to our
 		// all-accounts.keystore.json file in the wallet directory.
-		go k.listenForAccountChanges(ctx)
+		k.startAccountsChangeListener(ctx)
 	}
 	return k, nil
 }
@@ -304,7 +322,7 @@ func (km *Keymanager) SaveStoreAndReInitialize(ctx context.Context, store *accou
 	// manually reload the account from the keystore the first time
 	km.reloadAccountsFromKeystoreFile(filepath.Join(km.wallet.AccountsDir(), AccountsPath, AccountsKeystoreFileName))
 	// listen to account changes of the new file
-	go km.listenForAccountChanges(ctx)
+	km.startAccountsChangeListener(ctx)
 	return nil
 }
 
