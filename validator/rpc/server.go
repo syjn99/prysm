@@ -6,14 +6,11 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/OffchainLabs/prysm/v7/api"
 	"github.com/OffchainLabs/prysm/v7/api/server/httprest"
 	"github.com/OffchainLabs/prysm/v7/api/server/middleware"
-	"github.com/OffchainLabs/prysm/v7/async/event"
-	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/io/logs"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/validator/accounts/wallet"
@@ -22,7 +19,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/validator/db"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager/local"
-	"github.com/OffchainLabs/prysm/v7/validator/web"
 	"github.com/pkg/errors"
 )
 
@@ -43,7 +39,6 @@ type Config struct {
 	Wallet                 *wallet.Wallet
 	AccountStore           local.AccountStore
 	WalletDir              string
-	WalletInitializedFeed  *event.Feed
 	ValidatorService       *client.ValidatorService
 	AuthTokenPath          string
 	Middlewares            []middleware.Middleware
@@ -52,10 +47,8 @@ type Config struct {
 
 // Server defining a HTTP server for the remote signer API and registering clients
 type Server struct {
-	walletInitialized         bool
 	logStreamerBufferSize     int
 	grpcMaxCallRecvMsgSize    int
-	walletInitializedFeed     *event.Feed
 	beaconApiTimeout          time.Duration
 	wallet                    *wallet.Wallet
 	accountStore              local.AccountStore
@@ -104,18 +97,13 @@ func NewServer(ctx context.Context, cfg *Config) *Server {
 		authTokenPath:          cfg.AuthTokenPath,
 		db:                     cfg.DB,
 		walletDir:              cfg.WalletDir,
-		walletInitializedFeed:  cfg.WalletInitializedFeed,
-		// Web3signer and direct keystore loading run without a wallet but their
-		// keymanagers are ready at startup, so the keymanager API endpoints
-		// guarded by walletInitialized must work.
-		walletInitialized:  cfg.Wallet != nil || cfg.AccountStore != nil || (cfg.ValidatorService != nil && cfg.ValidatorService.RemoteSignerConfig() != nil),
-		wallet:             cfg.Wallet,
-		accountStore:       cfg.AccountStore,
-		beaconApiTimeout:   cfg.BeaconApiTimeout,
-		beaconApiEndpoint:  cfg.BeaconApiEndpoint,
-		beaconApiHeaders:   cfg.BeaconAPIHeaders,
-		beaconNodeEndpoint: cfg.BeaconNodeGRPCEndpoint,
-		router:             cfg.Router,
+		wallet:                 cfg.Wallet,
+		accountStore:           cfg.AccountStore,
+		beaconApiTimeout:       cfg.BeaconApiTimeout,
+		beaconApiEndpoint:      cfg.BeaconApiEndpoint,
+		beaconApiHeaders:       cfg.BeaconAPIHeaders,
+		beaconNodeEndpoint:     cfg.BeaconNodeGRPCEndpoint,
+		router:                 cfg.Router,
 	}
 
 	if server.authTokenPath == "" && server.walletDir != "" {
@@ -127,8 +115,7 @@ func NewServer(ctx context.Context, cfg *Config) *Server {
 		if err := server.initializeAuthToken(); err != nil {
 			log.WithError(err).Error("Could not initialize web auth token")
 		}
-		validatorWebAddr := fmt.Sprintf("%s:%d", server.httpHost, server.httpPort)
-		logValidatorWebAuth(validatorWebAddr, server.authToken, server.authTokenPath)
+		logValidatorWebAuth(server.authTokenPath)
 		go server.refreshAuthTokenFromFileChanges(server.ctx, server.authTokenPath)
 	}
 
@@ -146,8 +133,8 @@ func NewServer(ctx context.Context, cfg *Config) *Server {
 		httprest.WithMiddlewares(cfg.Middlewares),
 	}
 
-	if err := server.InitializeRoutesWithWebHandler(); err != nil {
-		log.WithError(err).Fatal("Could not initialize routes with web handler")
+	if err := server.InitializeRoutes(); err != nil {
+		log.WithError(err).Fatal("Could not initialize routes")
 	}
 	// create and set a new http server
 	s, err := httprest.New(server.ctx, opts...)
@@ -162,24 +149,6 @@ func NewServer(ctx context.Context, cfg *Config) *Server {
 // Start the HTTP server and registers clients that can communicate via HTTP or gRPC.
 func (s *Server) Start() {
 	s.server.Start()
-}
-
-// InitializeRoutesWithWebHandler adds a catchall wrapper for web handling
-func (s *Server) InitializeRoutesWithWebHandler() error {
-	if err := s.InitializeRoutes(); err != nil {
-		return err
-	}
-	s.router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api") {
-			r.URL.Path = strings.Replace(r.URL.Path, "/api", "", 1) // used to redirect apis to standard rest APIs
-			s.router.ServeHTTP(w, r)
-			return
-		}
-		if features.Get().EnableWeb {
-			web.Handler(w, r)
-		}
-	})
-	return nil
 }
 
 // InitializeRoutes initializes pure HTTP REST endpoints for the validator client.
@@ -207,8 +176,6 @@ func (s *Server) InitializeRoutes() error {
 	s.router.HandleFunc("POST /eth/v1/validator/{pubkey}/graffiti", s.SetGraffiti)
 	s.router.HandleFunc("DELETE /eth/v1/validator/{pubkey}/graffiti", s.DeleteGraffiti)
 
-	// auth endpoint
-	s.router.HandleFunc("GET "+api.WebUrlPrefix+"initialize", s.Initialize)
 	// accounts endpoints
 	s.router.HandleFunc("GET "+api.WebUrlPrefix+"accounts", s.ListAccounts)
 	s.router.HandleFunc("POST "+api.WebUrlPrefix+"accounts/backup", s.BackupAccounts)
@@ -223,11 +190,6 @@ func (s *Server) InitializeRoutes() error {
 	s.router.HandleFunc("GET "+api.WebUrlPrefix+"beacon/validators", s.GetValidators)
 	s.router.HandleFunc("GET "+api.WebUrlPrefix+"beacon/balances", s.GetValidatorBalances)
 	s.router.HandleFunc("GET "+api.WebUrlPrefix+"beacon/peers", s.GetPeers)
-	// web wallet endpoints
-	s.router.HandleFunc("GET "+api.WebUrlPrefix+"wallet", s.WalletConfig)
-	s.router.HandleFunc("POST "+api.WebUrlPrefix+"wallet/create", s.CreateWallet)
-	s.router.HandleFunc("POST "+api.WebUrlPrefix+"wallet/keystores/validate", s.ValidateKeystores)
-	s.router.HandleFunc("POST "+api.WebUrlPrefix+"wallet/recover", s.RecoverWallet)
 	// slashing protection endpoints
 	s.router.HandleFunc("GET "+api.WebUrlPrefix+"slashing-protection/export", s.ExportSlashingProtection)
 	s.router.HandleFunc("POST "+api.WebUrlPrefix+"slashing-protection/import", s.ImportSlashingProtection)

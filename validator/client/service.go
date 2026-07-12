@@ -42,7 +42,6 @@ type ValidatorService struct {
 	conn                    *validatorHelpers.NodeConnection
 	wallet                  *wallet.Wallet
 	accountStore            local.AccountStore
-	walletInitializedFeed   *event.Feed
 	graffiti                []byte
 	graffitiStruct          *graffiti.Graffiti
 	interopKeysConfig       *local.InteropKeymanagerConfig
@@ -50,7 +49,6 @@ type ValidatorService struct {
 	proposerSettings        *proposer.Settings
 	maxHealthChecks         int
 	validatorsRegBatchSize  int
-	enableAPI               bool
 	emitAccountMetrics      bool
 	logValidatorPerformance bool
 	distributed             bool
@@ -65,7 +63,6 @@ type Config struct {
 	DB                      db.Database
 	Wallet                  *wallet.Wallet
 	AccountStore            local.AccountStore
-	WalletInitializedFeed   *event.Feed
 	Conn                    *validatorHelpers.NodeConnection // Optional: pre-built connection (if nil, built from endpoint configs)
 	MaxHealthChecks         int
 	GRPCMaxCallRecvMsgSize  int
@@ -83,7 +80,6 @@ type Config struct {
 	Web3SignerConfig        *remoteweb3signer.SetupConfig
 	ProposerSettings        *proposer.Settings
 	ValidatorsRegBatchSize  int
-	EnableAPI               bool
 	LogValidatorPerformance bool
 	EmitAccountMetrics      bool
 	Distributed             bool
@@ -103,14 +99,12 @@ func NewValidatorService(ctx context.Context, cfg *Config) (*ValidatorService, e
 		db:                      cfg.DB,
 		wallet:                  cfg.Wallet,
 		accountStore:            cfg.AccountStore,
-		walletInitializedFeed:   cfg.WalletInitializedFeed,
 		graffiti:                []byte(cfg.Graffiti),
 		graffitiStruct:          cfg.GraffitiStruct,
 		interopKeysConfig:       cfg.InteropKmConfig,
 		web3SignerConfig:        cfg.Web3SignerConfig,
 		proposerSettings:        cfg.ProposerSettings,
 		validatorsRegBatchSize:  cfg.ValidatorsRegBatchSize,
-		enableAPI:               cfg.EnableAPI,
 		emitAccountMetrics:      cfg.EmitAccountMetrics,
 		logValidatorPerformance: cfg.LogValidatorPerformance,
 		distributed:             cfg.Distributed,
@@ -201,8 +195,6 @@ func (v *ValidatorService) Start() {
 		pubkeyToStatus:               make(map[[fieldparams.BLSPubkeyLength]byte]*validatorStatus),
 		wallet:                       v.wallet,
 		accountStore:                 v.accountStore,
-		walletInitializedChan:        make(chan *wallet.Wallet, 1),
-		walletInitializedFeed:        v.walletInitializedFeed,
 		graffiti:                     v.graffiti,
 		graffitiStruct:               v.graffitiStruct,
 		graffitiOrderedIndex:         graffitiOrderedIndex,
@@ -226,7 +218,6 @@ func (v *ValidatorService) Start() {
 		submittedPayloadAtts:         make(map[submittedPayloadAttKey][]uint64),
 		logValidatorPerformance:      v.logValidatorPerformance,
 		emitAccountMetrics:           v.emitAccountMetrics,
-		enableAPI:                    v.enableAPI,
 		duties:                       &dutyStore{},
 		submittedPrefSlots:           make(map[primitives.Slot]bool),
 		distributed:                  v.distributed,

@@ -180,11 +180,6 @@ func TestServer_AuthTokenHandler_ProtectsRoutes(t *testing.T) {
 			wantErrSubstr: "Unauthorized",
 		},
 		{
-			name:     "allows initialize without auth",
-			path:     api.WebUrlPrefix + "initialize",
-			wantCode: http.StatusOK,
-		},
-		{
 			name:     "allows health without auth",
 			path:     api.WebUrlPrefix + "health/logs",
 			wantCode: http.StatusOK,

@@ -65,7 +65,6 @@ var (
 
 type validator struct {
 	distributed                  bool
-	enableAPI                    bool
 	disableDutiesPolling         bool
 	emitAccountMetrics           bool
 	logValidatorPerformance      bool
@@ -79,8 +78,6 @@ type validator struct {
 	domainDataLock               sync.RWMutex
 	cachedAttestationData        *ethpb.AttestationData
 	graffitiOrderedIndex         uint64
-	walletInitializedFeed        *event.Feed
-	walletInitializedChan        chan *wallet.Wallet
 	wallet                       *wallet.Wallet
 	accountStore                 local.AccountStore
 	accountsChangedChannel       chan [][fieldparams.BLSPubkeyLength]byte
@@ -194,14 +191,8 @@ func (v *validator) WaitForKeymanagerInitialization(ctx context.Context) error {
 			return errors.Wrap(err, "could not initialize key manager")
 		}
 		v.km = keyManager
-	case v.enableAPI:
-		km, err := waitForWebWalletInitialization(ctx, v.walletInitializedFeed, v.walletInitializedChan)
-		if err != nil {
-			return err
-		}
-		v.km = km
 	default:
-		return wallet.ErrNoWalletFound
+		return errors.New("no key source configured")
 	}
 	if v.km == nil {
 		return errors.New("key manager not set")
@@ -209,35 +200,6 @@ func (v *validator) WaitForKeymanagerInitialization(ctx context.Context) error {
 	recheckKeys(ctx, v.db, v.km)
 	v.accountChangedSub = v.km.SubscribeAccountChanges(v.accountsChangedChannel)
 	return nil
-}
-
-// subscribe to channel for when the wallet is initialized
-func waitForWebWalletInitialization(
-	ctx context.Context,
-	walletInitializedEvent *event.Feed,
-	walletChan chan *wallet.Wallet,
-) (keymanager.IKeymanager, error) {
-	ctx, span := trace.StartSpan(ctx, "validator.waitForWebWalletInitialization")
-	defer span.End()
-
-	log.Info("Waiting for keymanager to initialize validator client with web UI or /v2/validator/wallet/create REST api")
-	sub := walletInitializedEvent.Subscribe(walletChan)
-	defer sub.Unsubscribe()
-	for {
-		select {
-		case w := <-walletChan:
-			keyManager, err := w.InitializeKeymanager(ctx, accountsiface.InitKeymanagerConfig{ListenForChanges: true})
-			if err != nil {
-				return nil, errors.Wrap(err, "could not read keymanager")
-			}
-			return keyManager, nil
-		case <-ctx.Done():
-			return nil, errors.New("context canceled")
-		case <-sub.Err():
-			log.Error("Subscriber closed, exiting goroutine")
-			return nil, nil
-		}
-	}
 }
 
 // recheckKeys checks if the validator has any keys that need to be rechecked.

@@ -31,6 +31,7 @@ import (
 	dbtest "github.com/OffchainLabs/prysm/v7/validator/db/testing"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager/derived"
+	"github.com/OffchainLabs/prysm/v7/validator/keymanager/local"
 	remoteweb3signer "github.com/OffchainLabs/prysm/v7/validator/keymanager/remote-web3signer"
 	"github.com/OffchainLabs/prysm/v7/validator/slashing-protection-history/format"
 	mocks "github.com/OffchainLabs/prysm/v7/validator/testing"
@@ -43,22 +44,30 @@ import (
 
 func TestServer_ListKeystores(t *testing.T) {
 	ctx := t.Context()
-	t.Run("wallet not ready", func(t *testing.T) {
-		m := &testutil.FakeValidator{}
+	t.Run("empty keymanager returns empty list", func(t *testing.T) {
+		keysDir := t.TempDir()
+		store, err := local.NewDirStore(keysDir, keysDir)
+		require.NoError(t, err)
+		local.ResetCaches() // The local keymanager caches keys in package globals.
+		emptyKM, err := local.NewKeymanager(ctx, &local.SetupConfig{Store: store})
+		require.NoError(t, err)
 		vs, err := client.NewValidatorService(ctx, &client.Config{
 			Conn:      mocks.MockNodeConnection(),
-			Validator: m,
+			Validator: &testutil.FakeValidator{Km: emptyKM},
 		})
 		require.NoError(t, err)
 		s := Server{
 			validatorService: vs,
+			accountStore:     store,
 		}
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/eth/v1/keystores"), nil)
 		w := httptest.NewRecorder()
 		w.Body = &bytes.Buffer{}
 		s.ListKeystores(w, req)
-		require.NotEqual(t, http.StatusOK, w.Code)
-		require.StringContains(t, "Prysm Wallet not initialized. Please create a new wallet.", w.Body.String())
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := &ListKeystoresResponse{}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), resp))
+		require.Equal(t, 0, len(resp.Data))
 	})
 
 	localWalletDir := setupWalletDir(t)
@@ -84,9 +93,8 @@ func TestServer_ListKeystores(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		wallet:            w,
-		validatorService:  vs,
+		wallet:           w,
+		validatorService: vs,
 	}
 	numAccounts := 50
 	dr, ok := km.(*derived.Keymanager)
@@ -151,9 +159,8 @@ func TestServer_ImportKeystores(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		wallet:            w,
-		validatorService:  vs,
+		wallet:           w,
+		validatorService: vs,
 	}
 	t.Run("200 response even if faulty keystore in request", func(t *testing.T) {
 		request := &ImportKeystoresRequest{
@@ -368,8 +375,7 @@ func TestServer_ImportKeystores_WrongKeymanagerKind(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		validatorService:  vs,
+		validatorService: vs,
 	}
 
 	request := &ImportKeystoresRequest{
@@ -646,8 +652,7 @@ func TestServer_DeleteKeystores_WrongKeymanagerKind(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		validatorService:  vs,
+		validatorService: vs,
 	}
 	request := &DeleteKeystoresRequest{
 		Pubkeys: []string{"0xaf2e7ba294e03438ea819bd4033c6c1bf6b04320ee2075b77273c08d02f8a61bcc303c2c06bd3713cb442072ae591494"},
@@ -690,9 +695,8 @@ func setupServerWithWallet(t testing.TB) *Server {
 	require.NoError(t, err)
 
 	return &Server{
-		walletInitialized: true,
-		wallet:            w,
-		validatorService:  vs,
+		wallet:           w,
+		validatorService: vs,
 	}
 }
 
@@ -756,7 +760,6 @@ func TestServer_SetVoluntaryExit(t *testing.T) {
 		beaconNodeValidatorClient: beaconClient,
 		wallet:                    w,
 		nodeClient:                mockNodeClient,
-		walletInitialized:         w != nil,
 	}
 
 	type want struct {
@@ -812,20 +815,6 @@ func TestServer_SetVoluntaryExit(t *testing.T) {
 			wError: &wantError{
 				expectedStatusCode: http.StatusBadRequest,
 				expectedErrorMsg:   "pubkey is invalid: invalid hex string",
-			},
-		},
-		{
-			name:   "Error: No Wallet Found",
-			epoch:  "30000000",
-			pubkey: hexutil.Encode(pubKeys[0][:]),
-			wError: &wantError{
-				expectedStatusCode: http.StatusServiceUnavailable,
-				expectedErrorMsg:   "No wallet found",
-			},
-			mockSetup: func(s *Server) error {
-				s.wallet = nil
-				s.walletInitialized = false
-				return nil
 			},
 		},
 	}
@@ -1463,8 +1452,7 @@ func TestServer_ListRemoteKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		validatorService:  vs,
+		validatorService: vs,
 	}
 	expectedKeys, err := km.FetchValidatingPublicKeys(ctx)
 	require.NoError(t, err)
@@ -1513,8 +1501,7 @@ func TestServer_ImportRemoteKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		validatorService:  vs,
+		validatorService: vs,
 	}
 	pubkey := "0x93247f2209abcacf57b75a51dafae777f9dd38bc7053d1af526f220a7489a6d3a2753e5f3e8b1cfe39b56f43611df74a"
 	remoteKeys := []*RemoteKey{
@@ -1569,8 +1556,7 @@ func TestServer_DeleteRemoteKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		validatorService:  vs,
+		validatorService: vs,
 	}
 
 	t.Run("returns proper data with existing pub keystores", func(t *testing.T) {

@@ -39,10 +39,6 @@ func (s *Server) ListKeystores(w http.ResponseWriter, r *http.Request) {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
 		return
 	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
-		return
-	}
 	km, err := s.validatorService.Keymanager()
 	if err != nil {
 		httputil.HandleError(w, err.Error(), http.StatusInternalServerError)
@@ -84,10 +80,6 @@ func (s *Server) ImportKeystores(w http.ResponseWriter, r *http.Request) {
 
 	if s.validatorService == nil {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
-		return
-	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
 		return
 	}
 	km, err := s.validatorService.Keymanager()
@@ -180,10 +172,6 @@ func (s *Server) DeleteKeystores(w http.ResponseWriter, r *http.Request) {
 
 	if s.validatorService == nil {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
-		return
-	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
 		return
 	}
 	km, err := s.validatorService.Keymanager()
@@ -330,11 +318,6 @@ func (s *Server) SetVoluntaryExit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !s.walletInitialized {
-		httputil.HandleError(w, "No wallet found", http.StatusServiceUnavailable)
-		return
-	}
-
 	km, err := s.validatorService.Keymanager()
 	if err != nil {
 		httputil.HandleError(w, err.Error(), http.StatusInternalServerError)
@@ -396,10 +379,6 @@ func (s *Server) ListRemoteKeys(w http.ResponseWriter, r *http.Request) {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
 		return
 	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
-		return
-	}
 	km, err := s.validatorService.Keymanager()
 	if err != nil {
 		httputil.HandleError(w, err.Error(), http.StatusInternalServerError)
@@ -441,10 +420,6 @@ func (s *Server) ImportRemoteKeys(w http.ResponseWriter, r *http.Request) {
 
 	if s.validatorService == nil {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
-		return
-	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
 		return
 	}
 	km, err := s.validatorService.Keymanager()
@@ -508,10 +483,6 @@ func (s *Server) DeleteRemoteKeys(w http.ResponseWriter, r *http.Request) {
 
 	if s.validatorService == nil {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
-		return
-	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
 		return
 	}
 	km, err := s.validatorService.Keymanager()

@@ -61,9 +61,8 @@ func TestServer_ListAccounts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		wallet:            w,
-		validatorService:  vs,
+		wallet:           w,
+		validatorService: vs,
 	}
 	numAccounts := 50
 	dr, ok := km.(*derived.Keymanager)
@@ -167,9 +166,8 @@ func TestServer_BackupAccounts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized: true,
-		wallet:            w,
-		validatorService:  vs,
+		wallet:           w,
+		validatorService: vs,
 	}
 	numAccounts := 50
 	dr, ok := km.(*derived.Keymanager)
@@ -292,7 +290,6 @@ func TestServer_VoluntaryExit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s := &Server{
-		walletInitialized:         true,
 		wallet:                    w,
 		nodeClient:                mockNodeClient,
 		beaconNodeValidatorClient: mockValidatorClient,

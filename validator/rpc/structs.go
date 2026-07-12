@@ -118,49 +118,6 @@ type BeaconStatusResponse struct {
 	ChainHead              *ChainHead `json:"chain_head"`
 }
 
-// KeymanagerKind is a type of key manager for the wallet
-type KeymanagerKind string
-
-const (
-	derivedKeymanagerKind    KeymanagerKind = "DERIVED"
-	importedKeymanagerKind   KeymanagerKind = "IMPORTED"
-	web3signerKeymanagerKind KeymanagerKind = "WEB3SIGNER"
-)
-
-type CreateWalletRequest struct {
-	Keymanager       KeymanagerKind `json:"keymanager"`
-	WalletPassword   string         `json:"wallet_password"`
-	Mnemonic         string         `json:"mnemonic"`
-	NumAccounts      uint64         `json:"num_accounts"`
-	MnemonicLanguage string         `json:"mnemonic_language"`
-}
-
-type CreateWalletResponse struct {
-	Wallet *WalletResponse `json:"wallet"`
-}
-
-type GenerateMnemonicResponse struct {
-	Mnemonic string `json:"mnemonic"`
-}
-
-type WalletResponse struct {
-	WalletPath     string         `json:"wallet_path"`
-	KeymanagerKind KeymanagerKind `json:"keymanager_kind"`
-}
-
-type ValidateKeystoresRequest struct {
-	Keystores         []string `json:"keystores"`
-	KeystoresPassword string   `json:"keystores_password"`
-}
-
-type RecoverWalletRequest struct {
-	Mnemonic         string `json:"mnemonic"`
-	NumAccounts      uint64 `json:"num_accounts"`
-	WalletPassword   string `json:"wallet_password"`
-	Language         string `json:"language"`
-	Mnemonic25ThWord string `json:"mnemonic25th_word"`
-}
-
 type ImportSlashingProtectionRequest struct {
 	SlashingProtectionJson string `json:"slashing_protection_json"`
 }
@@ -197,11 +154,6 @@ type Account struct {
 
 type VoluntaryExitResponse struct {
 	ExitedKeys [][]byte `protobuf:"bytes,1,rep,name=exited_keys,json=exitedKeys,proto3" json:"exited_keys,omitempty"`
-}
-
-type InitializeAuthResponse struct {
-	HasSignedUp bool `json:"has_signed_up"`
-	HasWallet   bool `json:"has_wallet"`
 }
 
 type ValidatorPerformanceResponse struct {

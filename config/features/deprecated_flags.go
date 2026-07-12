@@ -40,6 +40,16 @@ var (
 		Usage:   deprecatedUsage,
 		Hidden:  true,
 	}
+	deprecatedEnableWeb = &cli.BoolFlag{
+		Name:   "web",
+		Usage:  deprecatedUsage,
+		Hidden: true,
+	}
+	deprecatedWriteWalletPasswordOnWebOnboarding = &cli.BoolFlag{
+		Name:   "write-wallet-password-on-web-onboarding",
+		Usage:  deprecatedUsage,
+		Hidden: true,
+	}
 )
 
 // Deprecated flags for both the beacon node and validator client.
@@ -48,6 +58,13 @@ var deprecatedFlags = []cli.Flag{
 	deprecatedEnableDBBackupWebhook,
 	deprecatedSlasherRPCProvider,
 	deprecatedSlasherTLSCert,
+}
+
+// deprecatedValidatorFlags contains deprecated flags that only ever applied
+// to the validator client.
+var deprecatedValidatorFlags = []cli.Flag{
+	deprecatedEnableWeb,
+	deprecatedWriteWalletPasswordOnWebOnboarding,
 }
 
 var upcomingDeprecation = []cli.Flag{

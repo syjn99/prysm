@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/OffchainLabs/prysm/v7/api/server/middleware"
-	"github.com/OffchainLabs/prysm/v7/async/event"
 	"github.com/OffchainLabs/prysm/v7/cmd"
 	"github.com/OffchainLabs/prysm/v7/cmd/validator/flags"
 	"github.com/OffchainLabs/prysm/v7/config/features"
@@ -45,20 +44,23 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// defaultKeystoresDirName is the datadir subdirectory backing the keymanager
+// API when no other key source is configured.
+const defaultKeystoresDirName = "keystores"
+
 // ValidatorClient defines an instance of an Ethereum validator that manages
 // the entire lifecycle of services attached to it participating in proof of stake.
 type ValidatorClient struct {
-	cliCtx                *cli.Context
-	ctx                   context.Context
-	cancel                context.CancelFunc
-	db                    iface.ValidatorDB
-	services              *runtime.ServiceRegistry // Lifecycle and service store.
-	lock                  sync.RWMutex
-	wallet                *wallet.Wallet
-	accountStore          local.AccountStore
-	walletInitializedFeed *event.Feed
-	stop                  chan struct{} // Channel to wait for termination notifications.
-	once                  sync.Once
+	cliCtx       *cli.Context
+	ctx          context.Context
+	cancel       context.CancelFunc
+	db           iface.ValidatorDB
+	services     *runtime.ServiceRegistry // Lifecycle and service store.
+	lock         sync.RWMutex
+	wallet       *wallet.Wallet
+	accountStore local.AccountStore
+	stop         chan struct{} // Channel to wait for termination notifications.
+	once         sync.Once
 }
 
 // NewValidatorClient creates a new instance of the Prysm validator client.
@@ -100,14 +102,13 @@ func NewValidatorClient(cliCtx *cli.Context) (*ValidatorClient, error) {
 	registry := runtime.NewServiceRegistry()
 	ctx, cancel := context.WithCancel(cliCtx.Context)
 	validatorClient := &ValidatorClient{
-		cliCtx:                cliCtx,
-		ctx:                   ctx,
-		cancel:                cancel,
-		services:              registry,
-		wallet:                w,
-		accountStore:          accountStore,
-		walletInitializedFeed: new(event.Feed),
-		stop:                  make(chan struct{}),
+		cliCtx:       cliCtx,
+		ctx:          ctx,
+		cancel:       cancel,
+		services:     registry,
+		wallet:       w,
+		accountStore: accountStore,
+		stop:         make(chan struct{}),
 	}
 
 	if err := validatorClient.initializeDB(cliCtx); err != nil {
@@ -244,13 +245,30 @@ func getKeySource(cliCtx *cli.Context) (*wallet.Wallet, local.AccountStore, erro
 		return nil, nil, errors.Wrap(err, "could not read wallet password file")
 	}
 	w, err := wallet.OpenWalletOrElseCli(cliCtx, func(cliCtx *cli.Context) (*wallet.Wallet, error) {
-		// handle nil wallet in key manager initialization, give a chance for user to create a wallet
 		return nil, nil
 	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not open wallet")
 	}
-	return w, nil, nil
+	if w != nil {
+		return w, nil, nil
+	}
+	if cliCtx.IsSet(flags.WalletDirFlag.Name) {
+		return nil, nil, wallet.ErrNoWalletFound
+	}
+	// No key source on disk. With the keymanager API enabled, start with an
+	// empty keymanager over the default keystore directory; keys arrive via
+	// POST /eth/v1/keystores. Headless, fail fast instead of running keyless.
+	if cliCtx.IsSet(flags.EnableRPCFlag.Name) {
+		dir := filepath.Join(cliCtx.String(cmd.DataDirFlag.Name), defaultKeystoresDirName)
+		store, err := local.NewDirStore(dir, dir)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "could not open default keystore directory")
+		}
+		log.WithField("keysDir", dir).Info("No keys found on disk; import keys via POST /eth/v1/keystores")
+		return nil, store, nil
+	}
+	return nil, nil, errors.New("no key source configured: provide --validator-keys with --keystore-passwords, --wallet-dir, or --validators-external-signer-url, or enable --rpc to import keys via the keymanager API")
 }
 
 func (c *ValidatorClient) registerServices(cliCtx *cli.Context) error {
@@ -437,7 +455,6 @@ func (c *ValidatorClient) registerValidatorService(cliCtx *cli.Context) error {
 		DB:                      c.db,
 		Wallet:                  c.wallet,
 		AccountStore:            c.accountStore,
-		WalletInitializedFeed:   c.walletInitializedFeed,
 		GRPCMaxCallRecvMsgSize:  cliCtx.Int(cmd.GrpcMaxCallRecvMsgSizeFlag.Name),
 		GRPCRetries:             cliCtx.Uint(flags.GRPCRetriesFlag.Name),
 		GRPCRetryDelay:          cliCtx.Duration(flags.GRPCRetryDelayFlag.Name),
@@ -453,7 +470,6 @@ func (c *ValidatorClient) registerValidatorService(cliCtx *cli.Context) error {
 		Web3SignerConfig:        web3signerConfig,
 		ProposerSettings:        ps,
 		ValidatorsRegBatchSize:  cliCtx.Int(flags.ValidatorsRegistrationBatchSizeFlag.Name),
-		EnableAPI:               features.Get().EnableWeb || cliCtx.Bool(flags.EnableRPCFlag.Name),
 		LogValidatorPerformance: !cliCtx.Bool(flags.DisablePenaltyRewardLogFlag.Name),
 		EmitAccountMetrics:      !cliCtx.Bool(flags.DisableAccountMetricsFlag.Name),
 		Distributed:             cliCtx.Bool(flags.EnableDistributed.Name),
@@ -520,8 +536,7 @@ func proposerSettings(cliCtx *cli.Context, db iface.ValidatorDB) (*proposer.Sett
 }
 
 func (c *ValidatorClient) registerRPCService(cliCtx *cli.Context) error {
-	serveWebUI := features.Get().EnableWeb
-	if !cliCtx.IsSet(flags.EnableRPCFlag.Name) && !serveWebUI {
+	if !cliCtx.IsSet(flags.EnableRPCFlag.Name) {
 		return nil
 	}
 	host := cliCtx.String(flags.HTTPServerHost.Name)
@@ -532,12 +547,6 @@ func (c *ValidatorClient) registerRPCService(cliCtx *cli.Context) error {
 	var vs *client.ValidatorService
 	if err := c.services.FetchService(&vs); err != nil {
 		return err
-	}
-
-	if serveWebUI {
-		if cliCtx.IsSet(flags.Web3SignerURLFlag.Name) || cliCtx.IsSet(flags.Web3SignerPublicValidatorKeysFlag.Name) {
-			log.Warn("Remote Keymanager API enabled. Prysm web does not properly support web3signer at this time")
-		}
 	}
 
 	if host != flags.DefaultHTTPServerHost {
@@ -573,7 +582,6 @@ func (c *ValidatorClient) registerRPCService(cliCtx *cli.Context) error {
 		Wallet:                 c.wallet,
 		AccountStore:           c.accountStore,
 		WalletDir:              walletDir,
-		WalletInitializedFeed:  c.walletInitializedFeed,
 		ValidatorService:       vs,
 		AuthTokenPath:          authTokenPath,
 		Middlewares:            middlewares,

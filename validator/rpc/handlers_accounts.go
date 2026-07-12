@@ -36,10 +36,6 @@ func (s *Server) ListAccounts(w http.ResponseWriter, r *http.Request) {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
 		return
 	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
-		return
-	}
 	pageSize := r.URL.Query().Get("page_size")
 	var ps int64
 	if pageSize != "" {
@@ -114,10 +110,6 @@ func (s *Server) BackupAccounts(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 	if s.validatorService == nil {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
-		return
-	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -224,10 +216,6 @@ func (s *Server) VoluntaryExit(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 	if s.validatorService == nil {
 		httputil.HandleError(w, "Validator service not ready.", http.StatusServiceUnavailable)
-		return
-	}
-	if !s.walletInitialized {
-		httputil.HandleError(w, "Prysm Wallet not initialized. Please create a new wallet.", http.StatusServiceUnavailable)
 		return
 	}
 	var req VoluntaryExitRequest
