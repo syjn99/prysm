@@ -148,17 +148,14 @@ func TestGetLegacyDatabaseLocation(t *testing.T) {
 			expectedDataFile: path.Join(walletDir, "derived", kv.ProtectionDbFileName),
 		},
 		{
+			// Web3signer runs without a wallet.
 			name:                   "web3signer url is set and legacy data file does not exist",
 			isWeb3SignerURLFlagSet: true,
 			dataDir:                cmd.DefaultDataDir(),
 			dataFile:               nonExistingDataFile,
 			walletDir:              nonExistingWalletDir,
-			wallet: wallet.New(&wallet.Config{
-				WalletDir:      walletDir,
-				KeymanagerKind: keymanager.Derived,
-			}),
-			expectedDataDir:  cmd.DefaultDataDir(),
-			expectedDataFile: nonExistingDataFile,
+			expectedDataDir:        cmd.DefaultDataDir(),
+			expectedDataFile:       nonExistingDataFile,
 		},
 		{
 			name:                   "web3signer url is set and legacy data file does exist",
@@ -166,12 +163,8 @@ func TestGetLegacyDatabaseLocation(t *testing.T) {
 			dataDir:                cmd.DefaultDataDir(),
 			dataFile:               nonExistingDataFile,
 			walletDir:              walletDir,
-			wallet: wallet.New(&wallet.Config{
-				WalletDir:      walletDir,
-				KeymanagerKind: keymanager.Derived,
-			}),
-			expectedDataDir:  walletDir,
-			expectedDataFile: path.Join(walletDir, kv.ProtectionDbFileName),
+			expectedDataDir:        walletDir,
+			expectedDataFile:       path.Join(walletDir, kv.ProtectionDbFileName),
 		},
 	}
 
