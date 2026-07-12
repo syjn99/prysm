@@ -43,6 +43,8 @@ var Commands = &cli.Command{
 				return features.ConfigureValidator(cliCtx)
 			},
 			Action: func(cliCtx *cli.Context) error {
+				log.Warnf("`validator wallet create` is deprecated. Prefer a plain directory of EIP-2335 keystores loaded with --%s and --%s.",
+					flags.ValidatorKeysDirFlag.Name, flags.KeystorePasswordsFlag.Name)
 				if err := walletCreate(cliCtx); err != nil {
 					log.WithError(err).Fatal("Could not create a wallet")
 				}
@@ -75,6 +77,7 @@ var Commands = &cli.Command{
 				return features.ConfigureBeaconChain(cliCtx)
 			},
 			Action: func(cliCtx *cli.Context) error {
+				log.Warn("`validator wallet recover` is deprecated. Recover keystores with the staking deposit CLI or your key manager, then load them with --validator-keys.")
 				if err := walletRecover(cliCtx); err != nil {
 					log.WithError(err).Fatal("Could not recover wallet")
 				}

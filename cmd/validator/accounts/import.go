@@ -10,18 +10,30 @@ import (
 	"github.com/OffchainLabs/prysm/v7/validator/accounts/userprompt"
 	"github.com/OffchainLabs/prysm/v7/validator/accounts/wallet"
 	"github.com/OffchainLabs/prysm/v7/validator/client"
+	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
 
 func accountsImport(c *cli.Context) error {
-	w, err := walletImport(c)
-	if err != nil {
-		return errors.Wrap(err, "could not initialize wallet")
-	}
-	km, err := w.InitializeKeymanager(c.Context, iface.InitKeymanagerConfig{ListenForChanges: false})
-	if err != nil {
-		return err
+	var w *wallet.Wallet
+	var km keymanager.IKeymanager
+	var err error
+	if c.IsSet(flags.ValidatorKeysDirFlag.Name) {
+		// Directory key source: import writes standalone keystores into it.
+		w, km, err = keySourceForAccounts(c)
+		if err != nil {
+			return err
+		}
+	} else {
+		w, err = walletImport(c)
+		if err != nil {
+			return errors.Wrap(err, "could not initialize wallet")
+		}
+		km, err = w.InitializeKeymanager(c.Context, iface.InitKeymanagerConfig{ListenForChanges: false})
+		if err != nil {
+			return err
+		}
 	}
 
 	dialOpts := client.ConstructDialOptions(

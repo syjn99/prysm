@@ -11,7 +11,7 @@ import (
 )
 
 func accountsList(c *cli.Context) error {
-	w, km, err := walletWithKeymanager(c)
+	w, km, err := keySourceForAccounts(c)
 	if err != nil {
 		return err
 	}

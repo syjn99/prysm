@@ -63,6 +63,7 @@ go_test(
     srcs = [
         "accounts_delete_test.go",
         "accounts_exit_test.go",
+        "accounts_import_password_test.go",
         "accounts_import_test.go",
         "accounts_list_test.go",
         "wallet_recover_fuzz_test.go",

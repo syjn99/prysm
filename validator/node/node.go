@@ -251,6 +251,8 @@ func getKeySource(cliCtx *cli.Context) (*wallet.Wallet, local.AccountStore, erro
 		return nil, nil, errors.Wrap(err, "could not open wallet")
 	}
 	if w != nil {
+		log.Warnf("--%s wallets are deprecated. Export with `validator accounts backup` and load the keystores with --%s and --%s.",
+			flags.WalletDirFlag.Name, flags.ValidatorKeysDirFlag.Name, flags.KeystorePasswordsFlag.Name)
 		return w, nil, nil
 	}
 	if cliCtx.IsSet(flags.WalletDirFlag.Name) {

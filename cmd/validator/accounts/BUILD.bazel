@@ -46,6 +46,7 @@ go_test(
         "delete_test.go",
         "exit_test.go",
         "import_test.go",
+        "keysource_test.go",
         "wallet_utils_test.go",
     ],
     embed = [":go_default_library"],

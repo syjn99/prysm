@@ -21,10 +21,14 @@ func (acm *CLIManager) List(ctx context.Context) error {
 		}
 		return listValidatorIndices(ctx, acm.keymanager, client)
 	}
+	walletAccountsDir := ""
+	if acm.wallet != nil {
+		walletAccountsDir = acm.wallet.AccountsDir()
+	}
 	return acm.keymanager.ListKeymanagerAccounts(ctx,
 		keymanager.ListKeymanagerAccountConfig{
 			ShowPrivateKeys:          acm.showPrivateKeys,
-			WalletAccountsDir:        acm.wallet.AccountsDir(),
+			WalletAccountsDir:        walletAccountsDir,
 			KeymanagerConfigFileName: wallet.KeymanagerConfigFileName,
 		})
 }

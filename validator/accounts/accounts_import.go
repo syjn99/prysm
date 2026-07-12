@@ -13,7 +13,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	"github.com/OffchainLabs/prysm/v7/io/file"
 	"github.com/OffchainLabs/prysm/v7/io/prompt"
-	"github.com/OffchainLabs/prysm/v7/validator/accounts/wallet"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -39,7 +38,11 @@ func (acm *CLIManager) Import(ctx context.Context) error {
 	// Check if the user wishes to import a one-off, private key directly
 	// as an account into the Prysm validator.
 	if acm.importPrivateKeys {
-		return importPrivateKeyAsAccount(ctx, acm.wallet, k, acm.privateKeyFile)
+		password, err := acm.importPassword()
+		if err != nil {
+			return err
+		}
+		return importPrivateKeyAsAccount(ctx, password, k, acm.privateKeyFile)
 	}
 
 	keystoresImported, err := processDirectory(ctx, acm.keysDir, 0)
@@ -176,7 +179,24 @@ func ImportAccounts(ctx context.Context, cfg *ImportAccountsConfig) ([]*keymanag
 
 // Imports a one-off file containing a private key as a hex string into
 // the Prysm validator's accounts.
-func importPrivateKeyAsAccount(ctx context.Context, wallet *wallet.Wallet, importer keymanager.Importer, privKeyFile string) error {
+// importPassword is the password used to encrypt a directly-imported private
+// key: the wallet password when a wallet backs the CLI, otherwise the
+// contents of --account-password-file.
+func (acm *CLIManager) importPassword() (string, error) {
+	if acm.wallet != nil {
+		return acm.wallet.Password(), nil
+	}
+	if !acm.readPasswordFile || acm.passwordFilePath == "" {
+		return "", errors.New("--account-password-file is required to import a private key without a wallet")
+	}
+	data, err := os.ReadFile(acm.passwordFilePath) // #nosec G304
+	if err != nil {
+		return "", errors.Wrap(err, "could not read account password file")
+	}
+	return strings.TrimRight(string(data), "\r\n"), nil
+}
+
+func importPrivateKeyAsAccount(ctx context.Context, password string, importer keymanager.Importer, privKeyFile string) error {
 	fullPath, err := file.ExpandPath(privKeyFile)
 	if err != nil {
 		return errors.Wrapf(err, "could not expand file path for %s", privKeyFile)
@@ -208,7 +228,7 @@ func importPrivateKeyAsAccount(ctx context.Context, wallet *wallet.Wallet, impor
 	if err != nil {
 		return errors.Wrap(err, "not a valid BLS private key")
 	}
-	keystore, err := createKeystoreFromPrivateKey(privKey, wallet.Password())
+	keystore, err := createKeystoreFromPrivateKey(privKey, password)
 	if err != nil {
 		return errors.Wrap(err, "could not encrypt private key into a keystore file")
 	}
@@ -216,7 +236,7 @@ func importPrivateKeyAsAccount(ctx context.Context, wallet *wallet.Wallet, impor
 		ctx,
 		&ImportAccountsConfig{
 			Importer:        importer,
-			AccountPassword: wallet.Password(),
+			AccountPassword: password,
 			Keystores:       []*keymanager.Keystore{keystore},
 		},
 	)

@@ -21,6 +21,8 @@ var Commands = &cli.Command{
 			Description: `deletes the selected accounts from a users wallet.`,
 			Flags: cmd.WrapFlags([]cli.Flag{
 				flags.WalletDirFlag,
+				flags.ValidatorKeysDirFlag,
+				flags.KeystorePasswordsFlag,
 				flags.WalletPasswordFileFlag,
 				flags.DeletePublicKeysFlag,
 				features.Mainnet,
@@ -50,6 +52,8 @@ var Commands = &cli.Command{
 			Description: "Lists all validator accounts in a user's wallet directory",
 			Flags: cmd.WrapFlags([]cli.Flag{
 				flags.WalletDirFlag,
+				flags.ValidatorKeysDirFlag,
+				flags.KeystorePasswordsFlag,
 				flags.WalletPasswordFileFlag,
 				flags.ShowPrivateKeysFlag,
 				flags.ListValidatorIndices,
@@ -89,6 +93,8 @@ var Commands = &cli.Command{
 				"list of hex string public keys",
 			Flags: cmd.WrapFlags([]cli.Flag{
 				flags.WalletDirFlag,
+				flags.ValidatorKeysDirFlag,
+				flags.KeystorePasswordsFlag,
 				flags.WalletPasswordFileFlag,
 				flags.BackupDirFlag,
 				flags.BackupPublicKeysFlag,
@@ -120,6 +126,8 @@ var Commands = &cli.Command{
 			Description: `imports Ethereum validator accounts stored in EIP-2335 keystore.json files from an external directory`,
 			Flags: cmd.WrapFlags([]cli.Flag{
 				flags.WalletDirFlag,
+				flags.ValidatorKeysDirFlag,
+				flags.KeystorePasswordsFlag,
 				flags.KeysDirFlag,
 				flags.WalletPasswordFileFlag,
 				flags.AccountPasswordFileFlag,
@@ -151,6 +159,8 @@ var Commands = &cli.Command{
 			Description: "Performs a voluntary exit on selected accounts",
 			Flags: cmd.WrapFlags([]cli.Flag{
 				flags.WalletDirFlag,
+				flags.ValidatorKeysDirFlag,
+				flags.KeystorePasswordsFlag,
 				flags.WalletPasswordFileFlag,
 				flags.AccountPasswordFileFlag,
 				flags.VoluntaryExitPublicKeysFlag,

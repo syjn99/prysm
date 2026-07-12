@@ -33,9 +33,12 @@ func Exit(c *cli.Context, r io.Reader) error {
 	)
 	grpcHeaders := strings.Split(c.String(flags.GRPCHeadersFlag.Name), ",")
 	beaconRPCProvider := c.String(flags.BeaconRPCProviderFlag.Name)
-	if !c.IsSet(flags.Web3SignerURLFlag.Name) && !c.IsSet(flags.WalletDirFlag.Name) && !c.IsSet(flags.InteropNumValidators.Name) {
-		return errors.Errorf("No validators found, please provide a prysm wallet directory via flag --%s "+
+	if !c.IsSet(flags.Web3SignerURLFlag.Name) && !c.IsSet(flags.WalletDirFlag.Name) && !c.IsSet(flags.ValidatorKeysDirFlag.Name) && !c.IsSet(flags.InteropNumValidators.Name) {
+		return errors.Errorf("No validators found, please provide a keystore directory via flag --%s (with --%s), "+
+			"a prysm wallet directory via flag --%s, "+
 			"or a remote signer location with corresponding public keys via flags --%s and --%s ",
+			flags.ValidatorKeysDirFlag.Name,
+			flags.KeystorePasswordsFlag.Name,
 			flags.WalletDirFlag.Name,
 			flags.Web3SignerURLFlag.Name,
 			flags.Web3SignerPublicValidatorKeysFlag,
@@ -72,7 +75,7 @@ func Exit(c *cli.Context, r io.Reader) error {
 		}
 		w = &wallet.Wallet{}
 	} else {
-		w, km, err = walletWithKeymanager(c)
+		w, km, err = keySourceForAccounts(c)
 		if err != nil {
 			return err
 		}
