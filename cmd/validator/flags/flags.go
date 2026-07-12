@@ -157,6 +157,16 @@ var (
 		Name:  "wallet-password-file",
 		Usage: "Path to a plain-text, .txt file containing your wallet password.",
 	}
+	// ValidatorKeysDirFlag defines a directory of standalone EIP-2335 keystore files to load directly, without a wallet.
+	ValidatorKeysDirFlag = &cli.StringFlag{
+		Name:  "validator-keys",
+		Usage: "Path to a directory of EIP-2335 keystore files to load directly, without a wallet. Requires --keystore-passwords.",
+	}
+	// KeystorePasswordsFlag defines the password source for the --validator-keys keystores.
+	KeystorePasswordsFlag = &cli.StringFlag{
+		Name:  "keystore-passwords",
+		Usage: "Password source for --validator-keys: a file holding one password shared by all keystores, or a directory of per-keystore <keystore-name>.txt files.",
+	}
 	// Mnemonic25thWordFileFlag defines a path to a file containing a "25th" word mnemonic passphrase for advanced users.
 	Mnemonic25thWordFileFlag = &cli.StringFlag{
 		Name:  "mnemonic-25th-word-file",

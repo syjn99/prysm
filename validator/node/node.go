@@ -55,6 +55,7 @@ type ValidatorClient struct {
 	services              *runtime.ServiceRegistry // Lifecycle and service store.
 	lock                  sync.RWMutex
 	wallet                *wallet.Wallet
+	accountStore          local.AccountStore
 	walletInitializedFeed *event.Feed
 	stop                  chan struct{} // Channel to wait for termination notifications.
 	once                  sync.Once
@@ -91,7 +92,7 @@ func NewValidatorClient(cliCtx *cli.Context) (*ValidatorClient, error) {
 		}
 	}
 
-	w, err := getWallet(cliCtx)
+	w, accountStore, err := getKeySource(cliCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +105,7 @@ func NewValidatorClient(cliCtx *cli.Context) (*ValidatorClient, error) {
 		cancel:                cancel,
 		services:              registry,
 		wallet:                w,
+		accountStore:          accountStore,
 		walletInitializedFeed: new(event.Feed),
 		stop:                  make(chan struct{}),
 	}
@@ -212,26 +214,43 @@ func (c *ValidatorClient) getLegacyDatabaseLocation(
 	return dataDir, dataFile, nil
 }
 
-func getWallet(cliCtx *cli.Context) (*wallet.Wallet, error) {
+// getKeySource resolves the process's single key source from flags, in
+// priority order: interop, web3signer, --validator-keys, legacy --wallet-dir.
+func getKeySource(cliCtx *cli.Context) (*wallet.Wallet, local.AccountStore, error) {
 	if cliCtx.IsSet(flags.InteropNumValidators.Name) {
 		log.Info("No wallet required for interop validation")
-		return nil, nil
+		return nil, nil, nil
 	}
 	if cliCtx.IsSet(flags.Web3SignerURLFlag.Name) {
 		log.Info("No wallet required for web3signer validation")
-		return nil, nil
+		return nil, nil, nil
+	}
+	if cliCtx.IsSet(flags.ValidatorKeysDirFlag.Name) {
+		if cliCtx.IsSet(flags.WalletDirFlag.Name) {
+			return nil, nil, fmt.Errorf("--%s and --%s cannot be used together; provide one key source", flags.ValidatorKeysDirFlag.Name, flags.WalletDirFlag.Name)
+		}
+		if !cliCtx.IsSet(flags.KeystorePasswordsFlag.Name) {
+			return nil, nil, fmt.Errorf("--%s requires --%s", flags.ValidatorKeysDirFlag.Name, flags.KeystorePasswordsFlag.Name)
+		}
+		keysDir := cliCtx.String(flags.ValidatorKeysDirFlag.Name)
+		store, err := local.NewDirStore(keysDir, cliCtx.String(flags.KeystorePasswordsFlag.Name))
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "could not open validator keys directory")
+		}
+		log.WithField("keysDir", keysDir).Info("Loading validator keys directly, without a wallet")
+		return nil, store, nil
 	}
 	if err := setWalletPasswordFilePath(cliCtx); err != nil {
-		return nil, errors.Wrap(err, "could not read wallet password file")
+		return nil, nil, errors.Wrap(err, "could not read wallet password file")
 	}
 	w, err := wallet.OpenWalletOrElseCli(cliCtx, func(cliCtx *cli.Context) (*wallet.Wallet, error) {
 		// handle nil wallet in key manager initialization, give a chance for user to create a wallet
 		return nil, nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "could not open wallet")
+		return nil, nil, errors.Wrap(err, "could not open wallet")
 	}
-	return w, nil
+	return w, nil, nil
 }
 
 func (c *ValidatorClient) registerServices(cliCtx *cli.Context) error {
@@ -417,6 +436,7 @@ func (c *ValidatorClient) registerValidatorService(cliCtx *cli.Context) error {
 	validatorService, err := client.NewValidatorService(cliCtx.Context, &client.Config{
 		DB:                      c.db,
 		Wallet:                  c.wallet,
+		AccountStore:            c.accountStore,
 		WalletInitializedFeed:   c.walletInitializedFeed,
 		GRPCMaxCallRecvMsgSize:  cliCtx.Int(cmd.GrpcMaxCallRecvMsgSizeFlag.Name),
 		GRPCRetries:             cliCtx.Uint(flags.GRPCRetriesFlag.Name),
@@ -551,6 +571,7 @@ func (c *ValidatorClient) registerRPCService(cliCtx *cli.Context) error {
 		BeaconNodeCert:         cliCtx.String(flags.CertFlag.Name),
 		DB:                     c.db,
 		Wallet:                 c.wallet,
+		AccountStore:           c.accountStore,
 		WalletDir:              walletDir,
 		WalletInitializedFeed:  c.walletInitializedFeed,
 		ValidatorService:       vs,

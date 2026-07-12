@@ -82,6 +82,7 @@ type validator struct {
 	walletInitializedFeed        *event.Feed
 	walletInitializedChan        chan *wallet.Wallet
 	wallet                       *wallet.Wallet
+	accountStore                 local.AccountStore
 	accountsChangedChannel       chan [][fieldparams.BLSPubkeyLength]byte
 	blacklistedPubkeys           map[[fieldparams.BLSPubkeyLength]byte]bool
 	prevEpochBalances            map[[fieldparams.BLSPubkeyLength]byte]uint64
@@ -179,6 +180,12 @@ func (v *validator) WaitForKeymanagerInitialization(ctx context.Context) error {
 		keyManager, err := remoteweb3signer.NewKeymanager(ctx, v.web3SignerConfig)
 		if err != nil {
 			return errors.Wrap(err, "could not initialize web3signer keymanager")
+		}
+		v.km = keyManager
+	case v.accountStore != nil:
+		keyManager, err := local.NewKeymanager(ctx, &local.SetupConfig{Store: v.accountStore, ListenForChanges: true})
+		if err != nil {
+			return errors.Wrap(err, "could not initialize local keymanager")
 		}
 		v.km = keyManager
 	case v.wallet != nil:

@@ -21,6 +21,7 @@ import (
 	iface "github.com/OffchainLabs/prysm/v7/validator/client/iface"
 	"github.com/OffchainLabs/prysm/v7/validator/db"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
+	"github.com/OffchainLabs/prysm/v7/validator/keymanager/local"
 	"github.com/OffchainLabs/prysm/v7/validator/web"
 	"github.com/pkg/errors"
 )
@@ -40,6 +41,7 @@ type Config struct {
 	BeaconNodeCert         string
 	DB                     db.Database
 	Wallet                 *wallet.Wallet
+	AccountStore           local.AccountStore
 	WalletDir              string
 	WalletInitializedFeed  *event.Feed
 	ValidatorService       *client.ValidatorService
@@ -56,6 +58,7 @@ type Server struct {
 	walletInitializedFeed     *event.Feed
 	beaconApiTimeout          time.Duration
 	wallet                    *wallet.Wallet
+	accountStore              local.AccountStore
 	validatorService          *client.ValidatorService
 	httpPort                  int
 	cancel                    context.CancelFunc
@@ -102,10 +105,12 @@ func NewServer(ctx context.Context, cfg *Config) *Server {
 		db:                     cfg.DB,
 		walletDir:              cfg.WalletDir,
 		walletInitializedFeed:  cfg.WalletInitializedFeed,
-		// Web3signer runs without a wallet but its keymanager is ready at startup,
-		// so the keymanager API endpoints guarded by walletInitialized must work.
-		walletInitialized:  cfg.Wallet != nil || (cfg.ValidatorService != nil && cfg.ValidatorService.RemoteSignerConfig() != nil),
+		// Web3signer and direct keystore loading run without a wallet but their
+		// keymanagers are ready at startup, so the keymanager API endpoints
+		// guarded by walletInitialized must work.
+		walletInitialized:  cfg.Wallet != nil || cfg.AccountStore != nil || (cfg.ValidatorService != nil && cfg.ValidatorService.RemoteSignerConfig() != nil),
 		wallet:             cfg.Wallet,
+		accountStore:       cfg.AccountStore,
 		beaconApiTimeout:   cfg.BeaconApiTimeout,
 		beaconApiEndpoint:  cfg.BeaconApiEndpoint,
 		beaconApiHeaders:   cfg.BeaconAPIHeaders,
@@ -252,6 +257,9 @@ func (s *Server) keymanagerKind() (keymanager.Kind, bool) {
 	}
 	if s.validatorService != nil && s.validatorService.RemoteSignerConfig() != nil {
 		return keymanager.Web3Signer, true
+	}
+	if s.accountStore != nil {
+		return keymanager.Local, true
 	}
 	return keymanager.Local, false
 }

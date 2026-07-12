@@ -58,6 +58,8 @@ var appHelpFlagGroups = []flagGroup{
 			cmd.DataDirFlag,
 			flags.WalletDirFlag,
 			flags.WalletPasswordFileFlag,
+			flags.ValidatorKeysDirFlag,
+			flags.KeystorePasswordsFlag,
 			cmd.ClearDB,
 			cmd.ForceClearDB,
 			cmd.EnableTracingFlag,

@@ -70,6 +70,8 @@ var appFlags = []cli.Flag{
 	flags.MonitoringPortFlag,
 	flags.WalletPasswordFileFlag,
 	flags.WalletDirFlag,
+	flags.ValidatorKeysDirFlag,
+	flags.KeystorePasswordsFlag,
 	flags.GraffitiFileFlag,
 	flags.EnableDistributed,
 	flags.AuthTokenPathFlag,

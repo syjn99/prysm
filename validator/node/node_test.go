@@ -317,3 +317,43 @@ func Test_parseBeaconApiHeaders(t *testing.T) {
 		assert.DeepEqual(t, []string{"value1"}, h["key1"])
 	})
 }
+
+func TestGetKeySource_ValidatorKeysDir(t *testing.T) {
+	newCtx := func(setFlags map[string]string) *cli.Context {
+		app := cli.App{}
+		set := flag.NewFlagSet("test", 0)
+		set.String(flags.ValidatorKeysDirFlag.Name, "", "")
+		set.String(flags.KeystorePasswordsFlag.Name, "", "")
+		set.String(flags.WalletDirFlag.Name, "", "")
+		for k, v := range setFlags {
+			require.NoError(t, set.Set(k, v))
+		}
+		return cli.NewContext(&app, set, nil)
+	}
+	keysDir := t.TempDir()
+	passwordFile := filepath.Join(t.TempDir(), "password.txt")
+	require.NoError(t, os.WriteFile(passwordFile, []byte("$$Passw0rdz2$$"), os.ModePerm))
+
+	t.Run("mutually exclusive with wallet-dir", func(t *testing.T) {
+		_, _, err := getKeySource(newCtx(map[string]string{
+			flags.ValidatorKeysDirFlag.Name: keysDir,
+			flags.WalletDirFlag.Name:        t.TempDir(),
+		}))
+		require.ErrorContains(t, "cannot be used together", err)
+	})
+	t.Run("requires keystore-passwords", func(t *testing.T) {
+		_, _, err := getKeySource(newCtx(map[string]string{
+			flags.ValidatorKeysDirFlag.Name: keysDir,
+		}))
+		require.ErrorContains(t, "requires --keystore-passwords", err)
+	})
+	t.Run("returns a store and no wallet", func(t *testing.T) {
+		w, store, err := getKeySource(newCtx(map[string]string{
+			flags.ValidatorKeysDirFlag.Name:  keysDir,
+			flags.KeystorePasswordsFlag.Name: passwordFile,
+		}))
+		require.NoError(t, err)
+		require.IsNil(t, w)
+		require.NotNil(t, store)
+	})
+}

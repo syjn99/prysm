@@ -41,6 +41,7 @@ type ValidatorService struct {
 	db                      db.Database
 	conn                    *validatorHelpers.NodeConnection
 	wallet                  *wallet.Wallet
+	accountStore            local.AccountStore
 	walletInitializedFeed   *event.Feed
 	graffiti                []byte
 	graffitiStruct          *graffiti.Graffiti
@@ -63,6 +64,7 @@ type Config struct {
 	Validator               iface.Validator
 	DB                      db.Database
 	Wallet                  *wallet.Wallet
+	AccountStore            local.AccountStore
 	WalletInitializedFeed   *event.Feed
 	Conn                    *validatorHelpers.NodeConnection // Optional: pre-built connection (if nil, built from endpoint configs)
 	MaxHealthChecks         int
@@ -100,6 +102,7 @@ func NewValidatorService(ctx context.Context, cfg *Config) (*ValidatorService, e
 		validator:               cfg.Validator,
 		db:                      cfg.DB,
 		wallet:                  cfg.Wallet,
+		accountStore:            cfg.AccountStore,
 		walletInitializedFeed:   cfg.WalletInitializedFeed,
 		graffiti:                []byte(cfg.Graffiti),
 		graffitiStruct:          cfg.GraffitiStruct,
@@ -197,6 +200,7 @@ func (v *ValidatorService) Start() {
 		blacklistedPubkeys:           slashablePublicKeys,
 		pubkeyToStatus:               make(map[[fieldparams.BLSPubkeyLength]byte]*validatorStatus),
 		wallet:                       v.wallet,
+		accountStore:                 v.accountStore,
 		walletInitializedChan:        make(chan *wallet.Wallet, 1),
 		walletInitializedFeed:        v.walletInitializedFeed,
 		graffiti:                     v.graffiti,
