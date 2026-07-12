@@ -43,7 +43,7 @@ func TestWalletWithKeymanager(t *testing.T) {
 	newKm, err := local.NewKeymanager(
 		cliCtx.Context,
 		&local.SetupConfig{
-			Wallet:           w,
+			Store:            local.NewWalletStore(w),
 			ListenForChanges: false,
 		},
 	)

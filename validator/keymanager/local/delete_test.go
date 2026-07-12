@@ -22,7 +22,7 @@ func TestLocalKeymanager_DeleteKeystores(t *testing.T) {
 		WalletPassword: password,
 	}
 	dr := &Keymanager{
-		wallet:        wallet,
+		store:         NewWalletStore(wallet),
 		accountsStore: &accountStore{},
 	}
 	numAccounts := 5

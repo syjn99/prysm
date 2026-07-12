@@ -48,14 +48,15 @@ func TestLocalKeymanager_NoDuplicates(t *testing.T) {
 		pubKeys[i] = priv.PublicKey().Marshal()
 	}
 	wallet := &mock.Wallet{
+		Files:          make(map[string]map[string][]byte),
 		WalletPassword: "Passwordz0202$",
 	}
 	dr := &Keymanager{
-		wallet: wallet,
+		store:         NewWalletStore(wallet),
+		accountsStore: &accountStore{},
 	}
 	ctx := t.Context()
-	_, err := dr.CreateAccountsKeystore(ctx, privKeys, pubKeys)
-	require.NoError(t, err)
+	require.NoError(t, dr.ImportKeypairs(ctx, privKeys, pubKeys))
 
 	// We expect the 50 keys in the account store to match.
 	require.NotNil(t, dr.accountsStore)
@@ -66,9 +67,8 @@ func TestLocalKeymanager_NoDuplicates(t *testing.T) {
 		assert.DeepEqual(t, dr.accountsStore.PublicKeys[i], pubKeys[i])
 	}
 
-	// Re-run the create accounts keystore function with the same pubkeys.
-	_, err = dr.CreateAccountsKeystore(ctx, privKeys, pubKeys)
-	require.NoError(t, err)
+	// Re-import the same keypairs.
+	require.NoError(t, dr.ImportKeypairs(ctx, privKeys, pubKeys))
 
 	// We expect nothing to change.
 	require.NotNil(t, dr.accountsStore)
@@ -86,8 +86,7 @@ func TestLocalKeymanager_NoDuplicates(t *testing.T) {
 	privKeys = append(privKeys, privKey.Marshal())
 	pubKeys = append(pubKeys, privKey.PublicKey().Marshal())
 
-	_, err = dr.CreateAccountsKeystore(ctx, privKeys, pubKeys)
-	require.NoError(t, err)
+	require.NoError(t, dr.ImportKeypairs(ctx, privKeys, pubKeys))
 	require.Equal(t, len(dr.accountsStore.PublicKeys), len(dr.accountsStore.PrivateKeys))
 
 	// We should have 1 more new key in the store.
@@ -103,7 +102,7 @@ func TestLocalKeymanager_ImportKeystores(t *testing.T) {
 		WalletPassword: password,
 	}
 	dr := &Keymanager{
-		wallet:        wallet,
+		store:         NewWalletStore(wallet),
 		accountsStore: &accountStore{},
 	}
 

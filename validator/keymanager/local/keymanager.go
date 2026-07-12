@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/OffchainLabs/prysm/v7/async/event"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
@@ -15,7 +15,6 @@ import (
 	"github.com/OffchainLabs/prysm/v7/monitoring/tracing/trace"
 	validatorpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1/validator-client"
 	"github.com/OffchainLabs/prysm/v7/runtime/interop"
-	"github.com/OffchainLabs/prysm/v7/validator/accounts/iface"
 	"github.com/OffchainLabs/prysm/v7/validator/accounts/petnames"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/google/uuid"
@@ -39,17 +38,35 @@ const (
 	AccountsKeystoreFileName = "all-accounts.keystore.json"
 )
 
+// AccountStore is the persistence backend for the local keymanager's accounts.
+// Implementations: walletStore (the legacy encrypted all-accounts blob inside a
+// wallet) and dirStore (a plain directory of per-key EIP-2335 keystore files).
+type AccountStore interface {
+	// Load reads and decrypts all stored accounts. A nil store means no
+	// accounts exist yet.
+	Load(ctx context.Context) (*accountStore, error)
+	// Save persists the full account set. keystores and passwords carry the
+	// already-encrypted EIP-2335 files for keys added by an import so that
+	// directory stores can persist them without re-encrypting; both are nil
+	// for other mutations. Reports whether the backing store existed before.
+	Save(ctx context.Context, store *accountStore, keystores []*keymanager.Keystore, passwords []string) (bool, error)
+	// WatchPath is the file or directory watched for external changes; the
+	// keymanager reloads accounts via Load on change events.
+	WatchPath() string
+}
+
 // Keymanager implementation for local keystores utilizing EIP-2335.
 type Keymanager struct {
-	wallet              iface.Wallet
+	store               AccountStore
 	accountsStore       *accountStore
 	accountsChangedFeed *event.Feed
+	listeningForChanges atomic.Bool
 }
 
 // SetupConfig includes configuration values for initializing
-// a keymanager, such as passwords, the wallet, and more.
+// a keymanager, such as the backing account store.
 type SetupConfig struct {
-	Wallet           iface.Wallet
+	Store            AccountStore
 	ListenForChanges bool
 }
 
@@ -88,7 +105,7 @@ func ResetCaches() {
 // NewKeymanager instantiates a new local keymanager from configuration options.
 func NewKeymanager(ctx context.Context, cfg *SetupConfig) (*Keymanager, error) {
 	k := &Keymanager{
-		wallet:              cfg.Wallet,
+		store:               cfg.Store,
 		accountsStore:       &accountStore{},
 		accountsChangedFeed: new(event.Feed),
 	}
@@ -98,9 +115,9 @@ func NewKeymanager(ctx context.Context, cfg *SetupConfig) (*Keymanager, error) {
 	}
 
 	if cfg.ListenForChanges {
-		// We begin a goroutine to listen for file changes to our
-		// all-accounts.keystore.json file in the wallet directory.
-		go k.listenForAccountChanges(ctx)
+		// We begin a goroutine to listen for changes to the store's
+		// backing file or directory.
+		k.startAccountsChangeListener(ctx)
 	}
 	return k, nil
 }
@@ -223,68 +240,28 @@ func (_ *Keymanager) Sign(ctx context.Context, req *validatorpb.SignRequest) (bl
 }
 
 func (km *Keymanager) initializeAccountKeystore(ctx context.Context) error {
-	encoded, err := km.wallet.ReadFileAtPath(ctx, AccountsPath, AccountsKeystoreFileName)
-	if err != nil && strings.Contains(err.Error(), "no files found") {
-		// If there are no keys to initialize at all, just exit.
-		return nil
-	} else if err != nil {
-		return errors.Wrapf(err, "could not read keystore file for accounts %s", AccountsKeystoreFileName)
-	}
-	keystoreFile := &AccountsKeystoreRepresentation{}
-	if err := json.Unmarshal(encoded, keystoreFile); err != nil {
-		return errors.Wrapf(err, "could not decode keystore file for accounts %s", AccountsKeystoreFileName)
-	}
-	// We extract the validator signing private key from the keystore
-	// by utilizing the password and initialize a new BLS secret key from
-	// its raw bytes.
-	password := km.wallet.Password()
-	decryptor := keystorev4.New()
-	enc, err := decryptor.Decrypt(keystoreFile.Crypto, password)
-	if err != nil && strings.Contains(err.Error(), keymanager.IncorrectPasswordErrMsg) {
-		return errors.Wrap(err, "wrong password for wallet entered")
-	} else if err != nil {
-		return errors.Wrap(err, "could not decrypt keystore")
-	}
-
-	store := &accountStore{}
-	if err := json.Unmarshal(enc, store); err != nil {
+	store, err := km.store.Load(ctx)
+	if err != nil {
 		return err
 	}
-	if len(store.PublicKeys) != len(store.PrivateKeys) {
-		return errors.New("unequal number of public keys and private keys")
-	}
-	if len(store.PublicKeys) == 0 {
+	if store == nil || len(store.PublicKeys) == 0 {
+		// If there are no keys to initialize at all, just exit.
 		return nil
 	}
 	km.accountsStore = store
-	err = km.initializeKeysCachesFromKeystore()
-	if err != nil {
+	if err := km.initializeKeysCachesFromKeystore(); err != nil {
 		return errors.Wrap(err, "failed to initialize keys caches")
 	}
-	return err
-}
-
-// CreateAccountsKeystore creates a new keystore holding the provided keys.
-func (km *Keymanager) CreateAccountsKeystore(ctx context.Context, privateKeys [][]byte, publicKeys [][]byte) (*AccountsKeystoreRepresentation, error) {
-	if err := km.CreateOrUpdateInMemoryAccountsStore(ctx, privateKeys, publicKeys); err != nil {
-		return nil, err
-	}
-	return CreateAccountsKeystoreRepresentation(ctx, km.accountsStore, km.wallet.Password())
+	return nil
 }
 
 // SaveStoreAndReInitialize saves the store to disk and re-initializes the account keystore from file
 func (km *Keymanager) SaveStoreAndReInitialize(ctx context.Context, store *accountStore) error {
-	// Save the copy to disk
-	accountsKeystore, err := CreateAccountsKeystoreRepresentation(ctx, store, km.wallet.Password())
-	if err != nil {
-		return err
-	}
-	encodedAccounts, err := json.MarshalIndent(accountsKeystore, "", "\t")
-	if err != nil {
-		return err
-	}
+	return km.saveStoreAndReInitialize(ctx, store, nil, nil)
+}
 
-	existedPreviously, err := km.wallet.WriteFileAtPath(ctx, AccountsPath, AccountsKeystoreFileName, encodedAccounts)
+func (km *Keymanager) saveStoreAndReInitialize(ctx context.Context, store *accountStore, keystores []*keymanager.Keystore, passwords []string) error {
+	existedPreviously, err := km.store.Save(ctx, store, keystores, passwords)
 	if err != nil {
 		return err
 	}
@@ -293,18 +270,16 @@ func (km *Keymanager) SaveStoreAndReInitialize(ctx context.Context, store *accou
 		// Reinitialize account store and cache
 		// This will update the in-memory information instead of reading from the file itself for safety concerns
 		km.accountsStore = store
-		err = km.initializeKeysCachesFromKeystore()
-		if err != nil {
+		if err := km.initializeKeysCachesFromKeystore(); err != nil {
 			return errors.Wrap(err, "failed to initialize keys caches")
 		}
-
 		return nil
 	}
 
-	// manually reload the account from the keystore the first time
-	km.reloadAccountsFromKeystoreFile(filepath.Join(km.wallet.AccountsDir(), AccountsPath, AccountsKeystoreFileName))
-	// listen to account changes of the new file
-	go km.listenForAccountChanges(ctx)
+	// manually reload the accounts from the store the first time
+	km.reloadFromStore(ctx)
+	// listen to account changes of the new backing file
+	km.startAccountsChangeListener(ctx)
 	return nil
 }
 
@@ -340,29 +315,6 @@ func CreateEmptyKeyStoreRepresentationForNewWallet(ctx context.Context, walletPa
 	// make sure everything is clean when creating this.
 	ResetCaches()
 	return CreateAccountsKeystoreRepresentation(ctx, &accountStore{}, walletPassword)
-}
-
-// CreateOrUpdateInMemoryAccountsStore will set or update the local accounts store and update the local cache.
-// This function DOES NOT save the accounts store to disk.
-func (km *Keymanager) CreateOrUpdateInMemoryAccountsStore(_ context.Context, privateKeys, publicKeys [][]byte) error {
-	if len(privateKeys) != len(publicKeys) {
-		return fmt.Errorf(
-			"number of private keys and public keys is not equal: %d != %d", len(privateKeys), len(publicKeys),
-		)
-	}
-	if km.accountsStore == nil {
-		km.accountsStore = &accountStore{
-			PrivateKeys: privateKeys,
-			PublicKeys:  publicKeys,
-		}
-	} else {
-		updateAccountsStoreKeys(km.accountsStore, privateKeys, publicKeys)
-	}
-	err := km.initializeKeysCachesFromKeystore()
-	if err != nil {
-		return errors.Wrap(err, "failed to initialize keys caches")
-	}
-	return nil
 }
 
 func updateAccountsStoreKeys(store *accountStore, privateKeys, publicKeys [][]byte) {

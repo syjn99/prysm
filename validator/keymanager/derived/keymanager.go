@@ -43,7 +43,7 @@ func NewKeymanager(
 	cfg *SetupConfig,
 ) (*Keymanager, error) {
 	localKM, err := local.NewKeymanager(ctx, &local.SetupConfig{
-		Wallet:           cfg.Wallet,
+		Store:            local.NewWalletStore(cfg.Wallet),
 		ListenForChanges: cfg.ListenForChanges,
 	})
 	if err != nil {

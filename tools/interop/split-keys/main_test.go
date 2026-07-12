@@ -77,7 +77,7 @@ func Test_spreadKeysAcrossImportedWallets(t *testing.T) {
 		})
 		require.NoError(t, err)
 		km, err := local.NewKeymanager(ctx, &local.SetupConfig{
-			Wallet: w,
+			Store: local.NewWalletStore(w),
 		})
 		require.NoError(t, err)
 		pubKeys, err := km.FetchValidatingPublicKeys(ctx)

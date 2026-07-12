@@ -48,7 +48,7 @@ func TestImport_Noninteractive(t *testing.T) {
 	newKm, err := local.NewKeymanager(
 		cliCtx.Context,
 		&local.SetupConfig{
-			Wallet:           w,
+			Store:            local.NewWalletStore(w),
 			ListenForChanges: false,
 		},
 	)
@@ -155,7 +155,7 @@ func TestImport_Noninteractive_RandomName(t *testing.T) {
 	newKm, err := local.NewKeymanager(
 		cliCtx.Context,
 		&local.SetupConfig{
-			Wallet:           w,
+			Store:            local.NewWalletStore(w),
 			ListenForChanges: false,
 		},
 	)
@@ -239,7 +239,7 @@ func TestImport_Noninteractive_Filepath(t *testing.T) {
 	newKm, err := local.NewKeymanager(
 		cliCtx.Context,
 		&local.SetupConfig{
-			Wallet:           w,
+			Store:            local.NewWalletStore(w),
 			ListenForChanges: false,
 		},
 	)

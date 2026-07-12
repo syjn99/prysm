@@ -22,7 +22,7 @@ func TestLocalKeymanager_FetchValidatingPublicKeys(t *testing.T) {
 		WalletPassword: password,
 	}
 	dr := &Keymanager{
-		wallet:        wallet,
+		store:         NewWalletStore(wallet),
 		accountsStore: &accountStore{},
 	}
 	// First, generate accounts and their keystore.json files.
@@ -54,7 +54,7 @@ func TestLocalKeymanager_FetchValidatingPrivateKeys(t *testing.T) {
 		WalletPassword: password,
 	}
 	dr := &Keymanager{
-		wallet:        wallet,
+		store:         NewWalletStore(wallet),
 		accountsStore: &accountStore{},
 	}
 	// First, generate accounts and their keystore.json files.
@@ -88,7 +88,7 @@ func TestLocalKeymanager_Sign(t *testing.T) {
 		WalletPassword:   password,
 	}
 	dr := &Keymanager{
-		wallet:        wallet,
+		store:         NewWalletStore(wallet),
 		accountsStore: &accountStore{},
 	}
 
@@ -117,7 +117,7 @@ func TestLocalKeymanager_Sign(t *testing.T) {
 	// by utilizing the password and initialize a new BLS secret key from
 	// its raw bytes.
 	decryptor := keystorev4.New()
-	enc, err := decryptor.Decrypt(keystoreFile.Crypto, dr.wallet.Password())
+	enc, err := decryptor.Decrypt(keystoreFile.Crypto, wallet.Password())
 	require.NoError(t, err)
 	store := &accountStore{}
 	require.NoError(t, json.Unmarshal(enc, store))

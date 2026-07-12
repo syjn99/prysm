@@ -178,7 +178,7 @@ func TestDeleteAccounts_Noninteractive(t *testing.T) {
 	km, err := local.NewKeymanager(
 		cliCtx.Context,
 		&local.SetupConfig{
-			Wallet:           w,
+			Store:            local.NewWalletStore(w),
 			ListenForChanges: false,
 		},
 	)

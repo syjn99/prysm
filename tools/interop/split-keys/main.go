@@ -129,7 +129,7 @@ func spreadKeysAcrossLocalWallets(
 			WalletPassword: walletPassword,
 		})
 		km, err := local.NewKeymanager(ctx, &local.SetupConfig{
-			Wallet: w,
+			Store: local.NewWalletStore(w),
 		})
 		if err != nil {
 			return err

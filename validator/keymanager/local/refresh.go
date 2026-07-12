@@ -2,38 +2,51 @@ package local
 
 import (
 	"context"
-	"encoding/json"
 	"os"
-	"path/filepath"
 
 	"github.com/OffchainLabs/prysm/v7/async"
 	"github.com/OffchainLabs/prysm/v7/config/features"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	"github.com/OffchainLabs/prysm/v7/crypto/bls"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
-	"github.com/OffchainLabs/prysm/v7/io/file"
 	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/fsnotify/fsnotify"
 	"github.com/pkg/errors"
-	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
-// Listen for changes to the all-accounts.keystore.json file in our wallet
-// to load in new keys we observe into our keymanager. This uses the fsnotify
-// library to listen for file-system changes and debounces these events to
-// ensure we can handle thousands of events fired in a short time-span.
-func (km *Keymanager) listenForAccountChanges(ctx context.Context) {
-	debounceFileChangesInterval := features.Get().KeystoreImportDebounceInterval
-	accountsFilePath := filepath.Join(km.wallet.AccountsDir(), AccountsPath, AccountsKeystoreFileName)
-	exists, err := file.Exists(accountsFilePath, file.Regular)
-
-	if err != nil {
-		log.WithError(err).Errorf("Could not check if file exists: %s", accountsFilePath)
+// startAccountsChangeListener spawns listenForAccountChanges, guarding against
+// more than one listener running at a time: NewKeymanager starts one when
+// configured to listen for changes, and SaveStoreAndReInitialize starts one
+// after writing the accounts file for the first time. The guard re-arms when
+// the listener exits, e.g. when it started before the accounts file existed.
+// A start racing a just-exiting listener can be dropped; that window only
+// exists if the accounts file is created concurrently with keymanager setup.
+func (km *Keymanager) startAccountsChangeListener(ctx context.Context) {
+	if !km.listeningForChanges.CompareAndSwap(false, true) {
 		return
 	}
+	go func() {
+		defer km.listeningForChanges.Store(false)
+		km.listenForAccountChanges(ctx)
+	}()
+}
 
-	if !exists {
-		log.Warnf("Starting without accounts located in wallet at %s", accountsFilePath)
+// Listen for changes to the store's backing file or directory to load in new
+// keys we observe into our keymanager. This uses the fsnotify library to
+// listen for file-system changes and debounces these events to ensure we can
+// handle thousands of events fired in a short time-span.
+func (km *Keymanager) listenForAccountChanges(ctx context.Context) {
+	debounceFileChangesInterval := features.Get().KeystoreImportDebounceInterval
+	if km.store == nil {
+		return
+	}
+	watchPath := km.store.WatchPath()
+	if _, err := os.Stat(watchPath); err != nil {
+		if !os.IsNotExist(err) {
+			log.WithError(err).Errorf("Could not check if path exists: %s", watchPath)
+			return
+		}
+		log.Warnf("Starting without accounts located at %s", watchPath)
 		return
 	}
 
@@ -47,8 +60,8 @@ func (km *Keymanager) listenForAccountChanges(ctx context.Context) {
 			log.WithError(err).Error("Could not close file watcher")
 		}
 	}()
-	if err := watcher.Add(accountsFilePath); err != nil {
-		log.WithError(err).Errorf("Could not add file %s to file watcher", accountsFilePath)
+	if err := watcher.Add(watchPath); err != nil {
+		log.WithError(err).Errorf("Could not add path %s to file watcher", watchPath)
 		return
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -60,67 +73,50 @@ func (km *Keymanager) listenForAccountChanges(ctx context.Context) {
 	// to ensure we are not overwhelmed by a ton of events fired over the channel in
 	// a short span of time.
 	go async.Debounce(ctx, debounceFileChangesInterval, fileChangesChan, func(event any) {
-		ev, ok := event.(fsnotify.Event)
-		if !ok {
+		if _, ok := event.(fsnotify.Event); !ok {
 			log.Errorf("Type %T is not a valid file system event", event)
 			return
 		}
-		km.reloadAccountsFromKeystoreFile(ev.Name)
+		km.reloadFromStore(ctx)
 	})
 	for {
 		select {
 		case event := <-watcher.Events:
-			// If a file was modified, we attempt to read that file
-			// and parse it into our accounts store.
+			// If a file was modified, we attempt to reload the accounts
+			// from the store.
 			fileChangesChan <- event
 		case err := <-watcher.Errors:
-			log.WithError(err).Errorf("Could not watch for file changes for: %s", accountsFilePath)
+			log.WithError(err).Errorf("Could not watch for file changes for: %s", watchPath)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (km *Keymanager) reloadAccountsFromKeystoreFile(accountsFilePath string) {
-	if km.wallet == nil {
-		log.Error("Could not reload accounts because wallet was undefined")
+// reloadFromStore replaces the in-memory accounts with the store's on-disk
+// contents, refreshing key caches and notifying accounts-changed subscribers.
+func (km *Keymanager) reloadFromStore(ctx context.Context) {
+	if km.store == nil {
+		log.Error("Could not reload accounts because store was undefined")
 		return
 	}
-	fileBytes, err := os.ReadFile(filepath.Clean(accountsFilePath))
+	store, err := km.store.Load(ctx)
 	if err != nil {
-		log.WithError(err).Errorf("Could not read file at path: %s", accountsFilePath)
+		log.WithError(err).Error("Could not reload accounts from store")
 		return
 	}
-	if fileBytes == nil {
-		log.WithError(err).Errorf("Loaded in an empty file: %s", accountsFilePath)
+	if store == nil {
+		log.Error("Could not reload accounts: store has no accounts")
 		return
 	}
-	accountsKeystore := &AccountsKeystoreRepresentation{}
-	if err := json.Unmarshal(fileBytes, accountsKeystore); err != nil {
-		log.WithError(
-			err,
-		).Errorf("Could not read valid, EIP-2335 keystore json file at path: %s", accountsFilePath)
-		return
-	}
-	if err := km.reloadAccountsFromKeystore(accountsKeystore); err != nil {
-		log.WithError(
-			err,
-		).Error("Could not replace the accounts store from keystore file")
+	if err := km.replaceStore(store); err != nil {
+		log.WithError(err).Error("Could not replace the accounts store")
 	}
 }
 
-// Replaces the accounts store struct in the local keymanager with
-// the contents of a keystore file by decrypting it with the accounts password.
-func (km *Keymanager) reloadAccountsFromKeystore(keystore *AccountsKeystoreRepresentation) error {
-	decryptor := keystorev4.New()
-	encodedAccounts, err := decryptor.Decrypt(keystore.Crypto, km.wallet.Password())
-	if err != nil {
-		return errors.Wrap(err, "could not decrypt keystore file")
-	}
-	newAccountsStore := &accountStore{}
-	if err := json.Unmarshal(encodedAccounts, newAccountsStore); err != nil {
-		return err
-	}
+// Replaces the accounts store struct in the local keymanager with the
+// provided one after validating its keys.
+func (km *Keymanager) replaceStore(newAccountsStore *accountStore) error {
 	if len(newAccountsStore.PublicKeys) != len(newAccountsStore.PrivateKeys) {
 		return errors.New("number of public and private keys in keystore do not match")
 	}

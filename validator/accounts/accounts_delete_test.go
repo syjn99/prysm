@@ -57,7 +57,7 @@ func TestDelete(t *testing.T) {
 	km, err := local.NewKeymanager(
 		cliCtx.Context,
 		&local.SetupConfig{
-			Wallet:           w,
+			Store:            local.NewWalletStore(w),
 			ListenForChanges: false,
 		},
 	)

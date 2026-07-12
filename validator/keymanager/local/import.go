@@ -36,6 +36,8 @@ func (km *Keymanager) ImportKeystores(
 	bar := initializeProgressBar(len(keystores), "Importing accounts...")
 	keys := map[string]string{}
 	statuses := make([]*keymanager.KeyStatus, len(keystores))
+	newKeystores := make([]*keymanager.Keystore, 0, len(keystores))
+	newPasswords := make([]string, 0, len(keystores))
 	var err error
 	// 1) Copy the in memory keystore
 	storeCopy := km.accountsStore.Copy()
@@ -71,6 +73,11 @@ func (km *Keymanager) ImportKeystores(
 
 		keys[string(pubKeyBytes)] = string(privKeyBytes)
 		importedKeys = append(importedKeys, pubKeyBytes)
+		if keystores[i].Pubkey == "" {
+			keystores[i].Pubkey = hex.EncodeToString(pubKeyBytes)
+		}
+		newKeystores = append(newKeystores, keystores[i])
+		newPasswords = append(newPasswords, passwords[i])
 		statuses[i] = &keymanager.KeyStatus{
 			Status: keymanager.StatusImported,
 		}
@@ -86,7 +93,7 @@ func (km *Keymanager) ImportKeystores(
 		storeCopy.PrivateKeys = append(storeCopy.PrivateKeys, []byte(privKey))
 	}
 	// 3) & 4) save to disk and re-initializes keystore
-	if err := km.SaveStoreAndReInitialize(ctx, storeCopy); err != nil {
+	if err := km.saveStoreAndReInitialize(ctx, storeCopy, newKeystores, newPasswords); err != nil {
 		return nil, err
 	}
 

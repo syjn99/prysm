@@ -326,7 +326,7 @@ func (w *Wallet) InitializeKeymanager(ctx context.Context, cfg iface.InitKeymana
 	switch w.KeymanagerKind() {
 	case keymanager.Local:
 		km, err = local.NewKeymanager(ctx, &local.SetupConfig{
-			Wallet:           w,
+			Store:            local.NewWalletStore(w),
 			ListenForChanges: cfg.ListenForChanges,
 		})
 		if err != nil {
