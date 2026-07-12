@@ -20,6 +20,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/validator/client"
 	iface "github.com/OffchainLabs/prysm/v7/validator/client/iface"
 	"github.com/OffchainLabs/prysm/v7/validator/db"
+	"github.com/OffchainLabs/prysm/v7/validator/keymanager"
 	"github.com/OffchainLabs/prysm/v7/validator/web"
 	"github.com/pkg/errors"
 )
@@ -101,13 +102,15 @@ func NewServer(ctx context.Context, cfg *Config) *Server {
 		db:                     cfg.DB,
 		walletDir:              cfg.WalletDir,
 		walletInitializedFeed:  cfg.WalletInitializedFeed,
-		walletInitialized:      cfg.Wallet != nil,
-		wallet:                 cfg.Wallet,
-		beaconApiTimeout:       cfg.BeaconApiTimeout,
-		beaconApiEndpoint:      cfg.BeaconApiEndpoint,
-		beaconApiHeaders:       cfg.BeaconAPIHeaders,
-		beaconNodeEndpoint:     cfg.BeaconNodeGRPCEndpoint,
-		router:                 cfg.Router,
+		// Web3signer runs without a wallet but its keymanager is ready at startup,
+		// so the keymanager API endpoints guarded by walletInitialized must work.
+		walletInitialized:  cfg.Wallet != nil || (cfg.ValidatorService != nil && cfg.ValidatorService.RemoteSignerConfig() != nil),
+		wallet:             cfg.Wallet,
+		beaconApiTimeout:   cfg.BeaconApiTimeout,
+		beaconApiEndpoint:  cfg.BeaconApiEndpoint,
+		beaconApiHeaders:   cfg.BeaconAPIHeaders,
+		beaconNodeEndpoint: cfg.BeaconNodeGRPCEndpoint,
+		router:             cfg.Router,
 	}
 
 	if server.authTokenPath == "" && server.walletDir != "" {
@@ -239,4 +242,16 @@ func (s *Server) Status() error {
 		return s.startFailure
 	}
 	return nil
+}
+
+// keymanagerKind returns the kind of the configured keymanager and whether one
+// is configured at all, accounting for web3signer which runs without a wallet.
+func (s *Server) keymanagerKind() (keymanager.Kind, bool) {
+	if s.wallet != nil {
+		return s.wallet.KeymanagerKind(), true
+	}
+	if s.validatorService != nil && s.validatorService.RemoteSignerConfig() != nil {
+		return keymanager.Web3Signer, true
+	}
+	return keymanager.Local, false
 }

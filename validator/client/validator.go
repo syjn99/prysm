@@ -168,19 +168,23 @@ func (v *validator) WaitForKeymanagerInitialization(ctx context.Context) error {
 	}
 
 	switch {
-	case v.wallet != nil:
-		if v.web3SignerConfig != nil {
-			v.web3SignerConfig.GenesisValidatorsRoot = genesisRoot
-		}
-		keyManager, err := v.wallet.InitializeKeymanager(ctx, accountsiface.InitKeymanagerConfig{ListenForChanges: true, Web3SignerConfig: v.web3SignerConfig})
-		if err != nil {
-			return errors.Wrap(err, "could not initialize key manager")
-		}
-		v.km = keyManager
 	case v.interopKeysConfig != nil:
 		keyManager, err := local.NewInteropKeymanager(ctx, v.interopKeysConfig.Offset, v.interopKeysConfig.NumValidatorKeys)
 		if err != nil {
 			return errors.Wrap(err, "could not generate interop keys for key manager")
+		}
+		v.km = keyManager
+	case v.web3SignerConfig != nil:
+		v.web3SignerConfig.GenesisValidatorsRoot = genesisRoot
+		keyManager, err := remoteweb3signer.NewKeymanager(ctx, v.web3SignerConfig)
+		if err != nil {
+			return errors.Wrap(err, "could not initialize web3signer keymanager")
+		}
+		v.km = keyManager
+	case v.wallet != nil:
+		keyManager, err := v.wallet.InitializeKeymanager(ctx, accountsiface.InitKeymanagerConfig{ListenForChanges: true})
+		if err != nil {
+			return errors.Wrap(err, "could not initialize key manager")
 		}
 		v.km = keyManager
 	case v.enableAPI:
