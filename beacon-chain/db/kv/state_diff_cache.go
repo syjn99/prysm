@@ -26,11 +26,17 @@ type stateDiffCache struct {
 	levelsWithData   []bool
 	offset           uint64
 	anchorGeneration uint64
+	// memo holds the anchor of each level already deserialized. Anchors are kept as compressed ssz to bound
+	// memory, but getAnchor is called once per diff written and an anchor is reused for every slot in its
+	// span, so without a memo a long forward walk pays a full state deserialization per boundary.
+	// Entries are invalidated whenever the underlying bytes change.
+	memo []state.BeaconState
 }
 
 func populateStateDiffCacheFromDB(s *Store, offset uint64) (*stateDiffCache, error) {
 	cache := &stateDiffCache{
 		anchors:        make([]anchor, len(flags.Get().StateDiffExponents)-1),
+		memo:           make([]state.BeaconState, len(flags.Get().StateDiffExponents)-1),
 		levelsWithData: make([]bool, len(flags.Get().StateDiffExponents)),
 		offset:         offset,
 	}
@@ -72,8 +78,8 @@ func populateStateDiffCacheFromDB(s *Store, offset uint64) (*stateDiffCache, err
 		return nil, err
 	}
 
-	anchor0, err := s.getFullSnapshot(offset)
-	if err != nil {
+	// The offset snapshot must always exist; its absence means the tree is unreadable.
+	if _, err := s.getFullSnapshot(offset); err != nil {
 		if errors.Is(err, errSnapshotNotFound) {
 			return nil, pkgerrors.Wrapf(ErrStateDiffMissingSnapshot, "offset snapshot at slot %d", offset)
 		}
@@ -82,14 +88,33 @@ func populateStateDiffCacheFromDB(s *Store, offset uint64) (*stateDiffCache, err
 	// Only cache anchor if there are higher levels that need it.
 	// With a single exponent, len(anchors)==0 and no caching is needed.
 	if len(cache.anchors) > 0 {
-		err := cache.setAnchor(0, anchor0)
+		// Cache the newest level-0 snapshot, not the one at the offset: once the tree spans more than
+		// 2^exponents[0] slots the offset snapshot is no longer the anchor any live write resolves to.
+		anchorSlot := latestLevelZeroSlot(s, offset)
+		anchor0, err := s.getFullSnapshot(anchorSlot)
 		if err != nil {
+			return nil, pkgerrors.Wrapf(ErrStateDiffCorrupted, "failed to load level 0 snapshot at slot %d: %v", anchorSlot, err)
+		}
+		if err := cache.setAnchor(0, anchor0); err != nil {
 			return nil, err
 		}
 	}
 	cache.levelsWithData[0] = true
 
 	return cache, nil
+}
+
+// latestLevelZeroSlot returns the highest slot holding a full snapshot that is a valid level 0 boundary for
+// the given offset, falling back to the offset itself.
+func latestLevelZeroSlot(s *Store, offset uint64) uint64 {
+	maxSlot, err := latestSlotForLevel(s, 0)
+	if err != nil {
+		return offset
+	}
+	if maxSlot <= offset || computeLevel(offset, primitives.Slot(maxSlot)) != 0 {
+		return offset
+	}
+	return maxSlot
 }
 
 func validateStateDiffCache(ctx context.Context, s *Store, cache *stateDiffCache) error {
@@ -183,6 +208,7 @@ func newStateDiffCache(s *Store) (*stateDiffCache, error) {
 
 	return &stateDiffCache{
 		anchors:        make([]anchor, len(flags.Get().StateDiffExponents)-1), // -1 because last level doesn't need to be cached
+		memo:           make([]state.BeaconState, len(flags.Get().StateDiffExponents)-1),
 		levelsWithData: make([]bool, len(flags.Get().StateDiffExponents)),
 		offset:         offset,
 	}, nil
@@ -200,6 +226,8 @@ func withExactSlot(slot primitives.Slot) optFunc {
 	}
 }
 
+// getAnchor returns the anchor state for the given level. The result must be treated as read-only: it is
+// shared with every caller until the anchor is replaced. Callers that need to mutate it must Copy it first.
 func (c *stateDiffCache) getAnchor(level int, opts ...optFunc) state.BeaconState {
 	cfg := getAnchorOpts{}
 
@@ -213,10 +241,19 @@ func (c *stateDiffCache) getAnchor(level int, opts ...optFunc) state.BeaconState
 		return nil
 	}
 	cachedAnchor := c.anchors[level]
+	var memoized state.BeaconState
+	if level < len(c.memo) {
+		memoized = c.memo[level]
+	}
+	generation := c.anchorGeneration
 	c.RUnlock()
 
 	if cfg.exactSlot != nil && *cfg.exactSlot != cachedAnchor.slot {
 		return nil
+	}
+
+	if memoized != nil {
+		return memoized
 	}
 
 	if len(cachedAnchor.data) == 0 {
@@ -233,6 +270,12 @@ func (c *stateDiffCache) getAnchor(level int, opts ...optFunc) state.BeaconState
 		return nil
 	}
 
+	c.Lock()
+	defer c.Unlock()
+	// The anchors may have been replaced while we decoded; memoizing then would cache a stale state.
+	if generation == c.anchorGeneration && level < len(c.memo) {
+		c.memo[level] = st
+	}
 	return st
 }
 
@@ -263,6 +306,9 @@ func (c *stateDiffCache) setAnchor(level int, anchorState state.ReadOnlyBeaconSt
 		return nil
 	}
 	c.anchors[level] = anchor{slot: anchorState.Slot(), data: compressed}
+	if level < len(c.memo) {
+		c.memo[level] = nil
+	}
 	stateDiffAnchorCacheBytes.WithLabelValues(strconv.Itoa(level)).Set(float64(len(compressed)))
 	return nil
 }
@@ -319,6 +365,7 @@ func (c *stateDiffCache) clearAnchors() {
 func (c *stateDiffCache) clearAnchorsLocked() {
 	c.anchorGeneration++
 	c.anchors = make([]anchor, len(flags.Get().StateDiffExponents)-1) // -1 because last level doesn't need to be cached
+	c.memo = make([]state.BeaconState, len(c.anchors))
 	for level := range len(c.anchors) {
 		stateDiffAnchorCacheBytes.WithLabelValues(strconv.Itoa(level)).Set(0)
 	}
