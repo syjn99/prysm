@@ -39,6 +39,8 @@ var (
 	exponentsKey                = []byte("exponents")
 	ErrSlotBeforeOffset         = errors.New("slot is before state-diff root offset")
 	errExponentsMetadataMissing = errors.New("state diff exponents metadata not found")
+	// ErrAboveArchiveFrontier rejects a tree write that the archive walk has not laid the anchors for yet.
+	ErrAboveArchiveFrontier = errors.New("state-diff write above the archive regeneration frontier")
 
 	// stateKeyByVersion is the key prefix stored in front of a state's SSZ bytes, per fork.
 	stateKeyByVersion = map[int][]byte{
