@@ -357,12 +357,18 @@ func (r *testRunner) testCheckpointSync(ctx context.Context, g *errgroup.Group, 
 		return err
 	}
 
-	syncEvaluators := []e2etypes.Evaluator{ev.FinishedSyncing, ev.AllNodesHaveSameHead}
-	for _, evaluator := range syncEvaluators {
-		r.t.Run(evaluator.Name, func(t *testing.T) {
-			assert.NoError(t, evaluator.Evaluation(nil, conns...), "Evaluation failed for sync node")
+	r.t.Run("checkpoint_sync", func(t *testing.T) {
+		t.Run(ev.FinishedSyncing.Name, func(t *testing.T) {
+			assert.NoError(t, ev.FinishedSyncing.Evaluation(nil, conns...), "Evaluation failed for sync node")
 		})
-	}
+		t.Run("all_nodes_have_same_head", func(t *testing.T) {
+			// Use waitForMatchingHead instead of AllNodesHaveSameHead to avoid the
+			// race condition where waitForAllMidEpoch's delay allows heads to diverge
+			// after the initial sync.
+			assert.NoError(t, r.waitForMatchingHead(ctx, matchTimeout, c, conns[0]),
+				"checkpoint-synced node head diverged from reference")
+		})
+	})
 	return nil
 }
 
@@ -410,11 +416,13 @@ func (r *testRunner) testBeaconChainSync(ctx context.Context, g *errgroup.Group,
 	ticker := helpers.NewEpochTicker(tickingStartTime, secondsPerEpoch)
 	<-ticker.C()
 	ticker.Done()
-	for _, evaluator := range syncEvaluators {
-		t.Run(evaluator.Name, func(t *testing.T) {
-			assert.NoError(t, evaluator.Evaluation(nil, conns...), "Evaluation failed for sync node")
-		})
-	}
+	t.Run("beacon_chain_sync", func(t *testing.T) {
+		for _, evaluator := range syncEvaluators {
+			t.Run(evaluator.Name, func(t *testing.T) {
+				assert.NoError(t, evaluator.Evaluation(nil, conns...), "Evaluation failed for sync node")
+			})
+		}
+	})
 	return nil
 }
 
