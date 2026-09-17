@@ -236,6 +236,8 @@ func unmarshalAnchor(t *testing.T, fork int, stateSSZ, blockSSZ []byte) (state.B
 		return unmarshalFuluState(t, stateSSZ), unmarshalFuluBlock(t, blockSSZ)
 	case version.Gloas:
 		return unmarshalGloasState(t, stateSSZ), unmarshalGloasBlock(t, blockSSZ)
+	case version.Heze:
+		return unmarshalHezeState(t, stateSSZ), unmarshalHezeBlock(t, blockSSZ)
 	default:
 		t.Fatalf("unknown fork version: %v", fork)
 		return nil, nil
@@ -260,6 +262,8 @@ func unmarshalSignedBlock(t *testing.T, fork int, blockSSZ []byte) interfaces.Re
 		return unmarshalSignedFuluBlock(t, blockSSZ)
 	case version.Gloas:
 		return unmarshalSignedGloasBlock(t, blockSSZ)
+	case version.Heze:
+		return unmarshalSignedHezeBlock(t, blockSSZ)
 	default:
 		t.Fatalf("unknown fork version: %v", fork)
 		return nil
@@ -761,6 +765,34 @@ func unmarshalGloasBlock(t *testing.T, raw []byte) interfaces.SignedBeaconBlock 
 
 func unmarshalSignedGloasBlock(t *testing.T, raw []byte) interfaces.SignedBeaconBlock {
 	base := &ethpb.SignedBeaconBlockGloas{}
+	require.NoError(t, base.UnmarshalSSZ(raw))
+	blk, err := blocks.NewSignedBeaconBlock(base)
+	require.NoError(t, err)
+	return blk
+}
+
+// ----------------------------------------------------------------------------
+// Heze
+// ----------------------------------------------------------------------------
+
+func unmarshalHezeState(t *testing.T, raw []byte) state.BeaconState {
+	base := &ethpb.BeaconStateHeze{}
+	require.NoError(t, base.UnmarshalSSZ(raw))
+	st, err := state_native.InitializeFromProtoUnsafeHeze(base)
+	require.NoError(t, err)
+	return st
+}
+
+func unmarshalHezeBlock(t *testing.T, raw []byte) interfaces.SignedBeaconBlock {
+	base := &ethpb.BeaconBlockHeze{}
+	require.NoError(t, base.UnmarshalSSZ(raw))
+	blk, err := blocks.NewSignedBeaconBlock(&ethpb.SignedBeaconBlockHeze{Block: base, Signature: make([]byte, fieldparams.BLSSignatureLength)})
+	require.NoError(t, err)
+	return blk
+}
+
+func unmarshalSignedHezeBlock(t *testing.T, raw []byte) interfaces.SignedBeaconBlock {
+	base := &ethpb.SignedBeaconBlockHeze{}
 	require.NoError(t, base.UnmarshalSSZ(raw))
 	blk, err := blocks.NewSignedBeaconBlock(base)
 	require.NoError(t, err)

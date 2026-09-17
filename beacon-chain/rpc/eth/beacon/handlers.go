@@ -82,7 +82,9 @@ func versionHeaderFromRequest(body []byte) (string, error) {
 		return "", errors.Wrap(err, "unable to peek slot from block")
 	}
 	ce := slots.ToEpoch(sp.Block.Slot)
-	if ce >= params.BeaconConfig().GloasForkEpoch {
+	if ce >= params.BeaconConfig().HezeForkEpoch {
+		return version.String(version.Heze), nil
+	} else if ce >= params.BeaconConfig().GloasForkEpoch {
 		return version.String(version.Gloas), nil
 	} else if ce >= params.BeaconConfig().FuluForkEpoch {
 		return version.String(version.Fulu), nil
@@ -671,6 +673,7 @@ func (s *Server) publishBlockSSZ(ctx context.Context, w http.ResponseWriter, r *
 }
 
 var sszDecoders = map[string]blockDecoder{
+	version.String(version.Heze):      decodeHezeSSZ,
 	version.String(version.Gloas):     decodeGloasSSZ,
 	version.String(version.Fulu):      decodeFuluSSZ,
 	version.String(version.Electra):   decodeElectraSSZ,
@@ -698,6 +701,18 @@ func decodeGloasSSZ(body []byte) (*eth.GenericSignedBeaconBlock, error) {
 	}
 	return &eth.GenericSignedBeaconBlock{
 		Block: &eth.GenericSignedBeaconBlock_Gloas{Gloas: gloasBlock},
+	}, nil
+}
+
+func decodeHezeSSZ(body []byte) (*eth.GenericSignedBeaconBlock, error) {
+	hezeBlock := &eth.SignedBeaconBlockHeze{}
+	if err := hezeBlock.UnmarshalSSZ(body); err != nil {
+		return nil, decodingError(
+			version.String(version.Heze), err,
+		)
+	}
+	return &eth.GenericSignedBeaconBlock{
+		Block: &eth.GenericSignedBeaconBlock_Heze{Heze: hezeBlock},
 	}, nil
 }
 
@@ -841,6 +856,7 @@ func (s *Server) publishBlock(ctx context.Context, w http.ResponseWriter, r *htt
 }
 
 var jsonDecoders = map[string]blockDecoder{
+	version.String(version.Heze):      decodeHezeJSON,
 	version.String(version.Gloas):     decodeGloasJSON,
 	version.String(version.Fulu):      decodeFuluJSON,
 	version.String(version.Electra):   decodeElectraJSON,
@@ -863,6 +879,13 @@ func decodeGloasJSON(body []byte) (*eth.GenericSignedBeaconBlock, error) {
 	return decodeGenericJSON[*structs.SignedBeaconBlockGloas](
 		body,
 		version.String(version.Gloas),
+	)
+}
+
+func decodeHezeJSON(body []byte) (*eth.GenericSignedBeaconBlock, error) {
+	return decodeGenericJSON[*structs.SignedBeaconBlockHeze](
+		body,
+		version.String(version.Heze),
 	)
 }
 
