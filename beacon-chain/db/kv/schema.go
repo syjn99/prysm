@@ -64,7 +64,8 @@ var (
 	fuluKey                    = []byte("fulu")
 	fuluBlindKey               = []byte("blind-fulu")
 	gloasKey                   = []byte("gloas")
-	// No gloasBlindKey needed - Gloas blocks are never blinded (no execution payload in block body).
+	hezeKey                    = []byte("heze")
+	// No gloasBlindKey/hezeBlindKey needed - post-Gloas blocks are never blinded (no execution payload in block body).
 
 	// block root included in the beacon state used by weak subjectivity initial sync
 	originCheckpointBlockRootKey = []byte("origin-checkpoint-block-root")
