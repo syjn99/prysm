@@ -53,6 +53,7 @@ mainnet = {
     "execution_payload_availability.size": "1024",  # Gloas: SLOTS_PER_HISTORICAL_ROOT
     "builder_pending_payments.size": "64",  # Gloas: vector length (2 * SLOTS_PER_EPOCH)
     "builder_registry_limit": "1099511627776",  # Gloas: BUILDER_REGISTRY_LIMIT (same for mainnet/minimal)
+    "inclusion_list_bits.size": "2",  # Heze: INCLUSION_LIST_COMMITTEE_SIZE = 16 bits (same for mainnet/minimal)
 }
 
 minimal = {
@@ -102,6 +103,7 @@ minimal = {
     "execution_payload_availability.size": "8",  # Gloas: SLOTS_PER_HISTORICAL_ROOT
     "builder_pending_payments.size": "16",  # Gloas: vector length (2 * SLOTS_PER_EPOCH)
     "builder_registry_limit": "1099511627776",  # Gloas: BUILDER_REGISTRY_LIMIT (same for mainnet/minimal)
+    "inclusion_list_bits.size": "2",  # Heze: INCLUSION_LIST_COMMITTEE_SIZE = 16 bits (same for mainnet/minimal)
 }
 
 ###### Rules definitions #######

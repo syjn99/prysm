@@ -195,6 +195,75 @@ func copyBeaconBlockBodyGloas(body *BeaconBlockBodyGloas) *BeaconBlockBodyGloas 
 	return copied
 }
 
+// CopySignedBeaconBlockHeze copies the provided signed beacon block Heze object.
+func CopySignedBeaconBlockHeze(sb *SignedBeaconBlockHeze) *SignedBeaconBlockHeze {
+	if sb == nil {
+		return nil
+	}
+	return &SignedBeaconBlockHeze{
+		Block:     copyBeaconBlockHeze(sb.Block),
+		Signature: bytesutil.SafeCopyBytes(sb.Signature),
+	}
+}
+
+// copyBeaconBlockHeze copies the provided beacon block Heze object.
+func copyBeaconBlockHeze(b *BeaconBlockHeze) *BeaconBlockHeze {
+	if b == nil {
+		return nil
+	}
+	return &BeaconBlockHeze{
+		Slot:          b.Slot,
+		ProposerIndex: b.ProposerIndex,
+		ParentRoot:    bytesutil.SafeCopyBytes(b.ParentRoot),
+		StateRoot:     bytesutil.SafeCopyBytes(b.StateRoot),
+		Body:          copyBeaconBlockBodyHeze(b.Body),
+	}
+}
+
+// copySignedExecutionPayloadBidHeze copies the provided Heze signed execution payload bid.
+func copySignedExecutionPayloadBidHeze(bid *SignedExecutionPayloadBidHeze) *SignedExecutionPayloadBidHeze {
+	if bid == nil {
+		return nil
+	}
+	return &SignedExecutionPayloadBidHeze{
+		Message:   bid.Message.Copy(),
+		Signature: bytesutil.SafeCopyBytes(bid.Signature),
+	}
+}
+
+// copyBeaconBlockBodyHeze copies the provided beacon block body Heze object.
+func copyBeaconBlockBodyHeze(body *BeaconBlockBodyHeze) *BeaconBlockBodyHeze {
+	if body == nil {
+		return nil
+	}
+
+	copied := &BeaconBlockBodyHeze{
+		RandaoReveal: bytesutil.SafeCopyBytes(body.RandaoReveal),
+		Graffiti:     bytesutil.SafeCopyBytes(body.Graffiti),
+	}
+
+	if body.Eth1Data != nil {
+		copied.Eth1Data = body.Eth1Data.Copy()
+	}
+
+	if body.SyncAggregate != nil {
+		copied.SyncAggregate = body.SyncAggregate.Copy()
+	}
+
+	copied.ProposerSlashings = CopySlice(body.ProposerSlashings)
+	copied.AttesterSlashings = CopySlice(body.AttesterSlashings)
+	copied.Attestations = CopySlice(body.Attestations)
+	copied.Deposits = CopySlice(body.Deposits)
+	copied.VoluntaryExits = CopySlice(body.VoluntaryExits)
+	copied.BlsToExecutionChanges = CopySlice(body.BlsToExecutionChanges)
+
+	copied.SignedExecutionPayloadBid = copySignedExecutionPayloadBidHeze(body.SignedExecutionPayloadBid)
+	copied.PayloadAttestations = copyPayloadAttestations(body.PayloadAttestations)
+	copied.ParentExecutionRequests = CopyExecutionRequestsGloas(body.ParentExecutionRequests)
+
+	return copied
+}
+
 // CopySignedExecutionPayloadEnvelope copies the provided signed execution payload envelope.
 func CopySignedExecutionPayloadEnvelope(env *SignedExecutionPayloadEnvelope) *SignedExecutionPayloadEnvelope {
 	if env == nil {
