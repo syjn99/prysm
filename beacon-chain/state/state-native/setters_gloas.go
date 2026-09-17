@@ -107,6 +107,27 @@ func (b *BeaconState) SetExecutionPayloadBid(h interfaces.ROExecutionPayloadBid)
 	blobKzgCommitments := h.BlobKzgCommitments()
 	feeRecipient := h.FeeRecipient()
 	executionRequestsRoot := h.ExecutionRequestsRoot()
+	if b.version >= version.Heze {
+		b.latestExecutionPayloadBidHeze = &ethpb.ExecutionPayloadBidHeze{
+			ParentBlockHash:       parentBlockHash[:],
+			ParentBlockRoot:       parentBlockRoot[:],
+			BlockHash:             blockHash[:],
+			PrevRandao:            randao[:],
+			GasLimit:              h.GasLimit(),
+			BuilderIndex:          h.BuilderIndex(),
+			Slot:                  h.Slot(),
+			Value:                 h.Value(),
+			ExecutionPayment:      h.ExecutionPayment(),
+			BlobKzgCommitments:    blobKzgCommitments,
+			FeeRecipient:          feeRecipient[:],
+			ExecutionRequestsRoot: executionRequestsRoot[:],
+			InclusionListBits:     inclusionListBits(h),
+		}
+		b.markFieldAsDirty(types.LatestExecutionPayloadBid)
+
+		return nil
+	}
+
 	b.latestExecutionPayloadBid = &ethpb.ExecutionPayloadBid{
 		ParentBlockHash:       parentBlockHash[:],
 		ParentBlockRoot:       parentBlockRoot[:],
@@ -949,4 +970,13 @@ func (b *BeaconState) RotatePTCWindow(newEpochSlots []*ethpb.PTCs) error {
 
 func expectedPTCWindowSize() primitives.Slot {
 	return params.BeaconConfig().SlotsPerEpoch.Mul(uint64(2 + params.BeaconConfig().MinSeedLookahead))
+}
+
+// inclusionListBits returns the bid's inclusion list bits, zero-filled when absent.
+func inclusionListBits(h interfaces.ROExecutionPayloadBid) []byte {
+	bits := h.InclusionListBits()
+	if len(bits) == (fieldparams.InclusionListCommitteeSize+7)/8 {
+		return bits
+	}
+	return make([]byte, (fieldparams.InclusionListCommitteeSize+7)/8)
 }

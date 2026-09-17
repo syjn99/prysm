@@ -198,6 +198,19 @@ func (b *SignedBeaconBlock) Proto() (proto.Message, error) { // nolint:gocognit
 			Block:     block,
 			Signature: b.signature[:],
 		}, nil
+	case version.Heze:
+		var block *eth.BeaconBlockHeze
+		if blockMessage != nil {
+			var ok bool
+			block, ok = blockMessage.(*eth.BeaconBlockHeze)
+			if !ok {
+				return nil, errIncorrectBlockVersion
+			}
+		}
+		return &eth.SignedBeaconBlockHeze{
+			Block:     block,
+			Signature: b.signature[:],
+		}, nil
 	default:
 		return nil, errors.New("unsupported signed beacon block version")
 	}
@@ -422,6 +435,22 @@ func (b *BeaconBlock) Proto() (proto.Message, error) { // nolint:gocognit
 			}
 		}
 		return &eth.BeaconBlockGloas{
+			Slot:          b.slot,
+			ProposerIndex: b.proposerIndex,
+			ParentRoot:    b.parentRoot[:],
+			StateRoot:     b.stateRoot[:],
+			Body:          body,
+		}, nil
+	case version.Heze:
+		var body *eth.BeaconBlockBodyHeze
+		if bodyMessage != nil {
+			var ok bool
+			body, ok = bodyMessage.(*eth.BeaconBlockBodyHeze)
+			if !ok {
+				return nil, errIncorrectBodyVersion
+			}
+		}
+		return &eth.BeaconBlockHeze{
 			Slot:          b.slot,
 			ProposerIndex: b.proposerIndex,
 			ParentRoot:    b.parentRoot[:],
@@ -710,6 +739,22 @@ func (b *BeaconBlockBody) Proto() (proto.Message, error) {
 			SyncAggregate:             b.syncAggregate,
 			BlsToExecutionChanges:     b.blsToExecutionChanges,
 			SignedExecutionPayloadBid: b.signedExecutionPayloadBid,
+			PayloadAttestations:       b.payloadAttestations,
+			ParentExecutionRequests:   b.parentExecutionRequests,
+		}, nil
+	case version.Heze:
+		return &eth.BeaconBlockBodyHeze{
+			RandaoReveal:              b.randaoReveal[:],
+			Eth1Data:                  b.eth1Data,
+			Graffiti:                  b.graffiti[:],
+			ProposerSlashings:         b.proposerSlashings,
+			AttesterSlashings:         b.attesterSlashingsGloas,
+			Attestations:              b.attestationsGloas,
+			Deposits:                  b.deposits,
+			VoluntaryExits:            b.voluntaryExits,
+			SyncAggregate:             b.syncAggregate,
+			BlsToExecutionChanges:     b.blsToExecutionChanges,
+			SignedExecutionPayloadBid: b.signedExecutionPayloadBidHeze,
 			PayloadAttestations:       b.payloadAttestations,
 			ParentExecutionRequests:   b.parentExecutionRequests,
 		}, nil
@@ -1590,4 +1635,100 @@ func initBlockBodyFromProtoGloas(pb *eth.BeaconBlockBodyGloas) (*BeaconBlockBody
 		parentExecutionRequests:   per,
 	}
 	return b, nil
+}
+
+// ----------------------------------------------------------------------------
+// Heze
+// ----------------------------------------------------------------------------
+
+func initSignedBlockFromProtoHeze(pb *eth.SignedBeaconBlockHeze) (*SignedBeaconBlock, error) {
+	if pb == nil {
+		return nil, errNilBlock
+	}
+
+	block, err := initBlockFromProtoHeze(pb.Block)
+	if err != nil {
+		return nil, err
+	}
+	b := &SignedBeaconBlock{
+		version:   version.Heze,
+		block:     block,
+		signature: bytesutil.ToBytes96(pb.Signature),
+	}
+	return b, nil
+}
+
+func initBlockFromProtoHeze(pb *eth.BeaconBlockHeze) (*BeaconBlock, error) {
+	if pb == nil {
+		return nil, errNilBlock
+	}
+
+	body, err := initBlockBodyFromProtoHeze(pb.Body)
+	if err != nil {
+		return nil, err
+	}
+	b := &BeaconBlock{
+		version:       version.Heze,
+		slot:          pb.Slot,
+		proposerIndex: pb.ProposerIndex,
+		parentRoot:    bytesutil.ToBytes32(pb.ParentRoot),
+		stateRoot:     bytesutil.ToBytes32(pb.StateRoot),
+		body:          body,
+	}
+	return b, nil
+}
+
+func initBlockBodyFromProtoHeze(pb *eth.BeaconBlockBodyHeze) (*BeaconBlockBody, error) {
+	if pb == nil {
+		return nil, errNilBlockBody
+	}
+
+	per := pb.ParentExecutionRequests
+	if per == nil {
+		per = &enginev1.ExecutionRequestsGloas{}
+	}
+	b := &BeaconBlockBody{
+		version:                       version.Heze,
+		randaoReveal:                  bytesutil.ToBytes96(pb.RandaoReveal),
+		eth1Data:                      pb.Eth1Data,
+		graffiti:                      bytesutil.ToBytes32(pb.Graffiti),
+		proposerSlashings:             pb.ProposerSlashings,
+		attesterSlashingsGloas:        pb.AttesterSlashings,
+		attestationsGloas:             pb.Attestations,
+		deposits:                      pb.Deposits,
+		voluntaryExits:                pb.VoluntaryExits,
+		syncAggregate:                 pb.SyncAggregate,
+		blsToExecutionChanges:         pb.BlsToExecutionChanges,
+		signedExecutionPayloadBid:     gloasBidView(pb.SignedExecutionPayloadBid),
+		signedExecutionPayloadBidHeze: pb.SignedExecutionPayloadBid,
+		payloadAttestations:           pb.PayloadAttestations,
+		parentExecutionRequests:       per,
+	}
+	return b, nil
+}
+
+// gloasBidView projects a Heze bid onto the Gloas shape so that pre-Heze readers of
+// SignedExecutionPayloadBid keep working. Inclusion list bits are dropped on purpose.
+func gloasBidView(pb *eth.SignedExecutionPayloadBidHeze) *eth.SignedExecutionPayloadBid {
+	if pb == nil {
+		return nil
+	}
+	view := &eth.SignedExecutionPayloadBid{Signature: pb.Signature}
+	if pb.Message != nil {
+		view.Message = &eth.ExecutionPayloadBid{
+			ParentBlockHash:       pb.Message.ParentBlockHash,
+			ParentBlockRoot:       pb.Message.ParentBlockRoot,
+			BlockHash:             pb.Message.BlockHash,
+			PrevRandao:            pb.Message.PrevRandao,
+			FeeRecipient:          pb.Message.FeeRecipient,
+			GasLimit:              pb.Message.GasLimit,
+			BuilderIndex:          pb.Message.BuilderIndex,
+			Slot:                  pb.Message.Slot,
+			Value:                 pb.Message.Value,
+			ExecutionPayment:      pb.Message.ExecutionPayment,
+			BlobKzgCommitments:    pb.Message.BlobKzgCommitments,
+			ExecutionRequestsRoot: pb.Message.ExecutionRequestsRoot,
+		}
+	}
+	return view
 }

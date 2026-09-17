@@ -266,6 +266,13 @@ func (b *BeaconState) LatestExecutionPayloadBid() (interfaces.ROExecutionPayload
 	b.lock.RLock()
 	defer b.lock.RUnlock()
 
+	if b.version >= version.Heze {
+		if b.latestExecutionPayloadBidHeze == nil {
+			return nil, nil
+		}
+		return blocks.WrappedROExecutionPayloadBidHeze(b.latestExecutionPayloadBidHeze.Copy())
+	}
+
 	if b.latestExecutionPayloadBid == nil {
 		return nil, nil
 	}

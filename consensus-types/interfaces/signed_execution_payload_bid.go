@@ -26,5 +26,7 @@ type ROExecutionPayloadBid interface {
 	BlobKzgCommitmentCount() uint64
 	FeeRecipient() [20]byte
 	ExecutionRequestsRoot() [32]byte
+	// InclusionListBits is empty before Heze.
+	InclusionListBits() []byte
 	IsNil() bool
 }

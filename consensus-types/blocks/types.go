@@ -60,8 +60,11 @@ type BeaconBlockBody struct {
 	blobKzgCommitments        [][]byte
 	executionRequests         *enginev1.ExecutionRequests
 	signedExecutionPayloadBid *eth.SignedExecutionPayloadBid
-	payloadAttestations       []*eth.PayloadAttestation
-	parentExecutionRequests   *enginev1.ExecutionRequestsGloas
+	// signedExecutionPayloadBidHeze backs Proto() for Heze; signedExecutionPayloadBid holds the
+	// same bid without inclusion list bits so every pre-Heze reader keeps working.
+	signedExecutionPayloadBidHeze *eth.SignedExecutionPayloadBidHeze
+	payloadAttestations           []*eth.PayloadAttestation
+	parentExecutionRequests       *enginev1.ExecutionRequestsGloas
 }
 
 var _ interfaces.ReadOnlyBeaconBlockBody = &BeaconBlockBody{}

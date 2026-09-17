@@ -2,6 +2,7 @@ package blocks
 
 import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/signing"
+	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	consensus_types "github.com/OffchainLabs/prysm/v7/consensus-types"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -158,4 +159,122 @@ func (h executionPayloadBidGloas) ExecutionRequestsRoot() [32]byte {
 		return [32]byte{}
 	}
 	return [32]byte(h.payload.ExecutionRequestsRoot)
+}
+
+// InclusionListBits returns nil: Gloas bids have no inclusion list bits.
+func (executionPayloadBidGloas) InclusionListBits() []byte {
+	return nil
+}
+
+// executionPayloadBidHeze wraps the protobuf execution payload bid for the Heze
+// fork and implements the ROExecutionPayloadBid interface.
+type executionPayloadBidHeze struct {
+	payload *ethpb.ExecutionPayloadBidHeze
+}
+
+// WrappedROExecutionPayloadBidHeze creates a new read-only execution payload bid
+// wrapper for the Heze fork from the given protobuf message.
+func WrappedROExecutionPayloadBidHeze(pb *ethpb.ExecutionPayloadBidHeze) (interfaces.ROExecutionPayloadBid, error) {
+	wrapper := executionPayloadBidHeze{payload: pb}
+	if wrapper.IsNil() {
+		return nil, consensus_types.ErrNilObjectWrapped
+	}
+	return wrapper, nil
+}
+
+// IsNil checks if the execution payload bid is nil or has invalid fields.
+func (h executionPayloadBidHeze) IsNil() bool {
+	if h.payload == nil {
+		return true
+	}
+
+	if len(h.payload.ParentBlockHash) != 32 ||
+		len(h.payload.ParentBlockRoot) != 32 ||
+		len(h.payload.BlockHash) != 32 ||
+		len(h.payload.PrevRandao) != 32 ||
+		len(h.payload.FeeRecipient) != 20 ||
+		len(h.payload.InclusionListBits) != (fieldparams.InclusionListCommitteeSize+7)/8 {
+		return true
+	}
+
+	for _, commitment := range h.payload.BlobKzgCommitments {
+		if len(commitment) != 48 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ParentBlockHash returns the hash of the parent execution block.
+func (h executionPayloadBidHeze) ParentBlockHash() [32]byte {
+	return [32]byte(h.payload.ParentBlockHash)
+}
+
+// ParentBlockRoot returns the beacon block root of the parent block.
+func (h executionPayloadBidHeze) ParentBlockRoot() [32]byte {
+	return [32]byte(h.payload.ParentBlockRoot)
+}
+
+// PrevRandao returns the previous randao value for the execution block.
+func (h executionPayloadBidHeze) PrevRandao() [32]byte {
+	return [32]byte(h.payload.PrevRandao)
+}
+
+// BlockHash returns the hash of the execution block.
+func (h executionPayloadBidHeze) BlockHash() [32]byte {
+	return [32]byte(h.payload.BlockHash)
+}
+
+// GasLimit returns the gas limit for the execution block.
+func (h executionPayloadBidHeze) GasLimit() uint64 {
+	return h.payload.GasLimit
+}
+
+// BuilderIndex returns the builder index of the builder who created this bid.
+func (h executionPayloadBidHeze) BuilderIndex() primitives.BuilderIndex {
+	return h.payload.BuilderIndex
+}
+
+// Slot returns the beacon chain slot for which this bid was created.
+func (h executionPayloadBidHeze) Slot() primitives.Slot {
+	return h.payload.Slot
+}
+
+// Value returns the payment value offered by the builder in Gwei.
+func (h executionPayloadBidHeze) Value() primitives.Gwei {
+	return primitives.Gwei(h.payload.Value)
+}
+
+// ExecutionPayment returns the execution payment offered by the builder.
+func (h executionPayloadBidHeze) ExecutionPayment() primitives.Gwei {
+	return primitives.Gwei(h.payload.ExecutionPayment)
+}
+
+// BlobKzgCommitments returns the KZG commitments for blobs.
+func (h executionPayloadBidHeze) BlobKzgCommitments() [][]byte {
+	return bytesutil.SafeCopy2dBytes(h.payload.BlobKzgCommitments)
+}
+
+// BlobKzgCommitmentCount returns the number of blob KZG commitments.
+func (h executionPayloadBidHeze) BlobKzgCommitmentCount() uint64 {
+	return uint64(len(h.payload.BlobKzgCommitments))
+}
+
+// FeeRecipient returns the execution address that will receive the builder payment.
+func (h executionPayloadBidHeze) FeeRecipient() [20]byte {
+	return [20]byte(h.payload.FeeRecipient)
+}
+
+// ExecutionRequestsRoot returns the hash tree root of the execution requests.
+func (h executionPayloadBidHeze) ExecutionRequestsRoot() [32]byte {
+	if len(h.payload.ExecutionRequestsRoot) < 32 {
+		return [32]byte{}
+	}
+	return [32]byte(h.payload.ExecutionRequestsRoot)
+}
+
+// InclusionListBits returns the EIP-7805 inclusion list bitvector.
+func (h executionPayloadBidHeze) InclusionListBits() []byte {
+	return bytesutil.SafeCopyBytes(h.payload.InclusionListBits)
 }

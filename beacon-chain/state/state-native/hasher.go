@@ -46,6 +46,8 @@ func ComputeFieldRootsWithHasher(ctx context.Context, state *BeaconState) ([][]b
 		fieldRoots = make([][]byte, params.BeaconConfig().BeaconStateFuluFieldCount)
 	case version.Gloas:
 		fieldRoots = make([][]byte, params.BeaconConfig().BeaconStateGloasFieldCount)
+	case version.Heze:
+		fieldRoots = make([][]byte, params.BeaconConfig().BeaconStateHezeFieldCount)
 	default:
 		return nil, fmt.Errorf("unknown state version %s", version.String(state.version))
 	}
@@ -259,7 +261,7 @@ func ComputeFieldRootsWithHasher(ctx context.Context, state *BeaconState) ([][]b
 
 	if state.version >= version.Gloas {
 		// Execution payload bid root for Gloas.
-		bidRoot, err := state.latestExecutionPayloadBid.HashTreeRoot()
+		bidRoot, err := state.executionPayloadBidRoot()
 		if err != nil {
 			return nil, err
 		}
@@ -391,4 +393,12 @@ func ComputeFieldRootsWithHasher(ctx context.Context, state *BeaconState) ([][]b
 		fieldRoots[types.PTCWindow.RealPosition()] = ptcWindowRoot[:]
 	}
 	return fieldRoots, nil
+}
+
+// executionPayloadBidRoot hashes the fork-appropriate execution payload bid.
+func (b *BeaconState) executionPayloadBidRoot() ([32]byte, error) {
+	if b.version >= version.Heze {
+		return b.latestExecutionPayloadBidHeze.HashTreeRoot()
+	}
+	return b.latestExecutionPayloadBid.HashTreeRoot()
 }
