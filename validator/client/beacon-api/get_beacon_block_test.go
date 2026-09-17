@@ -80,7 +80,7 @@ func TestBeaconBlockV4_DecodeClosureCachesWinningResponse(t *testing.T) {
 	}).Times(1)
 
 	validatorClient := &beaconApiValidatorClient{handler: handler}
-	got, err := validatorClient.beaconBlockV4(ctx, slot, neturl.Values{}, builderConfig)
+	got, err := validatorClient.beaconBlockV4(ctx, slot, version.Gloas, neturl.Values{}, builderConfig)
 	require.NoError(t, err)
 
 	want := &ethpb.GenericBeaconBlock{Block: &ethpb.GenericBeaconBlock_Gloas{Gloas: block}}
@@ -1718,7 +1718,7 @@ func TestBeaconBlockV4_PostWithBuilderConfig(t *testing.T) {
 		}).Times(1)
 
 		validatorClient := &beaconApiValidatorClient{handler: handler, envelopeCache: cache.NewExecutionPayloadEnvelopeCache()}
-		block, err := validatorClient.beaconBlockV4(t.Context(), slot, neturl.Values{}, builderConfig)
+		block, err := validatorClient.beaconBlockV4(t.Context(), slot, version.Gloas, neturl.Values{}, builderConfig)
 		require.NoError(t, err)
 		assert.Equal(t, "http://builder.example", block.BuilderUrl)
 		assert.DeepEqual(t, proto, block.GetGloas())
@@ -1750,7 +1750,7 @@ func TestBeaconBlockV4_PostWithBuilderConfig(t *testing.T) {
 		}, nil).Times(1)
 
 		validatorClient := &beaconApiValidatorClient{handler: handler, stateless: true, envelopeCache: cache.NewExecutionPayloadEnvelopeCache()}
-		block, err := validatorClient.beaconBlockV4(t.Context(), slot, neturl.Values{}, builderConfig)
+		block, err := validatorClient.beaconBlockV4(t.Context(), slot, version.Gloas, neturl.Values{}, builderConfig)
 		require.NoError(t, err)
 		assert.Equal(t, "", block.BuilderUrl)
 		cached, _, _ := validatorClient.envelopeCache.Take(slot)
@@ -1767,7 +1767,7 @@ func TestBeaconBlockV4_PostWithBuilderConfig(t *testing.T) {
 		).Return(nil, nil, errors.New("boom")).Times(1)
 
 		validatorClient := &beaconApiValidatorClient{handler: handler, envelopeCache: cache.NewExecutionPayloadEnvelopeCache()}
-		_, err := validatorClient.beaconBlockV4(t.Context(), slot, neturl.Values{}, builderConfig)
+		_, err := validatorClient.beaconBlockV4(t.Context(), slot, version.Gloas, neturl.Values{}, builderConfig)
 		assert.ErrorContains(t, "could not post v4 block request", err)
 	})
 
@@ -1776,7 +1776,7 @@ func TestBeaconBlockV4_PostWithBuilderConfig(t *testing.T) {
 		defer ctrl.Finish()
 
 		validatorClient := &beaconApiValidatorClient{handler: mock.NewMockHandler(ctrl)}
-		_, err := validatorClient.beaconBlockV4(t.Context(), slot, neturl.Values{}, nil)
+		_, err := validatorClient.beaconBlockV4(t.Context(), slot, version.Gloas, neturl.Values{}, nil)
 		assert.ErrorContains(t, "builder config is required", err)
 	})
 }
