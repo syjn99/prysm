@@ -61,4 +61,11 @@ const (
 	MaxDataColumnSidecarSize         = 8585272 // MaxDataColumnSidecarSize is the maximum size of a data column sidecar, ~8 MiB.
 	MaxPartialDataColumnSidecarSize  = 8585741 // MaxPartialDataColumnSidecarSize is the maximum size of a partial data column sidecar, ~8 MiB.
 	MaxSignedExecutionPayloadBidSize = 196932  // MaxSignedExecutionPayloadBidSize is the maximum size of a signed execution payload bid, ~192 KiB.
+
+	// Introduced in Heze network upgrade.
+	InclusionListCommitteeSize = 16 // InclusionListCommitteeSize is the size of the inclusion list committee.
+
+	// Type-specific SSZ bounds, introduced in Heze network upgrade.
+	MaxSignedExecutionPayloadBidSizeHeze = 196934 // MaxSignedExecutionPayloadBidSizeHeze is the maximum size of a signed execution payload bid, ~192 KiB.
+	MaxSignedInclusionListSize           = 41112  // MaxSignedInclusionListSize is the maximum size of a signed inclusion list, ~40 KiB.
 )

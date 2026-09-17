@@ -185,6 +185,7 @@ type BeaconChainConfig struct {
 	BeaconStateElectraFieldCount   int             // BeaconStateElectraFieldCount defines how many fields are in beacon state post upgrade to Electra.
 	BeaconStateFuluFieldCount      int             // BeaconStateFuluFieldCount defines how many fields are in beacon state post upgrade to Fulu.
 	BeaconStateGloasFieldCount     int             // BeaconStateGloasFieldCount defines how many fields are in beacon state post upgrade to Gloas.
+	BeaconStateHezeFieldCount      int             // BeaconStateHezeFieldCount defines how many fields are in beacon state post upgrade to Heze.
 
 	// Slasher constants.
 	WeakSubjectivityPeriod    primitives.Epoch // WeakSubjectivityPeriod defines the time period expressed in number of epochs were proof of stake network should validate block headers and attestations for slashable events.
@@ -209,6 +210,8 @@ type BeaconChainConfig struct {
 	FuluForkEpoch        primitives.Epoch `yaml:"FULU_FORK_EPOCH" spec:"true"`        // FuluForkEpoch is used to represent the assigned fork epoch for fulu.
 	GloasForkVersion     []byte           `yaml:"GLOAS_FORK_VERSION" spec:"true"`     // GloasForkVersion is used to represent the fork version for gloas.
 	GloasForkEpoch       primitives.Epoch `yaml:"GLOAS_FORK_EPOCH" spec:"true"`       // GloasForkEpoch is used to represent the assigned fork epoch for gloas.
+	HezeForkVersion      []byte           `yaml:"HEZE_FORK_VERSION" spec:"true"`      // HezeForkVersion is used to represent the fork version for heze.
+	HezeForkEpoch        primitives.Epoch `yaml:"HEZE_FORK_EPOCH" spec:"true"`        // HezeForkEpoch is used to represent the assigned fork epoch for heze.
 
 	ForkVersionSchedule map[[fieldparams.VersionLength]byte]primitives.Epoch // Schedule of fork epochs by version.
 	ForkVersionNames    map[[fieldparams.VersionLength]byte]string           // Human-readable names of fork versions.
@@ -336,6 +339,12 @@ type BeaconChainConfig struct {
 	MaxBuilderDepositRequestsPerPayload  uint64 `yaml:"MAX_BUILDER_DEPOSIT_REQUESTS_PER_PAYLOAD" spec:"true"`   // MaxBuilderDepositRequestsPerPayload is the maximum number of builder deposit requests in each payload (EIP-8282).
 	MaxBuilderExitRequestsPerPayload     uint64 `yaml:"MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD" spec:"true"`      // MaxBuilderExitRequestsPerPayload is the maximum number of builder exit requests in each payload (EIP-8282).
 
+	// Values introduced in Heze upgrade (EIP-7805)
+	InclusionListDueBPS                  primitives.BP `yaml:"INCLUSION_LIST_DUE_BPS" spec:"true"`                    // InclusionListDueBPS defines the inclusion list due time in basis points of the slot.
+	MaxRequestInclusionList              uint64        `yaml:"MAX_REQUEST_INCLUSION_LIST" spec:"true"`                // MaxRequestInclusionList is the maximum number of inclusion lists in a single request.
+	MinSlotsForInclusionListsRequests    uint64        `yaml:"MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS" spec:"true"`    // MinSlotsForInclusionListsRequests is the minimum number of slots the node will keep inclusion lists for.
+	MaxTransactionsBytesPerInclusionList uint64        `yaml:"MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST" spec:"true"` // MaxTransactionsBytesPerInclusionList bounds the total size in bytes of the transactions in an inclusion list.
+
 	// Networking Specific Parameters
 	MaxPayloadSize                  uint64          `yaml:"MAX_PAYLOAD_SIZE" spec:"true"`                   // MAX_PAYLOAD_SIZE is the maximum allowed size of uncompressed payload in gossip messages and rpc chunks.
 	AttestationSubnetCount          uint64          `yaml:"ATTESTATION_SUBNET_COUNT" spec:"true"`           // AttestationSubnetCount is the number of attestation subnets used in the gossipsub protocol.
@@ -388,6 +397,7 @@ func (b *BeaconChainConfig) VersionToForkEpochMap() map[int]primitives.Epoch {
 		version.Electra:   b.ElectraForkEpoch,
 		version.Fulu:      b.FuluForkEpoch,
 		version.Gloas:     b.GloasForkEpoch,
+		version.Heze:      b.HezeForkEpoch,
 	}
 }
 
@@ -675,6 +685,7 @@ func initForkSchedule(b *BeaconChainConfig) *NetworkSchedule {
 		{Epoch: b.ElectraForkEpoch, isFork: true, ForkVersion: to4(b.ElectraForkVersion), MaxBlobsPerBlock: uint64(b.DeprecatedMaxBlobsPerBlockElectra), VersionEnum: version.Electra},
 		{Epoch: b.FuluForkEpoch, isFork: true, ForkVersion: to4(b.FuluForkVersion), VersionEnum: version.Fulu},
 		{Epoch: b.GloasForkEpoch, isFork: true, ForkVersion: to4(b.GloasForkVersion), VersionEnum: version.Gloas},
+		{Epoch: b.HezeForkEpoch, isFork: true, ForkVersion: to4(b.HezeForkVersion), VersionEnum: version.Heze},
 	})
 }
 
@@ -700,6 +711,7 @@ func configForkSchedule(b *BeaconChainConfig) map[[fieldparams.VersionLength]byt
 	fvs[bytesutil.ToBytes4(b.ElectraForkVersion)] = b.ElectraForkEpoch
 	fvs[bytesutil.ToBytes4(b.FuluForkVersion)] = b.FuluForkEpoch
 	fvs[bytesutil.ToBytes4(b.GloasForkVersion)] = b.GloasForkEpoch
+	fvs[bytesutil.ToBytes4(b.HezeForkVersion)] = b.HezeForkEpoch
 	return fvs
 }
 
@@ -724,6 +736,7 @@ func ConfigForkVersions(b *BeaconChainConfig) map[[fieldparams.VersionLength]byt
 		bytesutil.ToBytes4(b.ElectraForkVersion):   version.Electra,
 		bytesutil.ToBytes4(b.FuluForkVersion):      version.Fulu,
 		bytesutil.ToBytes4(b.GloasForkVersion):     version.Gloas,
+		bytesutil.ToBytes4(b.HezeForkVersion):      version.Heze,
 	}
 }
 
@@ -805,6 +818,11 @@ func FuluEnabled() bool {
 // GloasEnabled centralizes the check to determine if code paths that are specific to Gloas should be allowed to execute.
 func GloasEnabled() bool {
 	return BeaconConfig().GloasForkEpoch < math.MaxUint64
+}
+
+// HezeEnabled centralizes the check to determine if code paths that are specific to Heze should be allowed to execute.
+func HezeEnabled() bool {
+	return BeaconConfig().HezeForkEpoch < math.MaxUint64
 }
 
 // WithinDAPeriod checks if the block epoch is within the data availability retention period.
