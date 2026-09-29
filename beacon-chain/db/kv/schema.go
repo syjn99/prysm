@@ -16,6 +16,7 @@ var (
 	stateValidatorsBucket                   = []byte("state-validators")
 	stateDiffBucket                         = []byte("state-diff")
 	hotStateSnapshotsBucket                 = []byte("hot-state-snapshots")
+	archiveResumeSnapshotsBucket            = []byte("archive-resume-snapshots")
 	executionPayloadEnvelopesBucket         = []byte("execution-payload-envelopes")
 	executionPayloadEnvelopeBlockHashBucket = []byte("execution-payload-envelope-block-hash-index")
 

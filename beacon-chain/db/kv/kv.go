@@ -145,6 +145,7 @@ var Buckets = [][]byte{
 	lightClientSyncCommitteeBucket,
 	stateDiffBucket,
 	hotStateSnapshotsBucket,
+	archiveResumeSnapshotsBucket,
 	// Indices buckets.
 	blockSlotIndicesBucket,
 	stateSlotIndicesBucket,

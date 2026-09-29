@@ -225,10 +225,7 @@ func TestCompleteArchiveRegeneration_MarkCompleteFailureKeepsSuppression(t *test
 
 	// A resume snapshot that must survive, since the next boot still needs it as a replay base.
 	resumeRoot := [32]byte{'r'}
-	require.NoError(t, beaconDB.(*kv.Store).SaveHotStateSnapshot(ctx, st, resumeRoot))
-	service.archive.lock.Lock()
-	service.archive.resumeSnapshotRoots = [][32]byte{resumeRoot}
-	service.archive.lock.Unlock()
+	require.NoError(t, beaconDB.(*kv.Store).SaveArchiveResumeSnapshot(ctx, st, resumeRoot))
 
 	writeErr := errors.New("status write failed")
 	done, err := service.CompleteArchiveRegeneration(ctx, fSlot+1, func(context.Context) error {
@@ -245,4 +242,77 @@ func TestCompleteArchiveRegeneration_MarkCompleteFailureKeepsSuppression(t *test
 	require.Equal(t, true, done)
 	require.Equal(t, false, service.ArchivePending())
 	require.Equal(t, false, beaconDB.(*kv.Store).HasHotStateSnapshot(ctx, resumeRoot))
+}
+
+func TestSaveArchiveResumeSnapshot_DeletesSnapshotsFromPreviousRun(t *testing.T) {
+	ctx := t.Context()
+	setStateDiffExponents()
+	beaconDB := testDB.SetupDB(t)
+	require.NoError(t, beaconDB.(*kv.Store).InitStateDiffCacheForTesting(t, 0))
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true})
+	defer resetCfg()
+	store := beaconDB.(*kv.Store)
+
+	st, _ := util.DeterministicGenesisState(t, 32)
+	first := [32]byte{4}
+	require.NoError(t, st.SetSlot(archiveResumeSnapshotInterval))
+	previous := New(beaconDB, doublylinkedtree.New())
+	previous.SetArchivePending(true)
+	require.NoError(t, previous.saveArchiveResumeSnapshot(ctx, first, st))
+
+	restarted := New(beaconDB, doublylinkedtree.New())
+	restarted.SetArchivePending(true)
+	second := [32]byte{6}
+	require.NoError(t, st.SetSlot(2*archiveResumeSnapshotInterval))
+	require.NoError(t, restarted.saveArchiveResumeSnapshot(ctx, second, st))
+
+	require.Equal(t, false, store.HasHotStateSnapshot(ctx, first))
+	require.Equal(t, true, store.HasHotStateSnapshot(ctx, second))
+	roots, err := store.ArchiveResumeSnapshotRoots(ctx)
+	require.NoError(t, err)
+	require.DeepEqual(t, [][32]byte{second}, roots)
+}
+
+func TestForceCheckpoint_ArchivePendingSnapshotIsTracked(t *testing.T) {
+	ctx := t.Context()
+	setStateDiffExponents()
+	beaconDB := testDB.SetupDB(t)
+	require.NoError(t, beaconDB.(*kv.Store).InitStateDiffCacheForTesting(t, 0))
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true})
+	defer resetCfg()
+	store := beaconDB.(*kv.Store)
+
+	service := New(beaconDB, doublylinkedtree.New())
+	service.SetArchivePending(true)
+
+	st, _ := util.DeterministicGenesisState(t, 32)
+	root := [32]byte{'f'}
+	service.hotStateCache.put(root, st)
+	require.NoError(t, service.ForceCheckpoint(ctx, root[:]))
+
+	roots, err := store.ArchiveResumeSnapshotRoots(ctx)
+	require.NoError(t, err)
+	require.DeepEqual(t, [][32]byte{root}, roots)
+	require.Equal(t, true, store.HasHotStateSnapshot(ctx, root))
+}
+
+func TestSaveArchiveResumeSnapshot_LeavesUntrackedSnapshots(t *testing.T) {
+	ctx := t.Context()
+	setStateDiffExponents()
+	beaconDB := testDB.SetupDB(t)
+	require.NoError(t, beaconDB.(*kv.Store).InitStateDiffCacheForTesting(t, 0))
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true})
+	defer resetCfg()
+	store := beaconDB.(*kv.Store)
+
+	st, _ := util.DeterministicGenesisState(t, 32)
+	origin := [32]byte{'o'}
+	require.NoError(t, store.SaveHotStateSnapshot(ctx, st, origin))
+	require.NoError(t, store.SaveArchiveResumeSnapshot(ctx, st, origin))
+
+	roots, err := store.ArchiveResumeSnapshotRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(roots))
+	require.NoError(t, store.DeleteArchiveResumeSnapshots(ctx, [][32]byte{origin}))
+	require.Equal(t, true, store.HasHotStateSnapshot(ctx, origin))
 }

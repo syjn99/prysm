@@ -74,9 +74,8 @@ type State struct {
 
 // archiveState tracks whether an archive node is still regenerating history.
 type archiveState struct {
-	lock                sync.RWMutex
-	pending             bool
-	resumeSnapshotRoots [][32]byte
+	lock    sync.RWMutex
+	pending bool
 }
 
 // This tracks the config in the event of long non-finality,

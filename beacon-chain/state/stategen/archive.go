@@ -3,6 +3,7 @@ package stategen
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -58,17 +59,15 @@ func (s *State) CompleteArchiveRegeneration(
 		return false, errors.Wrap(err, "could not record archive regeneration as complete")
 	}
 
-	s.archive.lock.Lock()
-	s.archive.pending = false
-	roots := s.archive.resumeSnapshotRoots
-	s.archive.resumeSnapshotRoots = nil
-	s.archive.lock.Unlock()
+	s.SetArchivePending(false)
 
-	if len(roots) > 0 {
-		if deleter, ok := s.beaconDB.(hotStateSnapshotDeleter); ok {
-			if err := deleter.DeleteHotStateSnapshots(ctx, roots); err != nil {
-				log.WithError(err).Warn("Could not delete archive resume snapshots")
-			}
+	if store, ok := s.beaconDB.(archiveResumeSnapshotStore); ok {
+		roots, err := store.ArchiveResumeSnapshotRoots(ctx)
+		if err == nil {
+			err = store.DeleteArchiveResumeSnapshots(ctx, roots)
+		}
+		if err != nil {
+			log.WithError(err).Warn("Could not delete archive resume snapshots")
 		}
 	}
 
@@ -85,34 +84,33 @@ func (s *State) saveArchiveResumeSnapshot(ctx context.Context, blockRoot [32]byt
 	if st.Slot()%archiveResumeSnapshotInterval != 0 {
 		return nil
 	}
-	saver, ok := s.beaconDB.(hotStateSnapshotSaver)
+	store, ok := s.beaconDB.(archiveResumeSnapshotStore)
 	if !ok {
 		return nil
 	}
-	if err := saver.SaveHotStateSnapshot(ctx, st, blockRoot); err != nil {
+	if err := store.SaveArchiveResumeSnapshot(ctx, st, blockRoot); err != nil {
 		return err
 	}
-
-	s.archive.lock.Lock()
-	stale := s.archive.resumeSnapshotRoots
-	s.archive.resumeSnapshotRoots = [][32]byte{blockRoot}
-	s.archive.lock.Unlock()
 
 	log.WithFields(logrus.Fields{
 		"slot": st.Slot(),
 		"root": fmt.Sprintf("%#x", blockRoot),
 	}).Info("Saved archive restart snapshot")
 
-	if len(stale) > 0 {
-		if deleter, ok := s.beaconDB.(hotStateSnapshotDeleter); ok {
-			if err := deleter.DeleteHotStateSnapshots(ctx, stale); err != nil {
-				log.WithError(err).Warn("Could not delete superseded archive resume snapshot")
-			}
-		}
+	roots, err := store.ArchiveResumeSnapshotRoots(ctx)
+	if err == nil {
+		err = store.DeleteArchiveResumeSnapshots(ctx, slices.DeleteFunc(roots, func(r [32]byte) bool {
+			return r == blockRoot
+		}))
+	}
+	if err != nil {
+		log.WithError(err).Warn("Could not delete superseded archive resume snapshots")
 	}
 	return nil
 }
 
-type hotStateSnapshotDeleter interface {
-	DeleteHotStateSnapshots(ctx context.Context, blockRoots [][32]byte) error
+type archiveResumeSnapshotStore interface {
+	SaveArchiveResumeSnapshot(ctx context.Context, st state.ReadOnlyBeaconState, blockRoot [32]byte) error
+	ArchiveResumeSnapshotRoots(ctx context.Context) ([][32]byte, error)
+	DeleteArchiveResumeSnapshots(ctx context.Context, blockRoots [][32]byte) error
 }

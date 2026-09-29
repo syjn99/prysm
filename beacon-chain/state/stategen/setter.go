@@ -46,11 +46,11 @@ func (s *State) ForceCheckpoint(ctx context.Context, blockRoot []byte) error {
 	// The tree cannot accept a write above the archive walk's frontier, and this runs on every graceful
 	// shutdown. Persist by root instead, which doubles as the resume point for the next boot.
 	if s.ArchivePending() {
-		saver, ok := s.beaconDB.(hotStateSnapshotSaver)
+		store, ok := s.beaconDB.(archiveResumeSnapshotStore)
 		if !ok {
 			return nil
 		}
-		return saver.SaveHotStateSnapshot(ctx, fs, root32)
+		return store.SaveArchiveResumeSnapshot(ctx, fs, root32)
 	}
 
 	return s.beaconDB.SaveState(ctx, fs, root32)
