@@ -111,7 +111,7 @@ func (p *p2pBatchWorkerPool) complete() (batch, error) {
 	case err := <-p.shutdownErr:
 		return batch{}, errors.Wrap(err, "fatal error from backfill worker pool")
 	case <-p.ctx.Done():
-		log.WithError(p.ctx.Err()).Info("p2pBatchWorkerPool context canceled, shutting down")
+		log.WithError(p.ctx.Err()).Info("Backfill worker pool context canceled, shutting down")
 		return batch{}, p.ctx.Err()
 	}
 }
@@ -143,7 +143,7 @@ func (p *p2pBatchWorkerPool) batchRouter(pa PeerAssigner) {
 			todo = append(todo, b)
 			sortBatchDesc(todo)
 		case <-p.ctx.Done():
-			log.WithError(p.ctx.Err()).Info("p2pBatchWorkerPool context canceled, shutting down")
+			log.WithError(p.ctx.Err()).Info("Backfill worker pool context canceled, shutting down")
 			p.shutdown(p.ctx.Err())
 			return
 		}
