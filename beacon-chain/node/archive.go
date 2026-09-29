@@ -30,46 +30,41 @@ type archiveOriginInitializer interface {
 }
 
 // initArchiveOrigin loads and validates the archive origin state, but deliberately writes nothing.
-func (b *BeaconNode) initArchiveOrigin(cliCtx *cli.Context) error {
+func (b *BeaconNode) initArchiveOrigin(cliCtx *cli.Context) (state.BeaconState, error) {
 	if !features.Get().EnableArchive {
-		return nil
+		return nil, nil
 	}
 	// openDB downgrades to the legacy state layout when an existing database predates state-diff. Archive
 	// mode is meaningless without the tree, so refuse to run in that configuration.
 	if !features.Get().EnableStateDiff {
-		return errors.New("--enable-archive requires the state-diff database layout, but it was disabled " +
+		return nil, errors.New("--enable-archive requires the state-diff database layout, but it was disabled " +
 			"because this database was created without it; use a fresh data directory")
 	}
 	if cliCtx.Bool(flags.BeaconDBPruning.Name) {
-		return fmt.Errorf("--enable-archive cannot be combined with --%s: pruning deletes the history the "+
+		return nil, fmt.Errorf("--enable-archive cannot be combined with --%s: pruning deletes the history the "+
 			"archive is built from", flags.BeaconDBPruning.Name)
 	}
 	if _, ok := b.db.(archiveOriginInitializer); !ok {
-		return errors.New("database does not support archive mode")
+		return nil, errors.New("database does not support archive mode")
 	}
 
 	st, err := archiveOriginState(cliCtx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := validateArchiveOrigin(st); err != nil {
-		return err
+		return nil, err
 	}
-	// Held until finalizeArchiveOrigin rather than re-read, which would mean unmarshalling the state twice.
-	b.archiveOriginState = st
 	slot := st.Slot()
 	b.ArchiveOriginSlot = &slot
-	return nil
+	return st, nil
 }
 
 // finalizeArchiveOrigin anchors the state-diff tree at the archive origin, once the sync origin exists.
-func (b *BeaconNode) finalizeArchiveOrigin(ctx context.Context) error {
-	st := b.archiveOriginState
+func (b *BeaconNode) finalizeArchiveOrigin(ctx context.Context, st state.BeaconState) error {
 	if st == nil {
 		return nil
 	}
-	// Release the reference either way; a mainnet state is not something to keep alive for the whole run.
-	b.archiveOriginState = nil
 
 	if err := b.checkArchiveOriginBelowSyncOrigin(ctx); err != nil {
 		return err

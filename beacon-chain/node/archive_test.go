@@ -74,8 +74,8 @@ func TestFinalizeArchiveOrigin_RejectedOriginLeavesDBReAnchorable(t *testing.T) 
 	require.NoError(t, tooHigh.SetSlot(primitives.Slot(syncOrigin)*4))
 	tooHighSlot := tooHigh.Slot()
 
-	b := &BeaconNode{ctx: ctx, db: beaconDB, archiveOriginState: tooHigh, ArchiveOriginSlot: &tooHighSlot}
-	require.ErrorContains(t, "is above the sync origin slot", b.finalizeArchiveOrigin(ctx))
+	b := &BeaconNode{ctx: ctx, db: beaconDB, ArchiveOriginSlot: &tooHighSlot}
+	require.ErrorContains(t, "is above the sync origin slot", b.finalizeArchiveOrigin(ctx, tooHigh))
 
 	// Nothing was written, so the corrected origin anchors cleanly rather than hitting
 	// "archive origin state changed" / "already anchored".
@@ -87,12 +87,11 @@ func TestFinalizeArchiveOrigin_RejectedOriginLeavesDBReAnchorable(t *testing.T) 
 	require.NoError(t, good.SetSlot(primitives.Slot(syncOrigin)))
 	goodSlot := good.Slot()
 
-	b = &BeaconNode{ctx: ctx, db: beaconDB, archiveOriginState: good, ArchiveOriginSlot: &goodSlot}
-	require.NoError(t, b.finalizeArchiveOrigin(ctx))
+	b = &BeaconNode{ctx: ctx, db: beaconDB, ArchiveOriginSlot: &goodSlot}
+	require.NoError(t, b.finalizeArchiveOrigin(ctx, good))
 
 	as, err := store.ArchiveStatus(ctx)
 	require.NoError(t, err)
 	require.Equal(t, goodSlot, as.OriginSlot)
 	require.Equal(t, true, b.archiveRegenPending)
-	require.IsNil(t, b.archiveOriginState)
 }

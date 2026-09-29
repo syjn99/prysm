@@ -133,12 +133,9 @@ type BeaconNode struct {
 	syncChecker               *initialsync.SyncChecker
 	slasherEnabled            bool
 	archiveRegenPending       bool
-	// archiveOriginState carries the validated archive origin from initArchiveOrigin to
-	// finalizeArchiveOrigin, which clears it. Nil outside that window.
-	archiveOriginState state.BeaconState
-	lcStore            *lightclient.Store
-	ConfigOptions      []params.Option
-	SyncNeedsWaiter    func() (das.SyncNeeds, error)
+	lcStore                   *lightclient.Store
+	ConfigOptions             []params.Option
+	SyncNeedsWaiter           func() (das.SyncNeeds, error)
 	// ArchiveOriginSlot is the slot of the archive origin state, set only in archive mode. It is the
 	// state-diff tree offset and the slot backfill stops at.
 	ArchiveOriginSlot *primitives.Slot
@@ -353,7 +350,8 @@ func configureBeacon(cliCtx *cli.Context) error {
 func startBaseServices(cliCtx *cli.Context, beacon *BeaconNode, depositAddress string, clearer *dbClearer) (*backfill.Store, error) {
 	ctx := cliCtx.Context
 	// Validates the archive origin without touching the database; finalizeArchiveOrigin anchors it below.
-	if err := beacon.initArchiveOrigin(cliCtx); err != nil {
+	archiveOrigin, err := beacon.initArchiveOrigin(cliCtx)
+	if err != nil {
 		return nil, errors.Wrap(err, "could not initialize archive origin")
 	}
 
@@ -363,7 +361,7 @@ func startBaseServices(cliCtx *cli.Context, beacon *BeaconNode, depositAddress s
 	}
 	// Must follow startDB: the archive origin is validated against the sync origin, which only exists once
 	// genesis or checkpoint data has been written.
-	if err := beacon.finalizeArchiveOrigin(ctx); err != nil {
+	if err := beacon.finalizeArchiveOrigin(ctx, archiveOrigin); err != nil {
 		return nil, errors.Wrap(err, "could not anchor the archive origin")
 	}
 
