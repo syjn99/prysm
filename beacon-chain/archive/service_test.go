@@ -139,3 +139,34 @@ func TestStop_UnblocksBackfillWait(t *testing.T) {
 		t.Fatal("Stop did not return while the service was waiting for backfill")
 	}
 }
+
+func TestRound_NoHandoffBeforeOriginIsVerified(t *testing.T) {
+	setStateDiffExponents([]int{11, 9, 5})
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
+	defer resetCfg()
+
+	ctx := t.Context()
+	store := testDB.SetupDB(t).(*kv.Store)
+	genesisState, _ := util.DeterministicGenesisState(t, 64)
+	require.NoError(t, store.InitializeArchiveOrigin(ctx, genesisState))
+	saveGenesisBlock(t, ctx, store, genesisState)
+	require.NoError(t, store.SaveFinalizedCheckpoint(ctx, &ethpb.Checkpoint{
+		Epoch: 0,
+		Root:  finalizedRootAtSlot(t, store, 0),
+	}))
+
+	sg := &mockStateManager{pending: true, handoff: true}
+	svc := New(ctx, store, sg, nil, nil)
+	as, err := store.ArchiveStatus(ctx)
+	require.NoError(t, err)
+	svc.setStatus(as)
+
+	done, err := svc.round(ctx)
+	require.NoError(t, err)
+	require.Equal(t, false, done)
+	require.Equal(t, true, sg.ArchivePending())
+	require.Equal(t, primitives.Slot(0), sg.nextArg)
+	persisted, err := store.ArchiveStatus(ctx)
+	require.NoError(t, err)
+	require.Equal(t, false, persisted.Complete)
+}

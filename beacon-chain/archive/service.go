@@ -149,6 +149,10 @@ func (s *Service) round(ctx context.Context) (bool, error) {
 		as = s.status()
 	}
 
+	if as.RegeneratedThroughSlot == as.OriginSlot {
+		return false, nil
+	}
+
 	next := nextBoundary(as.OriginSlot, as.RegeneratedThroughSlot)
 	// Persisting the completed status disarms the frontier guard in the database, so a failure reports no handoff.
 	complete := *as
