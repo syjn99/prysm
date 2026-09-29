@@ -34,12 +34,6 @@ func (b *BeaconNode) initArchiveOrigin(cliCtx *cli.Context) (state.BeaconState, 
 	if !features.Get().EnableArchive {
 		return nil, nil
 	}
-	// openDB downgrades to the legacy state layout when an existing database predates state-diff. Archive
-	// mode is meaningless without the tree, so refuse to run in that configuration.
-	if !features.Get().EnableStateDiff {
-		return nil, errors.New("--enable-archive requires the state-diff database layout, but it was disabled " +
-			"because this database was created without it; use a fresh data directory")
-	}
 	if cliCtx.Bool(flags.BeaconDBPruning.Name) {
 		return nil, fmt.Errorf("--enable-archive cannot be combined with --%s: pruning deletes the history the "+
 			"archive is built from", flags.BeaconDBPruning.Name)

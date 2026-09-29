@@ -113,7 +113,8 @@ func (s *Store) archivePending() (primitives.Slot, bool) {
 // InitializeArchiveOrigin anchors the state-diff tree at the given origin state and records the status.
 func (s *Store) InitializeArchiveOrigin(ctx context.Context, st state.BeaconState) error {
 	if !features.Get().EnableStateDiff {
-		return errors.New("archive mode requires the state-diff database layout")
+		return errors.New("archive mode requires the state-diff database layout, but it was disabled " +
+			"because this database was created without it; use a fresh data directory")
 	}
 	existing, err := s.ArchiveStatus(ctx)
 	if err != nil && !errors.Is(err, ErrNotFound) {
