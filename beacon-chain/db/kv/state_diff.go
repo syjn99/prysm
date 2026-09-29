@@ -237,9 +237,8 @@ func (s *Store) getDiff(lvl int, slot uint64) (hdiff.HdiffBytes, error) {
 
 func (s *Store) getFullSnapshot(slot uint64) (state.BeaconState, error) {
 	if s.stateDiffCache != nil {
-		// The cached anchor is shared, and callers of getFullSnapshot may mutate the result.
 		if anchor := s.stateDiffCache.getAnchor(0, withExactSlot(primitives.Slot(slot))); anchor != nil {
-			return anchor.Copy(), nil
+			return anchor, nil
 		}
 	}
 

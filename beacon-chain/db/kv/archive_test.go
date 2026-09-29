@@ -275,6 +275,18 @@ func TestLatestLevelZeroSlot(t *testing.T) {
 	require.Equal(t, uint64(1), latestLevelZeroSlot(db, 1))
 }
 
+// memoized returns the deserialized anchor held in the memo for the level, without promoting it.
+func memoized(c *stateDiffCache, level int) state.BeaconState {
+	c.Lock()
+	defer c.Unlock()
+	for _, e := range c.memo {
+		if e.state != nil && e.level == level {
+			return e.state
+		}
+	}
+	return nil
+}
+
 // The memo must serve repeated reads of the same anchor and be dropped when the anchor is replaced.
 func TestStateDiff_AnchorMemo(t *testing.T) {
 	setDefaultStateDiffExponents()
@@ -287,18 +299,22 @@ func TestStateDiff_AnchorMemo(t *testing.T) {
 	st, _ := createState(t, 0, version.Phase0)
 	require.NoError(t, db.saveStateByDiff(ctx, st))
 
-	first := db.stateDiffCache.getAnchor(0)
+	require.NotNil(t, db.stateDiffCache.getAnchor(0))
+	first := memoized(db.stateDiffCache, 0)
 	require.NotNil(t, first)
 	second := db.stateDiffCache.getAnchor(0)
-	// Same object: the second read did not deserialize again.
-	require.Equal(t, true, first == second)
+	require.NotNil(t, second)
+	// Callers get a copy, but the second read was served from the memo without deserializing again.
+	require.Equal(t, false, first == second)
+	require.Equal(t, true, first == memoized(db.stateDiffCache, 0))
 
 	replacement, _ := createState(t, primitives.Slot(math.PowerOf2(18)), version.Phase0)
 	require.NoError(t, db.stateDiffCache.setAnchor(0, replacement))
+	require.IsNil(t, memoized(db.stateDiffCache, 0))
 	third := db.stateDiffCache.getAnchor(0)
 	require.NotNil(t, third)
-	require.Equal(t, false, first == third)
 	require.Equal(t, primitives.Slot(math.PowerOf2(18)), third.Slot())
+	require.Equal(t, false, first == memoized(db.stateDiffCache, 0))
 
 	db.stateDiffCache.clearAnchors()
 	require.IsNil(t, db.stateDiffCache.getAnchor(0))
@@ -322,16 +338,14 @@ func TestStateDiff_AnchorMemoIsBounded(t *testing.T) {
 	}
 
 	// Touch every level once; each is a miss, so the oldest is evicted as we go.
-	seen := make([]state.ReadOnlyBeaconState, anchorMemoSize+1)
 	for lvl := range anchorMemoSize + 1 {
-		seen[lvl] = cache.getAnchor(lvl)
-		require.NotNil(t, seen[lvl])
+		require.NotNil(t, cache.getAnchor(lvl))
 	}
 
 	// The most recent anchorMemoSize levels are still memoized.
 	for lvl := 1; lvl < anchorMemoSize+1; lvl++ {
-		require.Equal(t, true, seen[lvl] == cache.getAnchor(lvl), "level %d should be memoized", lvl)
+		require.NotNil(t, memoized(cache, lvl), "level %d should be memoized", lvl)
 	}
 	// Level 0 fell out and is deserialized afresh.
-	require.Equal(t, false, seen[0] == cache.getAnchor(0))
+	require.IsNil(t, memoized(cache, 0))
 }

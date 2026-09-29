@@ -263,7 +263,7 @@ func withExactSlot(slot primitives.Slot) optFunc {
 	}
 }
 
-// getAnchor returns the anchor state for the given level. The result is shared and must be treated as read-only.
+// getAnchor returns a copy of the anchor state for the given level; the caller is free to mutate it.
 func (c *stateDiffCache) getAnchor(level int, opts ...optFunc) state.BeaconState {
 	cfg := getAnchorOpts{}
 
@@ -285,7 +285,7 @@ func (c *stateDiffCache) getAnchor(level int, opts ...optFunc) state.BeaconState
 	}
 	if st := c.memoGet(level); st != nil {
 		c.Unlock()
-		return st
+		return st.Copy()
 	}
 	generation := c.anchorGeneration
 	c.Unlock()
@@ -305,12 +305,12 @@ func (c *stateDiffCache) getAnchor(level int, opts ...optFunc) state.BeaconState
 	}
 
 	c.Lock()
-	defer c.Unlock()
 	// The anchors may have been replaced while we deserialized; memoizing then would cache a stale state.
 	if generation == c.anchorGeneration {
 		c.memoPut(level, st)
 	}
-	return st
+	c.Unlock()
+	return st.Copy()
 }
 
 func (c *stateDiffCache) setAnchor(level int, anchorState state.ReadOnlyBeaconState) error {
