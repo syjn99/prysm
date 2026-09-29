@@ -51,6 +51,8 @@ type StateManager interface {
 // Service regenerates historical states into the state-diff tree.
 type Service struct {
 	ctx            context.Context
+	cancel         context.CancelFunc
+	done           chan struct{}
 	db             Database
 	sg             StateManager
 	cw             startup.ClockWaiter
@@ -65,8 +67,11 @@ var _ runtime.Service = (*Service)(nil)
 // New creates the archive regeneration service. backfillWaiter blocks until backfill has finished importing
 // blocks down to the archive origin.
 func New(ctx context.Context, d Database, sg StateManager, cw startup.ClockWaiter, backfillWaiter func() error) *Service {
+	ctx, cancel := context.WithCancel(ctx)
 	return &Service{
 		ctx:            ctx,
+		cancel:         cancel,
+		done:           make(chan struct{}),
 		db:             d,
 		sg:             sg,
 		cw:             cw,
@@ -78,12 +83,12 @@ func New(ctx context.Context, d Database, sg StateManager, cw startup.ClockWaite
 // Start runs the regeneration loop in the current goroutine until the walk hands cold state migration back to
 // the normal finalization-driven path, or the node shuts down.
 func (s *Service) Start() {
+	defer close(s.done)
 	if !s.sg.ArchivePending() {
 		log.Debug("Archive state regeneration is not pending; service is idle")
 		return
 	}
-	ctx, cancel := context.WithCancel(s.ctx)
-	defer cancel()
+	ctx := s.ctx
 
 	as, err := s.db.ArchiveStatus(ctx)
 	if err != nil {
@@ -98,11 +103,9 @@ func (s *Service) Start() {
 	}
 	// The walk needs every block above the origin, so it cannot start until backfill is done.
 	log.WithField("originSlot", as.OriginSlot).Info("Waiting for backfill to complete before regenerating states")
-	if s.backfillWaiter != nil {
-		if err := s.backfillWaiter(); err != nil {
-			log.WithError(err).Error("Error waiting for backfill to complete")
-			return
-		}
+	if err := s.waitForBackfill(ctx); err != nil {
+		log.WithError(err).Error("Error waiting for backfill to complete")
+		return
 	}
 	log.WithFields(logrus.Fields{
 		"originSlot":             as.OriginSlot,
@@ -194,7 +197,25 @@ func (s *Service) setStatus(as *kv.ArchiveStatus) {
 	s.archiveStatus = &cp
 }
 
-func (*Service) Stop() error {
+func (s *Service) waitForBackfill(ctx context.Context) error {
+	if s.backfillWaiter == nil {
+		return nil
+	}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.backfillWaiter()
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	}
+}
+
+func (s *Service) Stop() error {
+	s.cancel()
+	<-s.done
 	return nil
 }
 

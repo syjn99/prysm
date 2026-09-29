@@ -2,9 +2,11 @@ package archive
 
 import (
 	"testing"
+	"time"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	testDB "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/startup"
 	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -101,4 +103,39 @@ func archivePendingForTesting(t *testing.T, store *kv.Store) (primitives.Slot, b
 	as, err := store.ArchiveStatus(t.Context())
 	require.NoError(t, err)
 	return as.RegeneratedThroughSlot, !as.Complete
+}
+
+func TestStop_UnblocksBackfillWait(t *testing.T) {
+	setStateDiffExponents([]int{11, 9, 5})
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
+	defer resetCfg()
+
+	ctx := t.Context()
+	store := testDB.SetupDB(t).(*kv.Store)
+	genesisState, _ := util.DeterministicGenesisState(t, 64)
+	require.NoError(t, store.InitializeArchiveOrigin(ctx, genesisState))
+
+	waiting := make(chan struct{})
+	block := make(chan struct{})
+	defer close(block)
+	cs := startup.NewClockSynchronizer()
+	require.NoError(t, cs.SetClock(startup.NewClock(time.Now(), [32]byte{})))
+	svc := New(ctx, store, &mockStateManager{pending: true}, cs, func() error {
+		close(waiting)
+		<-block
+		return nil
+	})
+	go svc.Start()
+	<-waiting
+
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- svc.Stop()
+	}()
+	select {
+	case err := <-stopped:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return while the service was waiting for backfill")
+	}
 }
