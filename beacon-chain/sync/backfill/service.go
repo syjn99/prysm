@@ -16,6 +16,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	"github.com/OffchainLabs/prysm/v7/proto/dbval"
 	"github.com/OffchainLabs/prysm/v7/runtime"
+	"github.com/OffchainLabs/prysm/v7/runtime/logging"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -46,7 +47,7 @@ type Service struct {
 	workerCfg       *workerCfg
 	fuluStart       primitives.Slot
 	denebStart      primitives.Slot
-	progressLogger  *intervalLogger
+	progressLogger  *logging.IntervalLogger
 }
 
 const progressLogInterval = 60
@@ -337,7 +338,7 @@ func (s *Service) Start() {
 		"targetSlot":           needs.Block.Begin,
 	}).Info("Starting backfill")
 
-	s.progressLogger = newIntervalLogger(log, progressLogInterval)
+	s.progressLogger = logging.NewIntervalLogger(log, progressLogInterval)
 
 	for {
 		if ctx.Err() != nil {

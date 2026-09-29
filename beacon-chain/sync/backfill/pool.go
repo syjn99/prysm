@@ -13,6 +13,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/sync"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
+	"github.com/OffchainLabs/prysm/v7/runtime/logging"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -54,7 +55,7 @@ type p2pBatchWorkerPool struct {
 	earliest       primitives.Slot // earliest is the earliest slot a worker is processing
 	peerCache      *sync.DASPeerCache
 	p2p            p2p.P2P
-	peerFailLogger *intervalLogger
+	peerFailLogger *logging.IntervalLogger
 	needs          func() das.CurrentNeeds
 }
 
@@ -72,7 +73,7 @@ func newP2PBatchWorkerPool(p p2p.P2P, maxBatches int, needs func() das.CurrentNe
 		shutdownErr:    make(chan error),
 		peerCache:      sync.NewDASPeerCache(p),
 		p2p:            p,
-		peerFailLogger: newIntervalLogger(log, 5),
+		peerFailLogger: logging.NewIntervalLogger(log, 5),
 		earliest:       primitives.Slot(math.MaxUint64),
 		needs:          needs,
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime"
+	"github.com/OffchainLabs/prysm/v7/runtime/logging"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -23,7 +24,7 @@ import (
 // when it has caught up but finalization has not yet let it hand off.
 var retryInterval = 30 * time.Second
 
-const progressLogInterval = 60 * time.Second
+const progressLogInterval = 60
 
 // Database is the subset of the beacon db the walk needs.
 type Database interface {
@@ -59,7 +60,7 @@ type Service struct {
 	backfillWaiter func() error
 	lock           sync.RWMutex
 	archiveStatus  *kv.ArchiveStatus
-	progressLogger *rateLimitedLogger
+	progressLogger *logging.IntervalLogger
 }
 
 var _ runtime.Service = (*Service)(nil)
@@ -76,7 +77,7 @@ func New(ctx context.Context, d Database, sg StateManager, cw startup.ClockWaite
 		sg:             sg,
 		cw:             cw,
 		backfillWaiter: backfillWaiter,
-		progressLogger: newRateLimitedLogger(log, progressLogInterval),
+		progressLogger: logging.NewIntervalLogger(log, progressLogInterval),
 	}
 }
 
