@@ -1788,6 +1788,8 @@ func TestProposerSettingsLoader(t *testing.T) {
 				}
 			},
 			wantLogs: []string{"Proposer settings loaded from default"},
+			// A gas-limit-only default is per-run and not persisted.
+			skipDBSavedCheck: true,
 		},
 		{
 			name: "a run without the gas limit flag drops the persisted default gas limit and warns",

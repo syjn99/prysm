@@ -235,8 +235,9 @@ func (psl *SettingsLoader) Load(cliCtx *cli.Context) (*proposer.Settings, error)
 	if psl.replacesDBKeys {
 		warnReplacedDBKeys(dbps, ps)
 	}
-	// Flag-only builder defaults are rebuilt every run and never persisted on their own.
-	if !ps.ShouldBeSaved() {
+	// Flag-only builder defaults and the per-run default gas limit are rebuilt every
+	// run and never persisted on their own: the DB cannot store an empty result to scrub them later.
+	if !ps.ShouldBeSaved() || ps.ProposeConfig == nil && ps.DefaultConfig.FeeRecipientConfig == nil {
 		log.Debug("Proposer settings carry nothing to persist; validator DB left unchanged")
 		return ps, nil
 	}
@@ -317,12 +318,21 @@ func (psl *SettingsLoader) loadFromDefault(cliCtx *cli.Context, dbSettings *vali
 		option.GasLimit = *psl.options.gasLimit
 		logEntry = logEntry.WithField(flags.BuilderGasLimitFlag.Name, uint64(option.GasLimit))
 	}
+	// A v2 DB default keeps its legacy toggle and gas limit, as a flagless run does;
+	// v1 DBs leave the builder to the legacy merge's strip-unless---enable-builder rule.
+	if dbSettings.GetVersion() >= proposer.SchemaV2 && dbSettings.GetDefaultConfig().GetBuilder() != nil {
+		option.Builder = clearBuilderFlagFields(proto.Clone(dbSettings.DefaultConfig.Builder).(*validatorpb.BuilderConfig))
+	}
 	builder, err := builderConfigFromFlags(cliCtx)
 	if err != nil {
 		return nil, err
 	}
 	if builder != nil {
-		option.Builder = builder.ToConsensus()
+		flagBuilder := builder.ToConsensus()
+		if option.Builder != nil {
+			flagBuilder.Enabled, flagBuilder.GasLimit = option.Builder.Enabled, option.Builder.GasLimit
+		}
+		option.Builder = flagBuilder
 		loaded.Version = proposer.MaxSchemaVersion
 		if len(builder.Builders) > 0 {
 			logEntry = logEntry.WithField("builders", maskedBuilderURLs(builder.Builders))
