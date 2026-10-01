@@ -213,8 +213,12 @@ func (psl *SettingsLoader) Load(cliCtx *cli.Context) (*proposer.Settings, error)
 			flags.BuilderURLsFlag.Name + " or the settings file on every start")
 	}
 	if hadDefaultGasLimit && loadedSettings.GetDefaultConfig().GetGasLimit() == 0 {
-		log.Warn("Dropped the default gas limit a previous run stored in the validator DB because neither --" +
-			flags.BuilderGasLimitFlag.Name + " nor a settings source configured one this run; pass it on every start to keep it")
+		if legacyGasLimit := loadedSettings.GetDefaultConfig().GetBuilder().GetGasLimit(); legacyGasLimit != 0 {
+			log.Debugf("Dropped the option-level default gas limit, but legacy builder gas limit %d still applies to pre-Gloas registrations", legacyGasLimit)
+		} else {
+			log.Warn("Dropped the default gas limit a previous run stored in the validator DB because neither --" +
+				flags.BuilderGasLimitFlag.Name + " nor a settings source configured one this run; pass it on every start to keep it")
+		}
 	}
 	// Only when the flag is the effective default; a source's own gas_limit replaces it.
 	if gl := psl.options.gasLimit; gl != nil && loadedSettings.GetDefaultConfig().GetGasLimit() == *gl {

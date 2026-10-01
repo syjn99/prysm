@@ -393,7 +393,7 @@ var (
 		Name: "builder-urls",
 		Usage: `Comma-separated URLs of Gloas builders to request execution payload bids from, for all validators.
 		Auth data agreed with a builder may be appended as a hex fragment (https://builder.example#0x0123); otherwise
-		the URL's UTF-8 bytes are used. Before Gloas a non-empty list also enables builder validator registration,
+		the builder's hostname (lowercased) is used. Before Gloas a non-empty list also enables builder validator registration,
 		like --` + EnableBuilderFlag.Name + `; set the gas limit with --` + BuilderGasLimitFlag.Name + `. ` + perKeyPrecedenceNote,
 	}
 	// BuilderMinBidFlag sets the default_config min_bid for Gloas bids.
