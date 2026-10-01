@@ -216,6 +216,10 @@ func (psl *SettingsLoader) Load(cliCtx *cli.Context) (*proposer.Settings, error)
 		log.Warn("Dropped the default gas limit a previous run stored in the validator DB because neither --" +
 			flags.BuilderGasLimitFlag.Name + " nor a settings source configured one this run; pass it on every start to keep it")
 	}
+	// Only when the flag is the effective default; a source's own gas_limit replaces it.
+	if gl := psl.options.gasLimit; gl != nil && loadedSettings.GetDefaultConfig().GetGasLimit() == *gl {
+		warnGasLimitOverridesSchedule(*gl)
+	}
 
 	// exit early if nothing is provided
 	if loadedSettings == nil || (loadedSettings.ProposerConfig == nil && loadedSettings.DefaultConfig == nil) {
@@ -312,7 +316,6 @@ func (psl *SettingsLoader) loadFromDefault(cliCtx *cli.Context, dbSettings *vali
 	if psl.options.gasLimit != nil {
 		option.GasLimit = *psl.options.gasLimit
 		logEntry = logEntry.WithField(flags.BuilderGasLimitFlag.Name, uint64(option.GasLimit))
-		warnGasLimitOverridesSchedule(option.GasLimit)
 	}
 	builder, err := builderConfigFromFlags(cliCtx)
 	if err != nil {
@@ -435,6 +438,10 @@ func maskedBuilderURLs(entries []*proposer.BuilderEntry) string {
 // A source's default_config replaces the flag-built one whole, builder flags included.
 func warnBuilderFlagsReplaced(cliCtx *cli.Context, loaded *validatorpb.ProposerSettingsPayload, source string) {
 	names := setBuilderFlagNames(cliCtx)
+	// The flag gas limit only fills a default_config without its own gas_limit.
+	if loaded.DefaultConfig.GetGasLimit() != 0 && cliCtx.IsSet(flags.BuilderGasLimitFlag.Name) {
+		names = append(names, "--"+flags.BuilderGasLimitFlag.Name)
+	}
 	if loaded.DefaultConfig == nil || len(names) == 0 {
 		return
 	}
@@ -533,7 +540,7 @@ func mergeProposerSettings(loaded, db *validatorpb.ProposerSettingsPayload, opti
 	if merged.Version < proposer.SchemaV2 {
 		return mergeLegacyProposerSettings(merged, loaded, db, builderConfig, gasLimitOnly)
 	}
-	return mergeCurrentProposerSettings(merged, loaded, db, builderConfig, builderFlagsSet)
+	return mergeCurrentProposerSettings(merged, loaded, db, builderConfig, gasLimitOnly, builderFlagsSet)
 }
 
 // hasGloasBuilderFields reports whether a payload builder configures the Gloas builder API; an explicit empty list counts.
@@ -691,7 +698,7 @@ func mergeLegacyProposerSettings(merged, loaded, db *validatorpb.ProposerSetting
 	return merged
 }
 
-func mergeCurrentProposerSettings(merged, loaded, db *validatorpb.ProposerSettingsPayload, builderConfig *validatorpb.BuilderConfig, builderFlagsSet bool) *validatorpb.ProposerSettingsPayload {
+func mergeCurrentProposerSettings(merged, loaded, db *validatorpb.ProposerSettingsPayload, builderConfig *validatorpb.BuilderConfig, gasLimitOnly *validator.Uint64, builderFlagsSet bool) *validatorpb.ProposerSettingsPayload {
 	// Builder flags are per-run: a run without them drops the v2 builder fields an
 	// earlier flag run persisted in default_config. Legacy fields follow their own flags.
 	if db != nil && db.DefaultConfig != nil && !builderFlagsSet {
@@ -704,6 +711,16 @@ func mergeCurrentProposerSettings(merged, loaded, db *validatorpb.ProposerSettin
 		merged.DefaultConfig = loaded.DefaultConfig
 	}
 	merged.ProposerConfig = selectProposerConfig(db, loaded)
+
+	// --suggested-gas-limit is the default gas limit unless the source's default_config sets its own.
+	if gasLimitOnly != nil {
+		if merged.DefaultConfig == nil {
+			merged.DefaultConfig = &validatorpb.ProposerOptionPayload{}
+		}
+		if merged.DefaultConfig.GasLimit == 0 {
+			merged.DefaultConfig.GasLimit = *gasLimitOnly
+		}
+	}
 
 	// --enable-builder is legacy content: it still forces the default mev-boost
 	// toggle on for pre-gloas registrations, and is inert from the fork onward.

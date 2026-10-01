@@ -2268,15 +2268,17 @@ func Test_mergeProposerSettings_CreatesDefaultFromGasLimitFlag(t *testing.T) {
 	require.Equal(t, gl, merged.DefaultConfig.Builder.GasLimit)
 }
 
-func Test_mergeProposerSettings_V2GasLimitLeftToDefaultSource(t *testing.T) {
+func Test_mergeProposerSettings_V2GasLimitFlagFillsDefault(t *testing.T) {
 	gl := validator.Uint64(12345678)
 	merged := mergeProposerSettings(
 		nil,
 		&validatorpb.ProposerSettingsPayload{Version: proposer.SchemaV2},
 		&flagOptions{gasLimit: &gl},
 	)
-	// The default source writes the option-level gas limit; the merge adds no legacy builder content.
-	require.IsNil(t, merged.DefaultConfig)
+	// The flag is the option-level default gas limit; the merge adds no legacy builder content.
+	require.NotNil(t, merged.DefaultConfig)
+	require.Equal(t, gl, merged.DefaultConfig.GasLimit)
+	require.IsNil(t, merged.DefaultConfig.Builder)
 }
 
 func Test_mergeProposerSettings_VersionGatesBuilderReset(t *testing.T) {
