@@ -554,16 +554,6 @@ func clearBuilderFlagFields(b *validatorpb.BuilderConfig) *validatorpb.BuilderCo
 	return b
 }
 
-// enableLegacyPerKeyBuilders opts legacy-only per-key blocks in, as v1 --enable-builder
-// does. Blocks with v2 content, including builders: [], keep their own choice.
-func enableLegacyPerKeyBuilders(merged *validatorpb.ProposerSettingsPayload) {
-	for _, opt := range merged.ProposerConfig {
-		if opt != nil && opt.Builder != nil && !hasGloasBuilderFields(opt.Builder) {
-			opt.Builder.Enabled = true
-		}
-	}
-}
-
 // checkSchemaVersion rejects versions the merge path would otherwise silently treat
 // as v1, and the persistence-only builders_set marker that strict decoding cannot
 // tell apart from a documented key.
@@ -714,10 +704,6 @@ func mergeCurrentProposerSettings(merged, loaded, db *validatorpb.ProposerSettin
 		merged.DefaultConfig = loaded.DefaultConfig
 	}
 	merged.ProposerConfig = selectProposerConfig(db, loaded)
-
-	if builderFlagsSet && merged.DefaultConfig != nil && len(merged.DefaultConfig.Builder.GetBuilders()) > 0 {
-		enableLegacyPerKeyBuilders(merged)
-	}
 
 	// --enable-builder is legacy content: it still forces the default mev-boost
 	// toggle on for pre-gloas registrations, and is inert from the fork onward.

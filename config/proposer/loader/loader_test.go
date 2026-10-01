@@ -1741,7 +1741,8 @@ func TestProposerSettingsLoader(t *testing.T) {
 			wantLogs: []string{"Dropped the default builder settings"},
 		},
 		{
-			name: "builder flags opt legacy-only per-key blocks in and leave explicit opt-outs",
+			// The opt-in is resolved by RegistrationFor (loader_perkey_optin_test.go); the payload is untouched.
+			name: "builder flags leave legacy-only per-key blocks unmodified",
 			args: args{proposerSettingsFlagValues: &proposerSettingsFlag{
 				defaultfee:  "0x6e35733c5af9B61374A128e6F85f553aF09ff89A",
 				builderURLs: "https://builder-a.example",
@@ -1752,7 +1753,7 @@ func TestProposerSettingsLoader(t *testing.T) {
 					ProposeConfig: map[[fieldparams.BLSPubkeyLength]byte]*proposer.Option{
 						keyA: {
 							FeeRecipientConfig: &proposer.FeeRecipientConfig{FeeRecipient: common.HexToAddress("0x50155530FCE8a85ec7055A5F8b2bE214B3DaeFd3")},
-							BuilderConfig:      &proposer.BuilderConfig{Enabled: true, GasLimit: validator.Uint64(30000000)},
+							BuilderConfig:      &proposer.BuilderConfig{GasLimit: validator.Uint64(30000000)},
 						},
 						keyB: {BuilderConfig: &proposer.BuilderConfig{Builders: []*proposer.BuilderEntry{}}},
 					},
@@ -2348,7 +2349,7 @@ func Test_mergeProposerSettings_VersionGatesBuilderReset(t *testing.T) {
 		require.Equal(t, true, merged.ProposerConfig["0xaa"].Builder.Enabled)
 		require.NotNil(t, merged.ProposerConfig["0xbb"].Builder.MinBid)
 	})
-	t.Run("flag builders opt legacy-only per-key blocks in; builders: [] still opts out", func(t *testing.T) {
+	t.Run("flag builders leave legacy-only per-key blocks unmodified", func(t *testing.T) {
 		db := &validatorpb.ProposerSettingsPayload{
 			Version: proposer.SchemaV2,
 			ProposerConfig: map[string]*validatorpb.ProposerOptionPayload{
@@ -2363,7 +2364,7 @@ func Test_mergeProposerSettings_VersionGatesBuilderReset(t *testing.T) {
 			},
 		}
 		merged := mergeProposerSettings(loaded, db, &flagOptions{builderFlagsSet: true})
-		require.Equal(t, true, merged.ProposerConfig["0xaa"].Builder.Enabled)
+		require.Equal(t, false, merged.ProposerConfig["0xaa"].Builder.Enabled)
 		require.Equal(t, validator.Uint64(30000000), merged.ProposerConfig["0xaa"].Builder.GasLimit)
 		require.Equal(t, false, merged.ProposerConfig["0xbb"].Builder.Enabled)
 	})

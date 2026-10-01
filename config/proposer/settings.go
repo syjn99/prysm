@@ -260,9 +260,8 @@ func (ps *Settings) EffectiveBuilderConfig(pubkey [fieldparams.BLSPubkeyLength]b
 // limit, and participation. Registrations are pushed pre-gloas only.
 func (ps *Settings) RegistrationFor(pubkey [fieldparams.BLSPubkeyLength]byte) (common.Address, validator.Uint64, bool) {
 	feeRecipient := common.HexToAddress(params.BeaconConfig().EthBurnAddressHex)
-	gasLimit := validator.Uint64(params.BeaconConfig().DefaultBuilderGasLimit)
 	if ps == nil {
-		return feeRecipient, gasLimit, false
+		return feeRecipient, ps.GasLimit(pubkey), false
 	}
 	hasFeeRecipient := false
 	if ps.DefaultConfig != nil && ps.DefaultConfig.FeeRecipientConfig != nil {
@@ -274,31 +273,25 @@ func (ps *Settings) RegistrationFor(pubkey [fieldparams.BLSPubkeyLength]byte) (c
 		feeRecipient = opt.FeeRecipientConfig.FeeRecipient
 		hasFeeRecipient = true
 	}
-	enabled := false
+	enabled, defaultBuilders := false, false
 	if ps.DefaultConfig != nil {
 		if in, ok := ps.DefaultConfig.BuilderConfig.registrationEnabled(); ok {
 			enabled = in
 		}
+		defaultBuilders = ps.DefaultConfig.BuilderConfig != nil && len(ps.DefaultConfig.BuilderConfig.Builders) > 0
 	}
-	// A per-key choice wins over the default's.
+	// A per-key choice wins over the default's. With default builders configured,
+	// a legacy-only per-key block without enabled makes no choice and inherits.
 	if opt != nil {
-		if in, ok := opt.BuilderConfig.registrationEnabled(); ok {
+		in, ok := opt.BuilderConfig.registrationEnabled()
+		if ok && !in && defaultBuilders && !opt.BuilderConfig.hasGloasBuilderFields() {
+			ok = false
+		}
+		if ok {
 			enabled = in
 		}
 	}
-	// Explicitly set option-level gas limits win; legacy builder-level values
-	// are the pre-gloas fallback.
-	switch {
-	case opt != nil && opt.GasLimit != 0:
-		gasLimit = opt.GasLimit
-	case ps.DefaultConfig != nil && ps.DefaultConfig.GasLimit != 0:
-		gasLimit = ps.DefaultConfig.GasLimit
-	case opt != nil && opt.BuilderConfig != nil && opt.BuilderConfig.GasLimit != 0:
-		gasLimit = opt.BuilderConfig.GasLimit
-	case ps.DefaultConfig != nil && ps.DefaultConfig.BuilderConfig != nil && ps.DefaultConfig.BuilderConfig.GasLimit != 0:
-		gasLimit = ps.DefaultConfig.BuilderConfig.GasLimit
-	}
-	return feeRecipient, gasLimit, enabled && hasFeeRecipient
+	return feeRecipient, ps.GasLimit(pubkey), enabled && hasFeeRecipient
 }
 
 // EntryIdentity is what makes a builder entry unique: its url compared as the
@@ -901,8 +894,8 @@ func warnOncePerEpoch(guard *atomic.Uint64, epoch primitives.Epoch) bool {
 	}
 }
 
-// GasLimit resolves pubkey's gas limit: explicitly set option-level values win,
-// legacy builder-level values are the fallback, else the chain default.
+// GasLimit resolves pubkey's gas limit: any per-key value (option-level, then
+// legacy builder-level) wins over any default value (same order), else the chain default.
 func (ps *Settings) GasLimit(pubkey [fieldparams.BLSPubkeyLength]byte) validator.Uint64 {
 	chainDefault := validator.Uint64(params.BeaconConfig().DefaultBuilderGasLimit)
 	if ps == nil {
@@ -912,10 +905,10 @@ func (ps *Settings) GasLimit(pubkey [fieldparams.BLSPubkeyLength]byte) validator
 	switch {
 	case opt != nil && opt.GasLimit != 0:
 		return opt.GasLimit
-	case ps.DefaultConfig != nil && ps.DefaultConfig.GasLimit != 0:
-		return ps.DefaultConfig.GasLimit
 	case opt != nil && opt.BuilderConfig != nil && opt.BuilderConfig.GasLimit != 0:
 		return opt.BuilderConfig.GasLimit
+	case ps.DefaultConfig != nil && ps.DefaultConfig.GasLimit != 0:
+		return ps.DefaultConfig.GasLimit
 	case ps.DefaultConfig != nil && ps.DefaultConfig.BuilderConfig != nil && ps.DefaultConfig.BuilderConfig.GasLimit != 0:
 		return ps.DefaultConfig.BuilderConfig.GasLimit
 	}

@@ -1064,7 +1064,7 @@ func TestRegistrationFor(t *testing.T) {
 		require.Equal(t, true, enabled)
 	})
 
-	t.Run("per-key v1 disable wins over a default with builders", func(t *testing.T) {
+	t.Run("per-key legacy-only block inherits a default with builders", func(t *testing.T) {
 		ps := &Settings{
 			Version: SchemaV2,
 			DefaultConfig: &Option{
@@ -1076,7 +1076,7 @@ func TestRegistrationFor(t *testing.T) {
 			},
 		}
 		_, _, enabled := ps.RegistrationFor(key)
-		require.Equal(t, false, enabled)
+		require.Equal(t, true, enabled)
 	})
 
 	t.Run("v1 per-key disabled builder opts the key out", func(t *testing.T) {
