@@ -290,11 +290,12 @@ func (s *Service) Start() {
 
 	status := s.store.status()
 	needs := s.syncNeeds.Currently()
+	lowSlot := primitives.Slot(status.LowSlot)
 	// Exit early if there aren't going to be any batches to backfill.
-	if !needs.Block.At(primitives.Slot(status.LowSlot)) {
+	if !needs.Block.At(lowSlot) || lowSlot <= needs.Block.Begin {
 		log.WithField("minimumSlot", needs.Block.Begin).
 			WithField("backfillLowestSlot", status.LowSlot).
-			Info("Exiting backfill service; minimum block retention slot > lowest backfilled block")
+			Info("Exiting backfill service; minimum block retention slot >= lowest backfilled block")
 		s.markComplete()
 		return
 	}
