@@ -522,7 +522,13 @@ func ComputeCommittee(
 		return nil, err
 	}
 
-	return shuffledList[start:end], nil
+	// Copy the committee out instead of returning shuffledList[start:end]. shuffledList holds one
+	// entry per validator and nothing else owns it, so a sub-slice would pin the whole array
+	// (~9 MB on Hoodi, ~19 MB on mainnet) for as long as a caller holds a ~4.5 KB committee.
+	// The committee cache can return sub-slices because it owns the array and shares it.
+	committee := make([]primitives.ValidatorIndex, end-start)
+	copy(committee, shuffledList[start:end])
+	return committee, nil
 }
 
 // InitializeProposerLookahead computes the list of the proposer indices for the next MIN_SEED_LOOKAHEAD + 1 epochs.

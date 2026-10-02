@@ -73,6 +73,24 @@ func TestComputeCommittee_WithoutCache(t *testing.T) {
 	assert.DeepEqual(t, committee9, committees[start:end], "Committee has different shuffled indices")
 }
 
+// A sub-slice of the shuffled list would carry the rest of the per-validator array in its
+// capacity and keep it alive with the committee, so cap() is the observable form of the retention.
+func TestComputeCommittee_DoesNotRetainShuffledList(t *testing.T) {
+	const validators = 65536
+	indices := make([]primitives.ValidatorIndex, validators)
+	for i := range indices {
+		indices[i] = primitives.ValidatorIndex(i)
+	}
+	seed := [32]byte{'t', 'e', 's', 't'}
+
+	// Committee 0 is the case cap() can see: a sub-slice of it spans the whole array. The last
+	// committee would have cap == len even as a sub-slice, though it still pins the prefix.
+	committee, err := helpers.ComputeCommittee(indices, seed, 0, 64)
+	require.NoError(t, err)
+	require.Equal(t, validators/64, len(committee))
+	require.Equal(t, len(committee), cap(committee))
+}
+
 func TestComputeCommittee_RegressionTest(t *testing.T) {
 	helpers.ClearCache()
 
