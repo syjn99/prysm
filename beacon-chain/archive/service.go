@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/filters"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/startup"
@@ -89,7 +90,7 @@ func (s *Service) Start() {
 		log.Debug("Archive state regeneration is not pending; service is idle")
 		return
 	}
-	ctx := s.ctx
+	ctx := helpers.WithIsolatedCaches(s.ctx)
 
 	as, err := s.db.ArchiveStatus(ctx)
 	if err != nil {
