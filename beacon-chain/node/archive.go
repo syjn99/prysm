@@ -51,6 +51,11 @@ func (b *BeaconNode) initArchiveOrigin(cliCtx *cli.Context) (state.BeaconState, 
 	}
 	slot := st.Slot()
 	b.ArchiveOriginSlot = &slot
+	root, err := st.LatestBlockHeader().HashTreeRoot()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not hash the archive origin state's latest block header")
+	}
+	b.ArchiveOriginBlockRoot = &root
 	return st, nil
 }
 

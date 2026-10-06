@@ -139,6 +139,9 @@ type BeaconNode struct {
 	// ArchiveOriginSlot is the slot of the archive origin state, set only in archive mode. It is the
 	// state-diff tree offset and the slot backfill stops at.
 	ArchiveOriginSlot *primitives.Slot
+	// ArchiveOriginBlockRoot is the hash tree root of the archive origin state's latest block header, set only
+	// in archive mode. Backfill uses it to recognise the floor when the origin slot itself has no block.
+	ArchiveOriginBlockRoot *[32]byte
 }
 
 // New creates a new node instance, sets up configuration options, and registers
@@ -264,6 +267,7 @@ func New(cliCtx *cli.Context, cancel context.CancelFunc, optFuncs []func(*cli.Co
 		backfill.WithVerifierWaiter(beacon.verifyInitWaiter),
 		backfill.WithInitSyncWaiter(initSyncWaiter(ctx, beacon.initialSyncComplete)),
 		backfill.WithSyncNeedsWaiter(beacon.SyncNeedsWaiter),
+		backfill.WithArchiveOriginBlockRoot(func() *[32]byte { return beacon.ArchiveOriginBlockRoot }),
 	)
 
 	if err := registerServices(cliCtx, beacon, synchronizer, bfs); err != nil {

@@ -1,6 +1,7 @@
 package backfill
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -44,11 +45,14 @@ type Service struct {
 	blobStore       *filesystem.BlobStorage
 	dcStore         *filesystem.DataColumnStorage
 	initSyncWaiter  func() error
-	complete        chan struct{}
-	workerCfg       *workerCfg
-	fuluStart       primitives.Slot
-	denebStart      primitives.Slot
-	progressLogger  *logging.IntervalLogger
+	// archiveOriginRoot returns the hash tree root of the archive origin state's latest block header, or nil
+	// outside archive mode. It is read lazily because the origin is loaded after the service is constructed.
+	archiveOriginRoot func() *[32]byte
+	complete          chan struct{}
+	workerCfg         *workerCfg
+	fuluStart         primitives.Slot
+	denebStart        primitives.Slot
+	progressLogger    *logging.IntervalLogger
 }
 
 const progressLogInterval = 60
@@ -115,6 +119,16 @@ type InitializerWaiter interface {
 func WithVerifierWaiter(viw InitializerWaiter) ServiceOption {
 	return func(s *Service) error {
 		s.verifierWaiter = viw
+		return nil
+	}
+}
+
+// WithArchiveOriginBlockRoot gives the service the root of the archive origin state's latest block header.
+// Backfill is complete once the lowest imported block descends directly from it, which the slot-based
+// floor check cannot see when the origin slot itself has no block.
+func WithArchiveOriginBlockRoot(f func() *[32]byte) ServiceOption {
+	return func(s *Service) error {
+		s.archiveOriginRoot = f
 		return nil
 	}
 }
@@ -300,6 +314,19 @@ func (s *Service) Start() {
 		s.markComplete()
 		return
 	}
+	// The archive floor is a state, not a block. status.LowSlot is the slot of the lowest imported *block*, so
+	// when the origin slot was skipped the check above misses by one and the sequencer would request an
+	// empty range forever. The origin state's latest block header settles it: if the lowest block's parent is
+	// that header, nothing remains between them.
+	if s.archiveOriginRoot != nil {
+		if r := s.archiveOriginRoot(); r != nil && bytes.Equal(status.LowParentRoot, r[:]) {
+			log.WithField("archiveOriginRoot", fmt.Sprintf("%#x", r[:])).
+				WithField("backfillLowestSlot", status.LowSlot).
+				Info("Exiting backfill service; lowest backfilled block descends directly from the archive origin")
+			s.markComplete()
+			return
+		}
+	}
 
 	if s.initSyncWaiter != nil {
 		log.Info("Service waiting for initial-sync to reach head before starting")
@@ -353,6 +380,15 @@ func (s *Service) Start() {
 		s.importBatches(ctx)
 		batchesWaiting.Set(float64(s.batchSeq.countWithState(batchImportable)))
 		s.scheduleTodos()
+		// Every in-flight batch occupies a sequencer slot, so once every slot is end-of-sequence nothing
+		// remains. Deciding here does not depend on how many times sequence() ran after the floor was
+		// reached, which the pool's end-of-sequence count does: when the last two batches import in one
+		// pass, sequence() runs once and hands the pool one end-of-sequence batch out of maxBatches.
+		if s.batchSeq.countWithState(batchEndSequence) == len(s.batchSeq.seq) {
+			log.WithField("backfillSlot", s.syncNeeds.Currently().Block.Begin).Info("Backfill is complete")
+			s.markComplete()
+			return
+		}
 		s.logProgress()
 	}
 }
