@@ -155,10 +155,6 @@ func NewService(ctx context.Context, su *Store, bStore *filesystem.BlobStorage, 
 func (s *Service) updateComplete() bool {
 	b, err := s.pool.complete()
 	if err != nil {
-		if errors.Is(err, errEndSequence) {
-			log.WithField("backfillSlot", b.begin).Info("Backfill is complete")
-			return true
-		}
 		log.WithError(err).Error("Service received unhandled error from worker pool")
 		return true
 	}
@@ -341,6 +337,15 @@ func (s *Service) Start() {
 
 	for {
 		if ctx.Err() != nil {
+			return
+		}
+		// Check before blocking in complete(): once every slot has ended, no needed batch is in flight,
+		// so complete() could wait forever.
+		if s.batchSeq.allEnded() {
+			log.WithField("lowestBackfilledSlot", s.store.status().LowSlot).
+				WithField("targetSlot", s.syncNeeds.Currently().Block.Begin).
+				Info("Backfill is complete")
+			s.markComplete()
 			return
 		}
 		if s.updateComplete() {

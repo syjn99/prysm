@@ -227,7 +227,7 @@ func TestBatchSequencer(t *testing.T) {
 	require.Equal(t, newMin, last.begin)
 	require.Equal(t, seq.seq[len(seq.seq)-2].begin, last.end)
 
-	// Mark first batch done again, this time check that sequence() gives errEndSequence.
+	// Mark first batch done again, this time check that sequence() returns a batchEndSequence batch.
 	first = seq.seq[0]
 	first.state = batchImportComplete
 	// update() with a complete state will cause the sequence to be extended with an additional batch
@@ -236,7 +236,6 @@ func TestBatchSequencer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(endExp))
 	end := endExp[0]
-	//require.ErrorIs(t, err, errEndSequence)
 	require.Equal(t, batchEndSequence, end.state)
 }
 

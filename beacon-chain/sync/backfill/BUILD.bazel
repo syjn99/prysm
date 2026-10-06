@@ -58,6 +58,7 @@ go_test(
     srcs = [
         "batch_test.go",
         "batcher_expiration_test.go",
+        "batcher_termination_test.go",
         "batcher_test.go",
         "blobs_test.go",
         "columns_test.go",
@@ -65,6 +66,7 @@ go_test(
         "log_test.go",
         "pool_test.go",
         "service_test.go",
+        "service_termination_test.go",
         "status_test.go",
         "verify_column_test.go",
         "verify_test.go",

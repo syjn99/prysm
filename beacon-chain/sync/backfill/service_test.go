@@ -95,6 +95,14 @@ func TestServiceInit(t *testing.T) {
 	for i := remaining; i < remaining+nWorkers; i++ {
 		require.Equal(t, batchEndSequence, todo[i].state)
 	}
+	done := make(chan error, 1)
+	go func() { done <- srv.WaitForCompletion() }()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("backfill did not complete after the last batch imported")
+	}
 }
 
 func testReadN(ctx context.Context, t *testing.T, c chan batch, n int, into []batch) []batch {
