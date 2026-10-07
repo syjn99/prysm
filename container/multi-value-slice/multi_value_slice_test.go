@@ -3,6 +3,7 @@ package mvslice
 import (
 	"fmt"
 	"math/rand"
+	"slices"
 	"sync"
 	"testing"
 
@@ -63,47 +64,145 @@ func TestCopy(t *testing.T) {
 }
 
 func TestValue(t *testing.T) {
-	// What we want to check:
-	// - correct values are returned for first object
-	// - correct values are returned for second object
-	// - correct values are returned for an object without appended items
+	t.Run("individual and appended items", func(t *testing.T) {
+		s := setup()
+		assert.DeepEqual(t, []int{123, 1, 3, 1, 123, 1, 3}, s.Value(&testObject{id: 1}))
+		assert.DeepEqual(t, []int{123, 2, 3, 123, 2, 2, 3, 2}, s.Value(&testObject{id: 2}))
+	})
+	t.Run("empty overlay", func(t *testing.T) {
+		s := &Slice[int]{}
+		s.Init([]int{1, 2, 3, 4, 5, 6, 7, 8})
+		assert.DeepEqual(t, []int{1, 2, 3, 4, 5, 6, 7, 8}, s.Value(&testObject{id: 999}))
+	})
+	t.Run("overlay of other objects only", func(t *testing.T) {
+		s := setup()
+		assert.DeepEqual(t, []int{123, 123, 123, 123, 123}, s.Value(&testObject{id: 999}))
+	})
+	t.Run("sparse individual items only", func(t *testing.T) {
+		s := &Slice[int]{}
+		s.Init([]int{1, 2, 3, 4, 5, 6, 7, 8})
+		obj := &testObject{id: 1}
+		require.NoError(t, s.UpdateAt(obj, 6, 70))
+		assert.DeepEqual(t, []int{1, 2, 3, 4, 5, 6, 70, 8}, s.Value(obj))
+	})
+	t.Run("dense individual items only", func(t *testing.T) {
+		s := &Slice[int]{}
+		s.Init([]int{1, 2, 3, 4, 5, 6, 7, 8})
+		obj := &testObject{id: 1}
+		for i := range 8 {
+			require.NoError(t, s.UpdateAt(obj, uint64(i), 10*(i+1)))
+		}
+		assert.DeepEqual(t, []int{10, 20, 30, 40, 50, 60, 70, 80}, s.Value(obj))
+	})
+	t.Run("appended items only", func(t *testing.T) {
+		s := &Slice[int]{}
+		s.Init([]int{1, 2, 3})
+		obj := &testObject{id: 1}
+		s.Append(obj, 4)
+		s.Append(obj, 5)
+		assert.DeepEqual(t, []int{1, 2, 3, 4, 5}, s.Value(obj))
+	})
+	t.Run("result is owned by the caller", func(t *testing.T) {
+		s := setup()
+		obj := &testObject{id: 1}
+		v := s.Value(obj)
+		for i := range v {
+			v[i] = -1
+		}
+		assert.DeepEqual(t, []int{123, 1, 3, 1, 123, 1, 3}, s.Value(obj))
+		v = s.Value(&testObject{id: 999})
+		v[0] = -1
+		assert.DeepEqual(t, []int{123, 123, 123, 123, 123}, s.Value(&testObject{id: 999}))
+	})
+	t.Run("concurrent reads and writes", func(t *testing.T) {
+		// 64 shared items keep the individual items map sparse (at most 12 entries).
+		shared := make([]int, 64)
+		s := &Slice[int]{}
+		s.Init(slices.Clone(shared))
+		readers := make([]testObject, 8)
+		wants := make([][]int, len(readers))
+		for i := range readers {
+			readers[i].id = uint64(i + 1)
+			require.NoError(t, s.UpdateAt(&readers[i], uint64(i), 100+i))
+			s.Append(&readers[i], i)
+			wants[i] = slices.Clone(shared)
+			wants[i][i] = 100 + i
+			wants[i] = append(wants[i], i)
+		}
+		writer := &testObject{id: 100}
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			for j := range 500 {
+				assert.NoError(t, s.UpdateAt(writer, uint64(60+j%4), j))
+				s.Append(writer, j)
+			}
+		})
+		for i := range readers {
+			wg.Go(func() {
+				for range 500 {
+					assert.DeepEqual(t, wants[i], s.Value(&readers[i]))
+				}
+			})
+		}
+		wg.Wait()
+	})
+}
 
-	s := setup()
-	first := &testObject{id: 1}
-	second := &testObject{id: 2}
-
-	v := s.Value(first)
-
-	require.Equal(t, 7, len(v))
-	assert.Equal(t, 123, v[0])
-	assert.Equal(t, 1, v[1])
-	assert.Equal(t, 3, v[2])
-	assert.Equal(t, 1, v[3])
-	assert.Equal(t, 123, v[4])
-	assert.Equal(t, 1, v[5])
-	assert.Equal(t, 3, v[6])
-
-	v = s.Value(second)
-
-	require.Equal(t, 8, len(v))
-	assert.Equal(t, 123, v[0])
-	assert.Equal(t, 2, v[1])
-	assert.Equal(t, 3, v[2])
-	assert.Equal(t, 123, v[3])
-	assert.Equal(t, 2, v[4])
-	assert.Equal(t, 2, v[5])
-	assert.Equal(t, 3, v[6])
-	assert.Equal(t, 2, v[7])
-
-	s = &Slice[int]{}
-	s.Init([]int{1, 2, 3})
-
-	v = s.Value(&testObject{id: 999})
-
-	require.Equal(t, 3, len(v))
-	assert.Equal(t, 1, v[0])
-	assert.Equal(t, 2, v[1])
-	assert.Equal(t, 3, v[2])
+// FuzzValue checks Value against a model of each object's slice and against the per-index At path.
+// Each three input bytes are one operation: kind, object and argument.
+func FuzzValue(f *testing.F) {
+	// Few updates: the individual items map stays sparse.
+	f.Add([]byte{2, 0, 1, 2, 1, 2, 3, 0, 5, 1, 2, 0, 3, 2, 7, 2, 2, 0x13})
+	// Many updates: the individual items map becomes dense, then a detach and a copy shrink it.
+	f.Add([]byte{2, 0, 1, 2, 0, 2, 2, 0, 3, 2, 1, 5, 2, 1, 6, 2, 2, 0x31, 3, 1, 4, 0, 0, 0, 1, 3, 2, 2, 3, 0x47, 3, 3, 9})
+	f.Fuzz(func(t *testing.T, ops []byte) {
+		// With 16 shared items, Value walks the individual items map while it has at most 3 entries
+		// and looks up every index after that.
+		shared := slices.Repeat([]int{0, 10, 20, 30}, 4)
+		s := &Slice[int]{}
+		s.Init(slices.Clone(shared))
+		objects := make([]testObject, 4)
+		want := make([][]int, len(objects))
+		for i := range objects {
+			objects[i].id = uint64(i + 1)
+			want[i] = slices.Clone(shared)
+		}
+		for ; len(ops) >= 3; ops = ops[3:] {
+			i, arg := int(ops[1])%len(objects), int(ops[2])
+			switch ops[0] % 4 {
+			case 0:
+				s.Detach(&objects[i])
+				want[i] = slices.Clone(shared)
+			case 1:
+				j := arg % len(objects)
+				if j == i {
+					j = (i + 1) % len(objects)
+				}
+				s.Detach(&objects[i])
+				s.Copy(&objects[j], &objects[i])
+				want[i] = slices.Clone(want[j])
+			case 2:
+				// Values collide with the shared items, so updates also revert to them.
+				index, val := arg%len(want[i]), (arg>>4)%4*10
+				require.NoError(t, s.UpdateAt(&objects[i], uint64(index), val))
+				want[i][index] = val
+			default:
+				s.Append(&objects[i], arg%4)
+				want[i] = append(want[i], arg%4)
+			}
+			for j := range objects {
+				v := s.Value(&objects[j])
+				require.DeepEqual(t, want[j], v)
+				require.Equal(t, len(v), s.Len(&objects[j]))
+				for k := range v {
+					at, err := s.At(&objects[j], uint64(k))
+					require.NoError(t, err)
+					require.Equal(t, v[k], at)
+				}
+				require.DeepEqual(t, want[j], s.Reset(&objects[j]).Value(&testObject{id: 999}))
+			}
+		}
+	})
 }
 
 func TestAt(t *testing.T) {
@@ -929,6 +1028,47 @@ func BenchmarkValue(b *testing.B) {
 		}
 		for b.Loop() {
 			s.Value(objs[rand.Intn(_10m)])
+		}
+	})
+}
+
+// compactValidator has the size and pointer-free layout of stateutil.CompactValidator.
+type compactValidator [128]byte
+
+func BenchmarkValueMainnet(b *testing.B) {
+	b.Run("validators", func(b *testing.B) {
+		benchmarkValueMainnet(b, func(i int) compactValidator { return compactValidator{byte(i), byte(i >> 8)} })
+	})
+	b.Run("balances", func(b *testing.B) {
+		benchmarkValueMainnet(b, func(i int) uint64 { return uint64(i) })
+	})
+}
+
+// benchmarkValueMainnet reads 2.34M items, the size of the mainnet validator registry.
+// val must return a non-zero value for a positive input.
+func benchmarkValueMainnet[V comparable](b *testing.B, val func(int) V) {
+	const n = 2_340_000
+	obj := &testObject{id: 1}
+	b.Run("empty overlay", func(b *testing.B) {
+		s := &Slice[V]{}
+		s.Init(make([]V, n))
+		b.ReportAllocs()
+		for b.Loop() {
+			s.Value(obj)
+		}
+	})
+	b.Run("1000 individual and 10 appended items", func(b *testing.B) {
+		s := &Slice[V]{}
+		s.Init(make([]V, n))
+		for i := range 1000 {
+			require.NoError(b, s.UpdateAt(obj, uint64(i*1000), val(i+1)))
+		}
+		for i := range 10 {
+			s.Append(obj, val(i+1))
+		}
+		b.ReportAllocs()
+		for b.Loop() {
+			s.Value(obj)
 		}
 	})
 }

@@ -218,33 +218,7 @@ func (s *Slice[V]) Value(obj Identifiable) []V {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	l, ok := s.cachedLengths[obj.Id()]
-	if ok {
-		result := make([]V, l)
-		s.fillOriginalItems(obj, &result)
-
-		sharedLen := len(s.sharedItems)
-		for i, item := range s.appendedItems {
-			found := false
-			for _, v := range item.Values {
-				_, found = containsId(v.ids, obj.Id())
-				if found {
-					result[sharedLen+i] = v.val
-					break
-				}
-			}
-			if !found {
-				// This is an optimization. If we didn't find an appended item at index i,
-				// then all larger indices don't have an appended item for the object either.
-				return result
-			}
-		}
-		return result
-	} else {
-		result := make([]V, len(s.sharedItems))
-		s.fillOriginalItems(obj, &result)
-		return result
-	}
+	return s.value(obj.Id())
 }
 
 // At returns the item at the requested index for the input object.
@@ -261,28 +235,19 @@ func (s *Slice[V]) At(obj Identifiable, index uint64) (V, error) {
 		return def, fmt.Errorf("index %d %w", index, ErrOutOfBounds)
 	}
 
-	isOriginal := index < uint64(len(s.sharedItems))
-	if isOriginal {
-		ind, ok := s.individualItems[index]
-		if !ok {
-			return s.sharedItems[index], nil
-		}
-		for _, v := range ind.Values {
-			if slices.Contains(v.ids, obj.Id()) {
-				return v.val, nil
+	if index < uint64(len(s.sharedItems)) {
+		if ind, ok := s.individualItems[index]; ok {
+			if v, ok := ind.valueOf(obj.Id()); ok {
+				return v, nil
 			}
 		}
 		return s.sharedItems[index], nil
-	} else {
-		item := s.appendedItems[index-uint64(len(s.sharedItems))]
-		for _, v := range item.Values {
-			if slices.Contains(v.ids, obj.Id()) {
-				return v.val, nil
-			}
-		}
-		var def V
-		return def, fmt.Errorf("index %d %w", index, ErrOutOfBounds)
 	}
+	if v, ok := s.appendedItems[index-uint64(len(s.sharedItems))].valueOf(obj.Id()); ok {
+		return v, nil
+	}
+	var def V
+	return def, fmt.Errorf("index %d %w", index, ErrOutOfBounds)
 }
 
 // UpdateAt updates the item at the required index for the input object to the passed in value.
@@ -422,63 +387,59 @@ func (s *Slice[V]) Reset(obj Identifiable) *Slice[V] {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	l, ok := s.cachedLengths[obj.Id()]
-	if !ok {
-		l = len(s.sharedItems)
-	}
-
-	items := make([]V, l)
-	copy(items, s.sharedItems)
-	for i, ind := range s.individualItems {
-		for _, v := range ind.Values {
-			_, found := containsId(v.ids, obj.Id())
-			if found {
-				items[i] = v.val
-				break
-			}
-		}
-	}
-
-	index := len(s.sharedItems)
-	for _, app := range s.appendedItems {
-		found := true
-		for _, v := range app.Values {
-			_, found = containsId(v.ids, obj.Id())
-			if found {
-				items[index] = v.val
-				index++
-				break
-			}
-		}
-		if !found {
-			break
-		}
-	}
-
 	reset := &Slice[V]{}
-	reset.Init(items)
+	reset.Init(s.value(obj.Id()))
 	return reset
 }
 
-func (s *Slice[V]) fillOriginalItems(obj Identifiable, items *[]V) {
-	for i, item := range s.sharedItems {
-		ind, ok := s.individualItems[uint64(i)]
-		if !ok {
-			(*items)[i] = item
-		} else {
-			found := false
-			for _, v := range ind.Values {
-				_, found = containsId(v.ids, obj.Id())
-				if found {
-					(*items)[i] = v.val
-					break
-				}
+// value returns a new slice with all items for the object with the given id.
+// It copies the shared items in bulk and then writes the object's individual and appended values over them.
+// The caller must hold the lock.
+func (s *Slice[V]) value(id uint64) []V {
+	l, ok := s.cachedLengths[id]
+	if !ok {
+		l = len(s.sharedItems)
+	}
+	result := make([]V, l)
+	copy(result, s.sharedItems)
+
+	// Walking a sparse map is much cheaper than a lookup at every index.
+	// A dense map is cheaper to look up in index order, because its items are usually allocated in that order.
+	if len(s.individualItems) < len(s.sharedItems)/4 {
+		for i, ind := range s.individualItems {
+			if v, ok := ind.valueOf(id); ok {
+				result[i] = v
 			}
-			if !found {
-				(*items)[i] = item
+		}
+	} else {
+		for i := range s.sharedItems {
+			if ind, ok := s.individualItems[uint64(i)]; ok {
+				if v, ok := ind.valueOf(id); ok {
+					result[i] = v
+				}
 			}
 		}
 	}
+
+	// The object's appended values are contiguous from index 0, so its length tells how many it has.
+	sharedLen := len(s.sharedItems)
+	for i, item := range s.appendedItems[:l-sharedLen] {
+		if v, ok := item.valueOf(id); ok {
+			result[sharedLen+i] = v
+		}
+	}
+	return result
+}
+
+// valueOf returns the item's value for the object with the given id.
+func (m *MultiValueItem[V]) valueOf(id uint64) (V, bool) {
+	for _, v := range m.Values {
+		if slices.Contains(v.ids, id) {
+			return v.val, true
+		}
+	}
+	var def V
+	return def, false
 }
 
 func (s *Slice[V]) updateOriginalItem(obj Identifiable, index uint64, val V) {
