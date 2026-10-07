@@ -791,6 +791,7 @@ func BenchmarkValue(b *testing.B) {
 		for i := range objs {
 			objs[i] = &testObject{id: uint64(i)}
 			s.appendedItems[0].Values[0].ids = append(s.appendedItems[0].Values[0].ids, uint64(i))
+			s.cachedLengths[uint64(i)] = _100k + 1
 		}
 		for b.Loop() {
 			s.Value(objs[rand.Intn(_100k)])
@@ -799,11 +800,12 @@ func BenchmarkValue(b *testing.B) {
 	b.Run("100,000 shared items and 100,000 different appended items", func(b *testing.B) {
 		s := &Slice[int]{}
 		s.Init(make([]int, _100k))
-		s.appendedItems = []*MultiValueItem[int]{}
+		s.appendedItems = []*MultiValueItem[int]{{}}
 		objs := make([]*testObject, _100k)
 		for i := range objs {
 			objs[i] = &testObject{id: uint64(i)}
-			s.appendedItems = append(s.appendedItems, &MultiValueItem[int]{Values: []*Value[int]{{val: i, ids: []uint64{uint64(i)}}}})
+			s.appendedItems[0].Values = append(s.appendedItems[0].Values, &Value[int]{val: i, ids: []uint64{uint64(i)}})
+			s.cachedLengths[uint64(i)] = _100k + 1
 		}
 		for b.Loop() {
 			s.Value(objs[rand.Intn(_100k)])
@@ -849,6 +851,7 @@ func BenchmarkValue(b *testing.B) {
 		for i := range objs {
 			objs[i] = &testObject{id: uint64(i)}
 			s.appendedItems[0].Values[0].ids = append(s.appendedItems[0].Values[0].ids, uint64(i))
+			s.cachedLengths[uint64(i)] = _1m + 1
 		}
 		for b.Loop() {
 			s.Value(objs[rand.Intn(_1m)])
@@ -857,11 +860,12 @@ func BenchmarkValue(b *testing.B) {
 	b.Run("1,000,000 shared items and 1,000,000 different appended items", func(b *testing.B) {
 		s := &Slice[int]{}
 		s.Init(make([]int, _1m))
-		s.appendedItems = []*MultiValueItem[int]{}
+		s.appendedItems = []*MultiValueItem[int]{{}}
 		objs := make([]*testObject, _1m)
 		for i := range objs {
 			objs[i] = &testObject{id: uint64(i)}
-			s.appendedItems = append(s.appendedItems, &MultiValueItem[int]{Values: []*Value[int]{{val: i, ids: []uint64{uint64(i)}}}})
+			s.appendedItems[0].Values = append(s.appendedItems[0].Values, &Value[int]{val: i, ids: []uint64{uint64(i)}})
+			s.cachedLengths[uint64(i)] = _1m + 1
 		}
 		for b.Loop() {
 			s.Value(objs[rand.Intn(_1m)])
@@ -907,6 +911,7 @@ func BenchmarkValue(b *testing.B) {
 		for i := range objs {
 			objs[i] = &testObject{id: uint64(i)}
 			s.appendedItems[0].Values[0].ids = append(s.appendedItems[0].Values[0].ids, uint64(i))
+			s.cachedLengths[uint64(i)] = _10m + 1
 		}
 		for b.Loop() {
 			s.Value(objs[rand.Intn(_10m)])
@@ -915,11 +920,12 @@ func BenchmarkValue(b *testing.B) {
 	b.Run("10,000,000 shared items and 10,000,000 different appended items", func(b *testing.B) {
 		s := &Slice[int]{}
 		s.Init(make([]int, _10m))
-		s.appendedItems = []*MultiValueItem[int]{}
+		s.appendedItems = []*MultiValueItem[int]{{}}
 		objs := make([]*testObject, _10m)
 		for i := range objs {
 			objs[i] = &testObject{id: uint64(i)}
-			s.appendedItems = append(s.appendedItems, &MultiValueItem[int]{Values: []*Value[int]{{val: i, ids: []uint64{uint64(i)}}}})
+			s.appendedItems[0].Values = append(s.appendedItems[0].Values, &Value[int]{val: i, ids: []uint64{uint64(i)}})
+			s.cachedLengths[uint64(i)] = _10m + 1
 		}
 		for b.Loop() {
 			s.Value(objs[rand.Intn(_10m)])
