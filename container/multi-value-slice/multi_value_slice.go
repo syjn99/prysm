@@ -90,6 +90,7 @@
 package mvslice
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"sync"
@@ -219,6 +220,88 @@ func (s *Slice[V]) Value(obj Identifiable) []V {
 	defer s.lock.RUnlock()
 
 	return s.value(obj.Id())
+}
+
+// rangeChunk is how many items Range copies under one read lock.
+const rangeChunk = 1024
+
+// override is an individual value of one object at a shared index.
+type override[V any] struct {
+	index uint64
+	val   V
+}
+
+// Range calls f with the index and value of each item for the input object, in order, until f returns false.
+// It visits the items that Value returns without collecting them into one slice. Items are copied in chunks
+// under the read lock and f runs without the lock, so f may read the slice or update the item it was given.
+// Updates to items that Range has not visited yet may not be seen.
+func (s *Slice[V]) Range(obj Identifiable, f func(i int, v V) bool) {
+	id := obj.Id()
+	l, overrides, sparse := s.rangeStart(id)
+	buf := make([]V, min(l, rangeChunk))
+	for start := 0; start < l; start += len(buf) {
+		chunk := buf[:min(len(buf), l-start)]
+		overrides = s.readChunk(id, start, chunk, sparse, overrides)
+		for k, v := range chunk {
+			if !f(start+k, v) {
+				return
+			}
+		}
+	}
+}
+
+// rangeStart returns the object's length and, when the individual items map is sparse, the object's
+// individual values sorted by index. A sparse map is walked once instead of looked up at every index.
+func (s *Slice[V]) rangeStart(id uint64) (int, []override[V], bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	l, ok := s.cachedLengths[id]
+	if !ok {
+		l = len(s.sharedItems)
+	}
+	if len(s.individualItems) >= len(s.sharedItems)/4 {
+		return l, nil, false
+	}
+	var overrides []override[V]
+	for i, ind := range s.individualItems {
+		if v, ok := ind.valueOf(id); ok {
+			overrides = append(overrides, override[V]{index: i, val: v})
+		}
+	}
+	slices.SortFunc(overrides, func(a, b override[V]) int { return cmp.Compare(a.index, b.index) })
+	return l, overrides, true
+}
+
+// readChunk copies the items from index start into dst for the object with the given id and returns the
+// sparse overrides that are left. The caller must keep start+len(dst) within the object's length.
+func (s *Slice[V]) readChunk(id uint64, start int, dst []V, sparse bool, overrides []override[V]) []override[V] {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	end := start + len(dst)
+	sharedEnd := min(end, len(s.sharedItems))
+	if start < sharedEnd {
+		copy(dst, s.sharedItems[start:sharedEnd])
+		if sparse {
+			for len(overrides) > 0 && overrides[0].index < uint64(sharedEnd) {
+				dst[overrides[0].index-uint64(start)] = overrides[0].val
+				overrides = overrides[1:]
+			}
+		} else {
+			for i := start; i < sharedEnd; i++ {
+				if ind, ok := s.individualItems[uint64(i)]; ok {
+					if v, ok := ind.valueOf(id); ok {
+						dst[i-start] = v
+					}
+				}
+			}
+		}
+	}
+	for i := max(start, len(s.sharedItems)); i < end; i++ {
+		dst[i-start], _ = s.appendedItems[i-len(s.sharedItems)].valueOf(id)
+	}
+	return overrides
 }
 
 // At returns the item at the requested index for the input object.

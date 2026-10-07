@@ -194,6 +194,12 @@ func FuzzValue(f *testing.F) {
 				v := s.Value(&objects[j])
 				require.DeepEqual(t, want[j], v)
 				require.Equal(t, len(v), s.Len(&objects[j]))
+				var ranged []int
+				s.Range(&objects[j], func(_ int, x int) bool {
+					ranged = append(ranged, x)
+					return true
+				})
+				require.Equal(t, true, slices.Equal(v, ranged))
 				for k := range v {
 					at, err := s.At(&objects[j], uint64(k))
 					require.NoError(t, err)
@@ -202,6 +208,82 @@ func FuzzValue(f *testing.F) {
 				require.DeepEqual(t, want[j], s.Reset(&objects[j]).Value(&testObject{id: 999}))
 			}
 		}
+	})
+}
+
+func TestRange(t *testing.T) {
+	collect := func(s *Slice[int], obj Identifiable) []int {
+		var got []int
+		s.Range(obj, func(i int, v int) bool {
+			require.Equal(t, len(got), i)
+			got = append(got, v)
+			return true
+		})
+		return got
+	}
+	t.Run("matches Value", func(t *testing.T) {
+		s := setup()
+		for _, obj := range []*testObject{{id: 1}, {id: 2}, {id: 999}} {
+			require.Equal(t, true, slices.Equal(s.Value(obj), collect(s, obj)))
+		}
+	})
+	t.Run("across chunks", func(t *testing.T) {
+		const n = 3*rangeChunk + 7
+		s := &Slice[int]{}
+		s.Init(make([]int, n))
+		obj, other := &testObject{id: 1}, &testObject{id: 2}
+		s.Copy(obj, other)
+		for _, i := range []int{0, rangeChunk - 1, rangeChunk, 2*rangeChunk + 5, n - 1} {
+			require.NoError(t, s.UpdateAt(obj, uint64(i), i+1))
+			require.NoError(t, s.UpdateAt(other, uint64(i), -1))
+		}
+		for i := range rangeChunk + 3 {
+			s.Append(obj, 100+i)
+		}
+		require.Equal(t, true, slices.Equal(s.Value(obj), collect(s, obj)))
+		require.Equal(t, true, slices.Equal(s.Value(other), collect(s, other)))
+	})
+	t.Run("dense individual items across chunks", func(t *testing.T) {
+		const n = 2*rangeChunk + 3
+		s := &Slice[int]{}
+		s.Init(make([]int, n))
+		obj, other := &testObject{id: 1}, &testObject{id: 2}
+		s.Copy(obj, other)
+		for i := range n {
+			if i%2 == 0 {
+				require.NoError(t, s.UpdateAt(obj, uint64(i), i+1))
+			} else {
+				require.NoError(t, s.UpdateAt(other, uint64(i), -1))
+			}
+		}
+		require.Equal(t, true, slices.Equal(s.Value(obj), collect(s, obj)))
+		require.Equal(t, true, slices.Equal(s.Value(other), collect(s, other)))
+	})
+	t.Run("stops when f returns false", func(t *testing.T) {
+		s := setup()
+		visited := 0
+		s.Range(&testObject{id: 1}, func(i int, _ int) bool {
+			visited++
+			return i < 2
+		})
+		require.Equal(t, 3, visited)
+	})
+	t.Run("f may update the slice", func(t *testing.T) {
+		s := &Slice[int]{}
+		s.Init(make([]int, 2*rangeChunk))
+		obj := &testObject{id: 1}
+		s.Range(obj, func(i int, v int) bool {
+			require.NoError(t, s.UpdateAt(obj, uint64(i), v+i))
+			return true
+		})
+		for i, v := range s.Value(obj) {
+			require.Equal(t, i, v)
+		}
+	})
+	t.Run("empty", func(t *testing.T) {
+		s := &Slice[int]{}
+		s.Init(nil)
+		require.Equal(t, 0, len(collect(s, &testObject{id: 1})))
 	})
 }
 
@@ -1071,4 +1153,78 @@ func benchmarkValueMainnet[V comparable](b *testing.B, val func(int) V) {
 			s.Value(obj)
 		}
 	})
+}
+
+// BenchmarkReadEveryMainnet compares reading 2.34M validators one At call at a time with one Range.
+func BenchmarkReadEveryMainnet(b *testing.B) {
+	const n = 2_340_000
+	val := func(i int) compactValidator { return compactValidator{byte(i), byte(i >> 8)} }
+	fixtures := []struct {
+		name  string
+		build func(s *Slice[compactValidator], obj *testObject)
+	}{
+		{"empty overlay", func(*Slice[compactValidator], *testObject) {}},
+		{"1000 individual and 10 appended items", func(s *Slice[compactValidator], obj *testObject) {
+			for i := range 1000 {
+				require.NoError(b, s.UpdateAt(obj, uint64(i*1000), val(i+1)))
+			}
+			for i := range 10 {
+				s.Append(obj, val(i+1))
+			}
+		}},
+	}
+	for _, fx := range fixtures {
+		s := &Slice[compactValidator]{}
+		s.Init(make([]compactValidator, n))
+		obj := &testObject{id: 1}
+		fx.build(s, obj)
+		var sink byte
+		b.Run("At/"+fx.name, func(b *testing.B) {
+			for b.Loop() {
+				for i := range s.Len(obj) {
+					v, err := s.At(obj, uint64(i))
+					if err != nil {
+						b.Fatal(err)
+					}
+					sink ^= v[0]
+				}
+			}
+		})
+		b.Run("Range/"+fx.name, func(b *testing.B) {
+			for b.Loop() {
+				s.Range(obj, func(_ int, v compactValidator) bool {
+					sink ^= v[0]
+					return true
+				})
+			}
+		})
+		// Concurrent readers share the slice lock, as state copies do on a node.
+		b.Run("At/4 readers/"+fx.name, func(b *testing.B) {
+			b.SetParallelism(1)
+			b.RunParallel(func(pb *testing.PB) {
+				var local byte
+				for pb.Next() {
+					for i := range s.Len(obj) {
+						v, _ := s.At(obj, uint64(i))
+						local ^= v[0]
+					}
+				}
+				_ = local
+			})
+		})
+		b.Run("Range/4 readers/"+fx.name, func(b *testing.B) {
+			b.SetParallelism(1)
+			b.RunParallel(func(pb *testing.PB) {
+				var local byte
+				for pb.Next() {
+					s.Range(obj, func(_ int, v compactValidator) bool {
+						local ^= v[0]
+						return true
+					})
+				}
+				_ = local
+			})
+		})
+		_ = sink
+	}
 }
