@@ -103,6 +103,10 @@ func (s *Store) stateByDiff(ctx context.Context, slot primitives.Slot) (state.Be
 		}
 	}
 
+	if snapshot.Slot() != slot {
+		return nil, errors.Wrapf(ErrNotFoundState, "state-diff tree has no state at slot %d, nearest base is at slot %d", slot, snapshot.Slot())
+	}
+
 	return snapshot, nil
 }
 

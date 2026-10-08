@@ -1431,7 +1431,7 @@ func TestStore_CanSaveRetrieveStateUsingStateDiff(t *testing.T) {
 		require.NoError(t, err)
 
 		readSt, err := db.State(context.Background(), r)
-		require.ErrorContains(t, "snapshot not found", err)
+		require.ErrorIs(t, err, ErrNotFoundState)
 		require.IsNil(t, readSt)
 	})
 

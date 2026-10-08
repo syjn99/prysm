@@ -1454,3 +1454,61 @@ func setStateDiffExponents(exponents []int) {
 	globalFlags := flags.GlobalFlags{StateDiffExponents: exponents}
 	flags.Init(&globalFlags)
 }
+
+// A slot with no written diff must miss. It must not return the base snapshot as the requested slot. The miss
+// must not read the base snapshot.
+func TestStateDiff_StateByDiffMiss(t *testing.T) {
+	setDefaultStateDiffExponents()
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true})
+	defer resetCfg()
+	ctx := t.Context()
+	db := setupDB(t)
+
+	const offset = primitives.Slot(2048)
+	base, _ := util.DeterministicGenesisState(t, 16)
+	require.NoError(t, base.SetSlot(offset))
+	require.NoError(t, db.initializeStateDiff(offset, base))
+
+	t.Run("unwritten boundaries miss", func(t *testing.T) {
+		// Only the offset snapshot exists. The boundaries above it have no data.
+		for _, slot := range []primitives.Slot{offset + 32, offset + 512, offset + 2048, offset + 1<<18} {
+			_, err := db.stateByDiff(ctx, slot)
+			require.ErrorIs(t, err, ErrNotFoundState, "slot %d", slot)
+		}
+		got, err := db.stateByDiff(ctx, offset)
+		require.NoError(t, err)
+		require.Equal(t, offset, got.Slot())
+	})
+
+	next := base.Copy()
+	require.NoError(t, next.SetSlot(offset+32))
+	require.NoError(t, db.SaveState(ctx, next, [32]byte{1}))
+
+	t.Run("written boundary resolves", func(t *testing.T) {
+		got, err := db.stateByDiff(ctx, offset+32)
+		require.NoError(t, err)
+		require.Equal(t, offset+32, got.Slot())
+
+		// An unwritten boundary at a level with data still misses.
+		_, err = db.stateByDiff(ctx, offset+64)
+		require.NotNil(t, err)
+	})
+
+	t.Run("miss before the base snapshot read", func(t *testing.T) {
+		// Delete the base from the db and the anchor cache. A base read now fails.
+		require.NoError(t, db.db.Update(func(tx *bbolt.Tx) error {
+			return tx.Bucket(stateDiffBucket).Delete(makeKeyForStateDiffTree(0, uint64(offset)))
+		}))
+		db.stateDiffCache.clearAnchors()
+		_, err := db.getFullSnapshot(uint64(offset))
+		require.ErrorIs(t, err, errSnapshotNotFound)
+
+		// Level 5 has no data. The miss comes from the level flags.
+		_, err = db.stateByDiff(ctx, offset+512)
+		require.ErrorIs(t, err, ErrNotFoundState)
+
+		// Level 6 has data, but not this key. The miss comes from the diff read.
+		_, err = db.stateByDiff(ctx, offset+64)
+		require.ErrorContains(t, "state diff not found", err)
+	})
+}

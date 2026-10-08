@@ -525,11 +525,13 @@ func (s *Store) getBaseAndDiffChain(offset uint64, slot primitives.Slot) (state.
 		lastSeenDiffRelSlot = diffSlot
 	}
 
-	baseSnapshot, err := s.getFullSnapshot(baseAnchorSlot)
-	if err != nil {
-		return nil, nil, err
+	// The last item sets the result slot. If it is not the requested slot, the tree has no state there.
+	// Return the miss before the base snapshot decode.
+	if lvl > 0 && (len(diffChainItems) == 0 || diffChainItems[len(diffChainItems)-1].slot != uint64(slot)) {
+		return nil, nil, pkgerrors.Wrapf(ErrNotFoundState, "state-diff tree has no state at slot %d", slot)
 	}
 
+	// Read the diffs first. A missing diff then costs a key lookup, not a full state decode.
 	diffChain := make([]hdiff.HdiffBytes, 0, len(diffChainItems))
 	for _, item := range diffChainItems {
 		diff, err := s.getDiff(item.level, item.slot)
@@ -537,6 +539,11 @@ func (s *Store) getBaseAndDiffChain(offset uint64, slot primitives.Slot) (state.
 			return nil, nil, err
 		}
 		diffChain = append(diffChain, diff)
+	}
+
+	baseSnapshot, err := s.getFullSnapshot(baseAnchorSlot)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return baseSnapshot, diffChain, nil
