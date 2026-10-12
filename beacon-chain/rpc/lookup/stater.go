@@ -363,22 +363,13 @@ func (p *BeaconDbStater) archiveFrontier() (primitives.Slot, bool) {
 	return r.ArchiveFrontier()
 }
 
-// archiveGapError returns a not-found error for a slot above the archive walk frontier and below the sync origin.
-// No saved state exists in that range yet, so a replay starts at the frontier. That replay keeps every block in
-// memory, and a request far above the frontier can make the node run out of memory.
+// archiveGapError returns a not-found error that names the frontier for a slot in stategen.ArchiveGap.
 func (p *BeaconDbStater) archiveGapError(ctx context.Context, slot primitives.Slot) error {
-	frontier, pending := p.archiveFrontier()
-	if !pending || slot <= frontier {
-		return nil
-	}
-	bs, err := p.BeaconDB.BackfillStatus(ctx)
-	if errors.Is(err, db.ErrNotFound) {
-		return nil
-	}
+	frontier, inGap, err := stategen.ArchiveGap(ctx, p.BeaconDB, slot)
 	if err != nil {
 		return errors.Wrap(err, "could not determine state availability")
 	}
-	if bs == nil || uint64(slot) >= bs.OriginSlot {
+	if !inGap {
 		return nil
 	}
 	return newStateNotFoundErrorf("requested slot %d is not available yet; archive state regeneration has reached slot %d", slot, frontier)

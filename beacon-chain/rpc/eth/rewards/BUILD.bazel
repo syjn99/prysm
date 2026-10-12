@@ -32,6 +32,7 @@ go_library(
         "//network/httputil:go_default_library",
         "//runtime/version:go_default_library",
         "//time/slots:go_default_library",
+        "@com_github_pkg_errors//:go_default_library",
         "@com_github_wealdtech_go_bytesutil//:go_default_library",
     ],
 )

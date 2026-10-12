@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
+	"github.com/OffchainLabs/prysm/v7/proto/dbval"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -25,6 +27,36 @@ func (s *State) ArchivePending() bool {
 	s.archive.lock.RLock()
 	defer s.archive.lock.RUnlock()
 	return s.archive.pending
+}
+
+type archiveGapReader interface {
+	ArchiveFrontier() (primitives.Slot, bool)
+	BackfillStatus(ctx context.Context) (*dbval.BackfillStatus, error)
+}
+
+// ArchiveGap returns the archive walk frontier and true when slot is above the frontier and below the sync
+// origin. An archive node has no saved state in that range until the walk reaches it. A replay to such a
+// slot starts at the frontier and keeps every block in memory, so one request can exhaust memory.
+func ArchiveGap(ctx context.Context, d any, slot primitives.Slot) (primitives.Slot, bool, error) {
+	r, ok := d.(archiveGapReader)
+	if !ok {
+		return 0, false, nil
+	}
+	frontier, pending := r.ArchiveFrontier()
+	if !pending || slot <= frontier {
+		return 0, false, nil
+	}
+	bs, err := r.BackfillStatus(ctx)
+	if errors.Is(err, db.ErrNotFound) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, errors.Wrap(err, "could not read the backfill status")
+	}
+	if bs == nil || uint64(slot) >= bs.OriginSlot {
+		return 0, false, nil
+	}
+	return frontier, true, nil
 }
 
 // CompleteArchiveRegeneration hands migration back to the finalization-driven path, reporting if it happened.

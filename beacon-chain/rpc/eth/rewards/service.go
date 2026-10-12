@@ -19,6 +19,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/network/httputil"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
 	"github.com/OffchainLabs/prysm/v7/time/slots"
+	"github.com/pkg/errors"
 )
 
 // BlockRewardsFetcher is a interface that provides access to reward related responses
@@ -161,9 +162,13 @@ func (rs *BlockRewardService) GetStateForRewards(ctx context.Context, blk interf
 
 	st, err := rs.Replayer.ReplayerForSlot(slots.PrevSlot(blk.Slot())).ReplayToSlot(ctx, blk.Slot())
 	if err != nil {
+		code := http.StatusInternalServerError
+		if errors.Is(err, stategen.ErrNoDataForSlot) {
+			code = http.StatusNotFound
+		}
 		return nil, &httputil.DefaultJsonError{
 			Message: "Could not get state: " + err.Error(),
-			Code:    http.StatusInternalServerError,
+			Code:    code,
 		}
 	}
 	return st, nil

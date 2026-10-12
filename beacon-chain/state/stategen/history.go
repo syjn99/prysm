@@ -120,6 +120,14 @@ func (c *CanonicalHistory) bestForSlot(ctx context.Context, roots [][32]byte) ([
 func (c *CanonicalHistory) chainForSlot(ctx context.Context, target primitives.Slot) (state.BeaconState, []interfaces.ReadOnlySignedBeaconBlock, error) {
 	ctx, span := trace.StartSpan(ctx, "canonicalChainer.chainForSlot")
 	defer span.End()
+	// Only the API builds a CanonicalHistory, so this guard does not stop the archive walk or migration.
+	frontier, inGap, err := ArchiveGap(ctx, c.h, target)
+	if err != nil {
+		return nil, nil, err
+	}
+	if inGap {
+		return nil, nil, errors.Wrapf(ErrNoDataForSlot, "slot %d is above the archive regeneration frontier %d", target, frontier)
+	}
 	r, err := c.BlockRootForSlot(ctx, target)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "no canonical block root found below slot=%d", target)
