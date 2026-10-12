@@ -175,6 +175,58 @@ func TestWalk_SkipsOrphanAtHighestPopulatedSlot(t *testing.T) {
 	require.Equal(t, wantRoot64, gotRoot64, "boundary 64 differs from the canonical chain")
 }
 
+// The walk target is the start of the finalized epoch, and the finalized index holds every block of that epoch,
+// orphans too. A lone orphan at the target slot must not supply the boundary state.
+func TestWalk_SkipsOrphanAtFinalizedEpochStart(t *testing.T) {
+	setStateDiffExponents([]int{11, 9, 5})
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
+	defer resetCfg()
+
+	ctx := t.Context()
+	store := testDB.SetupDB(t).(*kv.Store)
+	genesisState, keys := util.DeterministicGenesisState(t, 64)
+	require.NoError(t, store.InitializeArchiveOrigin(ctx, genesisState))
+	saveGenesisBlock(t, ctx, store, genesisState)
+
+	working := genesisState.Copy()
+	var root62 [32]byte
+	for slot := primitives.Slot(1); slot <= 62; slot++ {
+		working, root62 = applyBlock(t, ctx, store, working, keys, slot)
+	}
+	stateAt62 := working.Copy()
+
+	// An orphan at slot 64 builds on 62. The canonical chain skips 63 and 64 and resumes at 65.
+	orphan, err := util.GenerateFullBlock(stateAt62.Copy(), keys, util.DefaultBlockGenConfig(), 64)
+	require.NoError(t, err)
+	orphanRoot := saveBlock(t, ctx, store, orphan)
+	canonical := stateAt62.Copy()
+	for slot := primitives.Slot(65); slot <= 70; slot++ {
+		canonical, _ = applyBlock(t, ctx, store, canonical, keys, slot)
+	}
+
+	// The checkpoint root of epoch 2 is the highest canonical block at or below slot 64, which is 62.
+	require.NoError(t, store.SaveFinalizedCheckpoint(ctx, &ethpb.Checkpoint{Epoch: 2, Root: root62[:]}))
+	require.Equal(t, true, store.IsFinalizedBlock(ctx, orphanRoot), "the orphan must be in the finalized index for this test to mean anything")
+
+	want, err := transition.ProcessSlots(ctx, stateAt62.Copy(), 64)
+	require.NoError(t, err)
+	wantRoot, err := want.HashTreeRoot(ctx)
+	require.NoError(t, err)
+
+	svc := newTestService(t, store)
+	target, err := svc.target(ctx)
+	require.NoError(t, err)
+	require.Equal(t, primitives.Slot(64), target)
+	require.NoError(t, svc.walk(ctx, target))
+
+	got, err := store.StateBySlotFromDiffTree(ctx, 64)
+	require.NoError(t, err)
+	gotRoot, err := got.HashTreeRoot(ctx)
+	require.NoError(t, err)
+	require.Equal(t, primitives.Slot(62), got.LatestBlockHeader().Slot, "boundary 64 was built from the orphan")
+	require.Equal(t, wantRoot, gotRoot)
+}
+
 // A wrong origin state produces a state root that does not match what the first block commits to. This is the
 // only verification of the operator-supplied origin state, so it must fire.
 func TestWalk_RejectsWrongOriginState(t *testing.T) {
