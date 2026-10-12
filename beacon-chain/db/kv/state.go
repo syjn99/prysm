@@ -924,6 +924,24 @@ func (s *Store) HighestStateSlotAtOrBelow(ctx context.Context, slot primitives.S
 	return found, err
 }
 
+// StateRootsBelowSlot returns the block roots of stored states below the input slot, in ascending slot order.
+func (s *Store) StateRootsBelowSlot(ctx context.Context, slot primitives.Slot) ([][32]byte, error) {
+	_, span := trace.StartSpan(ctx, "BeaconDB.StateRootsBelowSlot")
+	defer span.End()
+
+	var roots [][32]byte
+	err := s.db.View(func(tx *bolt.Tx) error {
+		c := tx.Bucket(stateSlotIndicesBucket).Cursor()
+		for k, v := c.First(); k != nil && bytesutil.BytesToSlotBigEndian(k) < slot; k, v = c.Next() {
+			for i := 0; i+32 <= len(v); i += 32 {
+				roots = append(roots, bytesutil.ToBytes32(v[i:i+32]))
+			}
+		}
+		return nil
+	})
+	return roots, err
+}
+
 // createStateIndicesFromStateSlot takes in a state slot and returns
 // a map of bolt DB index buckets corresponding to each particular key for indices for
 // data, such as (shard indices bucket -> shard 5).

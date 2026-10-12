@@ -4,14 +4,17 @@ import (
 	"testing"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/blocks"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	testDB "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
 	doublylinkedtree "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/doubly-linked-tree"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/cmd/beacon-chain/flags"
 	"github.com/OffchainLabs/prysm/v7/config/features"
+	"github.com/OffchainLabs/prysm/v7/config/params"
 	consensusblocks "github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
+	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/testing/assert"
 	"github.com/OffchainLabs/prysm/v7/testing/require"
@@ -618,4 +621,78 @@ func TestMigrateToColdHdiff_NoOpWhenFinalizedSlotNotAdvanced(t *testing.T) {
 
 	// Migration should be a no-op (finalized slot not advancing).
 	require.NoError(t, service.MigrateToCold(ctx, fRoot))
+}
+
+func TestMigrateToCold_PruneHistoricalStates(t *testing.T) {
+	ctx := t.Context()
+	cfg := params.BeaconConfig().Copy()
+	cfg.SlotsPerArchivedPoint = 8
+	params.SetupTestConfigCleanup(t)
+	params.OverrideBeaconConfig(cfg)
+	oRoot, hRoot := [32]byte{'o'}, [32]byte{'h'}
+	newState := func(t *testing.T, slot primitives.Slot) state.BeaconState {
+		st, err := util.NewBeaconState()
+		require.NoError(t, err)
+		require.NoError(t, st.SetSlot(slot))
+		return st
+	}
+
+	// migrate builds a block every 8 slots from genesis to the finalized slot 96, stores the genesis, origin (slot 4),
+	// hot (slot 20) and archived (8..72) states, then migrates the cached boundary states 80 and 88 to cold.
+	migrate := func(t *testing.T, opts ...Option) (db.Database, map[primitives.Slot][32]byte) {
+		beaconDB := testDB.SetupDB(t)
+		service := New(beaconDB, doublylinkedtree.New(), opts...)
+		roots := make(map[primitives.Slot][32]byte)
+		parent := bytesutil.PadTo([]byte{'a'}, 32)
+		for slot := primitives.Slot(0); slot <= 96; slot += 8 {
+			b := util.NewBeaconBlock()
+			b.Block.Slot = slot
+			b.Block.ParentRoot = parent
+			r, err := b.Block.HashTreeRoot()
+			require.NoError(t, err)
+			util.SaveBlock(t, ctx, beaconDB, b)
+			switch {
+			case slot > 0 && slot < 80:
+				require.NoError(t, beaconDB.SaveState(ctx, newState(t, slot), r))
+			case slot >= 80 && slot < 96:
+				require.NoError(t, service.epochBoundaryStateCache.put(r, newState(t, slot)))
+			}
+			roots[slot] = r
+			parent = r[:]
+		}
+		require.NoError(t, beaconDB.SaveState(ctx, newState(t, 0), roots[0]))
+		require.NoError(t, beaconDB.SaveGenesisBlockRoot(ctx, roots[0]))
+		require.NoError(t, beaconDB.SaveState(ctx, newState(t, 4), oRoot))
+		require.NoError(t, beaconDB.SaveOriginCheckpointBlockRoot(ctx, oRoot))
+		require.NoError(t, beaconDB.SaveState(ctx, newState(t, 20), hRoot))
+		service.saveHotStateDB.blockRootsOfSavedStates = [][32]byte{hRoot}
+		fRoot := roots[96]
+		require.NoError(t, beaconDB.SaveFinalizedCheckpoint(ctx, &ethpb.Checkpoint{Epoch: 10, Root: fRoot[:]}))
+		require.NoError(t, service.MigrateToCold(ctx, fRoot))
+		return beaconDB, roots
+	}
+
+	t.Run("disabled keeps every state", func(t *testing.T) {
+		beaconDB, _ := migrate(t)
+		got, err := beaconDB.StateRootsBelowSlot(ctx, 96)
+		require.NoError(t, err)
+		require.Equal(t, 14, len(got))
+	})
+	t.Run("keeps newest anchors and protected states", func(t *testing.T) {
+		beaconDB, roots := migrate(t, WithHistoricalStatePruning())
+		got, err := beaconDB.StateRootsBelowSlot(ctx, 96)
+		require.NoError(t, err)
+		require.DeepEqual(t, [][32]byte{roots[0], oRoot, hRoot, roots[80], roots[88]}, got)
+	})
+	t.Run("restart replays from newest anchor", func(t *testing.T) {
+		beaconDB, roots := migrate(t, WithHistoricalStatePruning())
+		st, err := New(beaconDB, doublylinkedtree.New()).latestAncestor(ctx, roots[96])
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(88), st.Slot())
+	})
+	t.Run("pruned state is not served", func(t *testing.T) {
+		beaconDB, roots := migrate(t, WithHistoricalStatePruning())
+		_, err := New(beaconDB, doublylinkedtree.New()).latestAncestor(ctx, roots[48])
+		require.ErrorIs(t, err, ErrHistoricalStateNotStored)
+	})
 }

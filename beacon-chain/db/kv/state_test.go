@@ -737,6 +737,35 @@ func TestStore_HighestStateSlotAtOrBelow(t *testing.T) {
 	})
 }
 
+func TestStore_StateRootsBelowSlot(t *testing.T) {
+	db := setupDB(t)
+	ctx := t.Context()
+	save := func(slot primitives.Slot, root [32]byte) {
+		st, err := util.NewBeaconState()
+		require.NoError(t, err)
+		require.NoError(t, st.SetSlot(slot))
+		require.NoError(t, db.SaveState(ctx, st, root))
+	}
+	save(20, [32]byte{'c'})
+	save(10, [32]byte{'a'})
+	save(10, [32]byte{'b'})
+
+	for _, tc := range []struct {
+		slot primitives.Slot
+		want [][32]byte
+	}{
+		{10, nil},
+		{11, [][32]byte{{'a'}, {'b'}}},
+		{21, [][32]byte{{'a'}, {'b'}, {'c'}}},
+	} {
+		t.Run(fmt.Sprintf("below %d", tc.slot), func(t *testing.T) {
+			got, err := db.StateRootsBelowSlot(ctx, tc.slot)
+			require.NoError(t, err)
+			require.DeepEqual(t, tc.want, got)
+		})
+	}
+}
+
 func TestStore_GenesisState_CanGetHighestBelow(t *testing.T) {
 	db := setupDB(t)
 

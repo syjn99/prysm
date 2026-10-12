@@ -97,6 +97,7 @@ var appFlags = []cli.Flag{
 	flags.BuilderCriticalFailedBuilders,
 	flags.BuilderBidTimeout,
 	flags.BeaconDBPruning,
+	flags.PruneHistoricalStates,
 	flags.PrunerRetentionEpochs,
 	flags.DisableBuilderSSZ,
 	cmd.MinimalConfigFlag,

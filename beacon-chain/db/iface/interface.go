@@ -45,6 +45,7 @@ type ReadOnlyDatabase interface {
 	HasStateSummary(ctx context.Context, blockRoot [32]byte) bool
 	HighestSlotStatesBelow(ctx context.Context, slot primitives.Slot) ([]state.ReadOnlyBeaconState, error)
 	HighestStateSlotAtOrBelow(ctx context.Context, slot primitives.Slot) (primitives.Slot, error)
+	StateRootsBelowSlot(ctx context.Context, slot primitives.Slot) ([][32]byte, error)
 	SlotInDiffTree(primitives.Slot) (uint64, int, error)
 	StateBySlotFromDiffTree(ctx context.Context, slot primitives.Slot) (state.BeaconState, error)
 	// Checkpoint operations.

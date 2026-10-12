@@ -11,6 +11,7 @@ import (
 
 	"github.com/OffchainLabs/prysm/v7/cmd"
 	"github.com/OffchainLabs/prysm/v7/cmd/beacon-chain/flags"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/testing/assert"
@@ -38,6 +39,38 @@ func TestConfigureHistoricalSlasher(t *testing.T) {
 			params.BeaconConfig().SlotsPerArchivedPoint,
 			int(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().MaxAttestations))),
 	)
+}
+
+func TestHistoricalStatePruning(t *testing.T) {
+	newCliCtx := func(t *testing.T, prune, slasher bool) *cli.Context {
+		set := flag.NewFlagSet("test", 0)
+		set.Bool(flags.PruneHistoricalStates.Name, prune, "")
+		set.Bool(flags.HistoricalSlasherNode.Name, slasher, "")
+		return cli.NewContext(&cli.App{}, set, nil)
+	}
+
+	t.Run("unset warns", func(t *testing.T) {
+		hook := logTest.NewGlobal()
+		prune, err := historicalStatePruning(newCliCtx(t, false, false))
+		require.NoError(t, err)
+		require.Equal(t, false, prune)
+		assert.LogsContain(t, hook, "accumulate in the database without bound")
+	})
+	t.Run("set", func(t *testing.T) {
+		prune, err := historicalStatePruning(newCliCtx(t, true, false))
+		require.NoError(t, err)
+		require.Equal(t, true, prune)
+	})
+	t.Run("historical slasher conflicts", func(t *testing.T) {
+		_, err := historicalStatePruning(newCliCtx(t, true, true))
+		require.ErrorContains(t, "cannot be combined with --historical-slasher-node", err)
+	})
+	t.Run("archive conflicts", func(t *testing.T) {
+		resetCfg := features.InitWithReset(&features.Flags{EnableArchive: true, EnableStateDiff: true})
+		defer resetCfg()
+		_, err := historicalStatePruning(newCliCtx(t, true, false))
+		require.ErrorContains(t, "cannot be combined with --enable-archive", err)
+	})
 }
 
 func TestConfigureBuilderHeaderTimeout(t *testing.T) {

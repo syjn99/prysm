@@ -380,6 +380,12 @@ var (
 		Usage: "Enables pruning of beacon db beyond MIN_EPOCHS_FOR_BLOCK_REQUESTS duration. This is an opt-in feature," +
 			" and should only be enabled if operators doesn't require historical data.",
 	}
+	// PruneHistoricalStates keeps only the newest archived states instead of one every --slots-per-archive-point forever.
+	PruneHistoricalStates = &cli.BoolFlag{
+		Name: "prune-historical-states",
+		Usage: "Keeps only the newest archived beacon states in the database. States older than them can no longer be served. " +
+			"Cannot be combined with --enable-archive, --enable-state-diff or --historical-slasher-node.",
+	}
 	// PrunerRetentionEpochs defines the retention period for the pruner service in terms of epochs.
 	PrunerRetentionEpochs = &cli.Uint64Flag{
 		Name: "pruner-retention-epochs",

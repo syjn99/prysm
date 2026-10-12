@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/transition"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -57,6 +58,7 @@ func (s *State) MigrateToCold(ctx context.Context, fRoot [32]byte) error {
 		startSlot = (oldFSlot + s.slotsPerArchivedPoint - 1) / s.slotsPerArchivedPoint * s.slotsPerArchivedPoint
 	}
 
+	saved := false
 	// Start at the first archived point after old finalized slot, stop before current finalized slot.
 	// Jump directly between archived points.
 	for slot := startSlot; slot < fSlot; slot += s.slotsPerArchivedPoint {
@@ -108,6 +110,7 @@ func (s *State) MigrateToCold(ctx context.Context, fRoot [32]byte) error {
 		if err := s.beaconDB.SaveState(ctx, aState, aRoot); err != nil {
 			return err
 		}
+		saved = true
 
 		duration := time.Since(saveStart)
 		saveStateToColdSummary.Observe(float64(duration.Milliseconds()))
@@ -118,6 +121,9 @@ func (s *State) MigrateToCold(ctx context.Context, fRoot [32]byte) error {
 				"root":     hex.EncodeToString(bytesutil.Trunc(aRoot[:])),
 				"duration": duration,
 			}).Info("Saved state in DB")
+	}
+	if saved && s.pruneHistoricalStates {
+		s.pruneArchivedStates(ctx, fSlot)
 	}
 
 	// Update finalized info in memory.
@@ -133,6 +139,55 @@ func (s *State) MigrateToCold(ctx context.Context, fRoot [32]byte) error {
 	s.migratedSlot = fSlot
 
 	return nil
+}
+
+// archivedStatesToKeep is how many of the newest archived states pruning keeps as restart anchors.
+const archivedStatesToKeep = 2
+
+// pruneArchivedStates deletes the stored states below fSlot except the newest few, genesis, origin and hot states.
+func (s *State) pruneArchivedStates(ctx context.Context, fSlot primitives.Slot) {
+	roots, err := s.beaconDB.StateRootsBelowSlot(ctx, fSlot)
+	if err != nil {
+		log.WithError(err).Error("Could not list archived states to prune")
+		return
+	}
+	keep := make(map[[32]byte]bool)
+	oRoot, err := s.beaconDB.OriginCheckpointBlockRoot(ctx)
+	if err != nil && !errors.Is(err, db.ErrNotFoundOriginBlockRoot) {
+		log.WithError(err).Error("Could not get origin checkpoint root to prune archived states")
+		return
+	}
+	keep[oRoot] = true
+	// DeleteState refuses the genesis, justified and finalized states on its own.
+	if gRoot, err := s.beaconDB.GenesisBlockRoot(ctx); err == nil {
+		keep[gRoot] = true
+	}
+	s.saveHotStateDB.lock.Lock()
+	for _, r := range s.saveHotStateDB.blockRootsOfSavedStates {
+		keep[r] = true
+	}
+	s.saveHotStateDB.lock.Unlock()
+
+	candidates := make([][32]byte, 0, len(roots))
+	for _, r := range roots {
+		if !keep[r] {
+			candidates = append(candidates, r)
+		}
+	}
+	if len(candidates) <= archivedStatesToKeep {
+		return
+	}
+	pruned := 0
+	for _, r := range candidates[:len(candidates)-archivedStatesToKeep] {
+		if err := s.beaconDB.DeleteState(ctx, r); err != nil {
+			if !errors.Is(err, db.ErrDeleteJustifiedAndFinalized) {
+				log.WithError(err).WithField("root", fmt.Sprintf("%#x", r)).Warn("Could not prune archived state")
+			}
+			continue
+		}
+		pruned++
+	}
+	log.WithField("count", pruned).Info("Pruned archived states")
 }
 
 // migrateToColdHdiff saves the state-diffs for slots that are in the state diff tree after finalization

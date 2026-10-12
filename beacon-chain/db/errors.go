@@ -19,6 +19,9 @@ var ErrNotFoundState = kv.ErrNotFoundState
 // ErrNotFoundOriginBlockRoot wraps ErrNotFound for an error specific to the origin block root.
 var ErrNotFoundOriginBlockRoot = kv.ErrNotFoundOriginBlockRoot
 
+// ErrDeleteJustifiedAndFinalized is returned when deleting the genesis, justified or finalized state or block.
+var ErrDeleteJustifiedAndFinalized = kv.ErrDeleteJustifiedAndFinalized
+
 // IsNotFound allows callers to treat errors from a flat-file database, where the file record is missing,
 // as equivalent to db.ErrNotFound.
 func IsNotFound(err error) bool {

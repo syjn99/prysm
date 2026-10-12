@@ -130,6 +130,7 @@ var appHelpFlagGroups = []flagGroup{
 			das.BackfillOldestSlot,
 			das.BlobRetentionEpochFlag,
 			flags.BeaconDBPruning,
+			flags.PruneHistoricalStates,
 			flags.PrunerRetentionEpochs,
 			flags.SlotsPerArchivedPoint,
 			storage.BlobStorageLayout,

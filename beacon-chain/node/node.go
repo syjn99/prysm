@@ -662,6 +662,13 @@ func (b *BeaconNode) startSlasherDB(cliCtx *cli.Context, clearer *dbClearer) err
 
 func (b *BeaconNode) startStateGen(ctx context.Context, bfs coverage.AvailableBlocker, fc forkchoice.ForkChoicer) error {
 	opts := []stategen.Option{stategen.WithAvailableBlocker(bfs)}
+	prune, err := historicalStatePruning(b.cliCtx)
+	if err != nil {
+		return err
+	}
+	if prune {
+		opts = append(opts, stategen.WithHistoricalStatePruning())
+	}
 	sg := stategen.New(b.db, fc, opts...)
 
 	// Must be set before the finalized state is loaded below: that load may have to replay, and the replay

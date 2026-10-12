@@ -5,6 +5,7 @@ import (
 
 	"github.com/OffchainLabs/prysm/v7/cmd"
 	"github.com/OffchainLabs/prysm/v7/cmd/beacon-chain/flags"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/monitoring/tracing"
@@ -51,6 +52,27 @@ func configureHistoricalSlasher(cliCtx *cli.Context) error {
 		)
 	}
 	return nil
+}
+
+// historicalStatePruning reports whether to prune archived states, rejecting flags that need every historical state.
+func historicalStatePruning(cliCtx *cli.Context) (bool, error) {
+	slasher := cliCtx.Bool(flags.HistoricalSlasherNode.Name)
+	if !cliCtx.Bool(flags.PruneHistoricalStates.Name) {
+		if !features.Get().EnableStateDiff && !slasher {
+			log.Warnf("Archived beacon states accumulate in the database without bound. Set --%s to keep only the newest ones. "+
+				"A future release will prune them by default and require --%s to serve historical states.",
+				flags.PruneHistoricalStates.Name, features.EnableArchive.Name)
+		}
+		return false, nil
+	}
+	if features.Get().EnableStateDiff {
+		return false, fmt.Errorf("--%s cannot be combined with --%s or --%s", flags.PruneHistoricalStates.Name,
+			features.EnableArchive.Name, features.EnableStateDiff.Name)
+	}
+	if slasher {
+		return false, fmt.Errorf("--%s cannot be combined with --%s", flags.PruneHistoricalStates.Name, flags.HistoricalSlasherNode.Name)
+	}
+	return true, nil
 }
 
 func configureBuilderCircuitBreaker(cliCtx *cli.Context) error {

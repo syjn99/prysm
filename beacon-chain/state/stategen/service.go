@@ -70,6 +70,7 @@ type State struct {
 	migratedSlot            primitives.Slot // guarded by migrationLock after initialization
 	fc                      forkchoice.ForkChoicer
 	archive                 *archiveState
+	pruneHistoricalStates   bool
 }
 
 // archiveState tracks whether an archive node is still regenerating history.
@@ -103,6 +104,13 @@ type Option func(*State)
 func WithAvailableBlocker(avb coverage.AvailableBlocker) Option {
 	return func(sg *State) {
 		sg.avb = avb
+	}
+}
+
+// WithHistoricalStatePruning keeps only the newest archived states in the DB.
+func WithHistoricalStatePruning() Option {
+	return func(sg *State) {
+		sg.pruneHistoricalStates = true
 	}
 }
 
