@@ -128,6 +128,11 @@ func (c *CanonicalHistory) chainForSlot(ctx context.Context, target primitives.S
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "unable to retrieve canonical block for slot, root=%#x", r)
 	}
+	if ar, ok := c.h.(replayAnchorReader); ok {
+		if err := checkReplayDistance(ctx, ar, b.Block().Slot(), params.BeaconConfig().SlotsPerArchivedPoint); err != nil {
+			return nil, nil, err
+		}
+	}
 	s, descendants, err := c.ancestorChain(ctx, b)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to query for ancestor and descendant blocks")

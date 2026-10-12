@@ -534,6 +534,24 @@ func TestStateBySlot_ReplayNoDataForSlotReturnsNotFound(t *testing.T) {
 	require.Equal(t, true, errors.As(err, &stateNotFoundErr))
 }
 
+func TestStateBySlot_HistoricalStateNotStoredReturnsNotFound(t *testing.T) {
+	target := primitives.Slot(100)
+	currentSlot := target + 1
+	mock := &chainMock.ChainService{Slot: &currentSlot}
+	mockReplayer := mockstategen.NewReplayerBuilder()
+	mockReplayer.SetMockSlotError(target, stategen.ErrHistoricalStateNotStored)
+
+	p := BeaconDbStater{
+		GenesisTimeFetcher: mock,
+		ReplayerBuilder:    mockReplayer,
+	}
+
+	_, err := p.StateBySlot(t.Context(), target)
+	require.ErrorContains(t, "start the node with --enable-archive", err)
+	var stateNotFoundErr *StateNotFoundError
+	require.Equal(t, true, errors.As(err, &stateNotFoundErr))
+}
+
 func TestStateByEpoch(t *testing.T) {
 	ctx := t.Context()
 	slotsPerEpoch := params.BeaconConfig().SlotsPerEpoch

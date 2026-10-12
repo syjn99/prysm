@@ -325,6 +325,9 @@ func (p *BeaconDbStater) StateBySlot(ctx context.Context, target primitives.Slot
 
 	st, err := p.ReplayerBuilder.ReplayerForSlot(target).ReplayBlocks(ctx)
 	if err != nil {
+		if errors.Is(err, stategen.ErrHistoricalStateNotStored) {
+			return nil, newStateNotFoundErrorf("requested slot %d is unavailable; historical state is not stored, start the node with --enable-archive to serve it", target)
+		}
 		if errors.Is(err, stategen.ErrNoDataForSlot) {
 			return nil, newStateNotFoundErrorf("requested slot %d is unavailable; historical data not available", target)
 		}

@@ -9,16 +9,54 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/time"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	"github.com/OffchainLabs/prysm/v7/monitoring/tracing/trace"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
+	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
 )
 
 var ErrNoDataForSlot = errors.New("cannot retrieve data for slot")
+
+// ErrHistoricalStateNotStored is returned instead of replaying a finalized state from an anchor too far below it.
+var ErrHistoricalStateNotStored = fmt.Errorf("%w: historical state is not stored, start the node with --enable-archive to serve it", ErrNoDataForSlot)
+
+type replayAnchorReader interface {
+	FinalizedCheckpoint(ctx context.Context) (*ethpb.Checkpoint, error)
+	HighestStateSlotAtOrBelow(ctx context.Context, slot primitives.Slot) (primitives.Slot, error)
+}
+
+// checkReplayDistance refuses a finalized target whose nearest stored state is more than two archive intervals below it.
+func checkReplayDistance(ctx context.Context, r replayAnchorReader, target, slotsPerArchivedPoint primitives.Slot) error {
+	// The state-diff tree has its own floor, and a replay from genesis this short is cheap.
+	if features.Get().EnableStateDiff || target <= 2*slotsPerArchivedPoint {
+		return nil
+	}
+	cp, err := r.FinalizedCheckpoint(ctx)
+	if err != nil {
+		return errors.Wrap(err, "could not get finalized checkpoint")
+	}
+	fSlot, err := slots.EpochStart(cp.Epoch)
+	if err != nil {
+		return err
+	}
+	// Unfinalized replays start from the in-memory finalized state or hot states.
+	if target >= fSlot {
+		return nil
+	}
+	anchor, err := r.HighestStateSlotAtOrBelow(ctx, target)
+	if err != nil {
+		return errors.Wrap(err, "could not get highest stored state slot")
+	}
+	if target-anchor > 2*slotsPerArchivedPoint {
+		return errors.Wrapf(ErrHistoricalStateNotStored, "slot %d, nearest stored state at slot %d", target, anchor)
+	}
+	return nil
+}
 
 // HasState returns true if the state exists in cache or in DB.
 func (s *State) HasState(ctx context.Context, blockRoot [32]byte) (bool, error) {
@@ -331,6 +369,9 @@ func (s *State) latestAncestor(ctx context.Context, blockRoot [32]byte) (state.B
 		return nil, err
 	}
 	if err := blocks.BeaconBlockIsNil(b); err != nil {
+		return nil, err
+	}
+	if err := checkReplayDistance(ctx, s.beaconDB, b.Block().Slot(), s.slotsPerArchivedPoint); err != nil {
 		return nil, err
 	}
 

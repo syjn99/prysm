@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 	mathRand "math/rand"
 	"strconv"
 	"testing"
@@ -699,6 +700,41 @@ func TestStore_SaveDeleteState_CanGetHighestBelow(t *testing.T) {
 	highest, err = db.HighestSlotStatesBelow(t.Context(), 1001)
 	require.NoError(t, err)
 	assert.DeepSSZEqual(t, highest[0].ToProtoUnsafe(), s2)
+}
+
+func TestStore_HighestStateSlotAtOrBelow(t *testing.T) {
+	db := setupDB(t)
+	ctx := t.Context()
+
+	t.Run("empty db", func(t *testing.T) {
+		got, err := db.HighestStateSlotAtOrBelow(ctx, 100)
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(0), got)
+	})
+
+	for _, slot := range []primitives.Slot{10, 20} {
+		st, err := util.NewBeaconState()
+		require.NoError(t, err)
+		require.NoError(t, st.SetSlot(slot))
+		require.NoError(t, db.SaveState(ctx, st, [32]byte{byte(slot)}))
+	}
+
+	for _, tc := range []struct {
+		query, want primitives.Slot
+	}{{5, 0}, {10, 10}, {15, 10}, {20, 20}, {1000, 20}} {
+		t.Run(fmt.Sprintf("query %d", tc.query), func(t *testing.T) {
+			got, err := db.HighestStateSlotAtOrBelow(ctx, tc.query)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+
+	t.Run("deleted state is skipped", func(t *testing.T) {
+		require.NoError(t, db.DeleteState(ctx, [32]byte{20}))
+		got, err := db.HighestStateSlotAtOrBelow(ctx, 1000)
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(10), got)
+	})
 }
 
 func TestStore_GenesisState_CanGetHighestBelow(t *testing.T) {

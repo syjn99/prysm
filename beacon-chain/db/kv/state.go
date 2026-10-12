@@ -900,6 +900,30 @@ func (s *Store) HighestSlotStatesBelow(ctx context.Context, slot primitives.Slot
 	return []state.ReadOnlyBeaconState{st}, nil
 }
 
+// HighestStateSlotAtOrBelow returns the slot of the highest stored state at or below the input slot, or 0 if none.
+func (s *Store) HighestStateSlotAtOrBelow(ctx context.Context, slot primitives.Slot) (primitives.Slot, error) {
+	_, span := trace.StartSpan(ctx, "BeaconDB.HighestStateSlotAtOrBelow")
+	defer span.End()
+
+	var found primitives.Slot
+	err := s.db.View(func(tx *bolt.Tx) error {
+		c := tx.Bucket(stateSlotIndicesBucket).Cursor()
+		k, v := c.Seek(bytesutil.SlotToBytesBigEndian(slot + 1))
+		if k == nil {
+			k, v = c.Last()
+		} else {
+			k, v = c.Prev()
+		}
+		for ; k != nil && len(v) == 0; k, v = c.Prev() {
+		}
+		if k != nil {
+			found = bytesutil.BytesToSlotBigEndian(k)
+		}
+		return nil
+	})
+	return found, err
+}
+
 // createStateIndicesFromStateSlot takes in a state slot and returns
 // a map of bolt DB index buckets corresponding to each particular key for indices for
 // data, such as (shard indices bucket -> shard 5).

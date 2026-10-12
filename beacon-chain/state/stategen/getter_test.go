@@ -729,3 +729,75 @@ func TestState_HasStateInCache(t *testing.T) {
 		require.Equal(t, tc.want, got)
 	}
 }
+
+func TestReplayDistanceGuard(t *testing.T) {
+	ctx := t.Context()
+	cfg := params.BeaconConfig().Copy()
+	cfg.SlotsPerArchivedPoint = 8
+	params.SetupTestConfigCleanup(t)
+	params.OverrideBeaconConfig(cfg)
+
+	// setup stores a block and a state every 8 slots from 0 to 96, finalizes the given epoch,
+	// then deletes the states in [8, deleteBelow).
+	setup := func(t *testing.T, fEpoch primitives.Epoch, deleteBelow primitives.Slot) (*State, *CanonicalHistory, map[primitives.Slot][32]byte) {
+		beaconDB := testDB.SetupDB(t)
+		roots := make(map[primitives.Slot][32]byte)
+		parent := bytesutil.PadTo([]byte{'a'}, 32)
+		for slot := primitives.Slot(0); slot <= 96; slot += 8 {
+			b := util.NewBeaconBlock()
+			b.Block.Slot = slot
+			b.Block.ParentRoot = parent
+			r, err := b.Block.HashTreeRoot()
+			require.NoError(t, err)
+			util.SaveBlock(t, ctx, beaconDB, b)
+			st, err := util.NewBeaconState()
+			require.NoError(t, err)
+			require.NoError(t, st.SetSlot(slot))
+			require.NoError(t, beaconDB.SaveState(ctx, st, r))
+			roots[slot] = r
+			parent = r[:]
+		}
+		require.NoError(t, beaconDB.SaveGenesisBlockRoot(ctx, roots[0]))
+		fRoot := roots[96]
+		require.NoError(t, beaconDB.SaveFinalizedCheckpoint(ctx, &ethpb.Checkpoint{Epoch: fEpoch, Root: fRoot[:]}))
+		for slot := primitives.Slot(8); slot < deleteBelow; slot += 8 {
+			require.NoError(t, beaconDB.DeleteState(ctx, roots[slot]))
+		}
+		service := New(beaconDB, doublylinkedtree.New())
+		history := NewCanonicalHistory(beaconDB, &mockCanonicalChecker{is: true}, &mockCurrentSlotter{Slot: 200})
+		return service, history, roots
+	}
+
+	t.Run("all states stored", func(t *testing.T) {
+		service, _, roots := setup(t, 10, 0)
+		st, err := service.latestAncestor(ctx, roots[48])
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(40), st.Slot())
+	})
+	t.Run("below deleted range errors", func(t *testing.T) {
+		service, history, roots := setup(t, 10, 64)
+		_, err := service.latestAncestor(ctx, roots[48])
+		require.ErrorIs(t, err, ErrNoDataForSlot)
+		require.ErrorIs(t, err, ErrHistoricalStateNotStored)
+		_, err = history.ReplayerForSlot(48).ReplayBlocks(ctx)
+		require.ErrorIs(t, err, ErrHistoricalStateNotStored)
+	})
+	t.Run("above deleted range replays", func(t *testing.T) {
+		service, _, roots := setup(t, 10, 64)
+		st, err := service.latestAncestor(ctx, roots[80])
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(72), st.Slot())
+	})
+	t.Run("short replay from genesis allowed", func(t *testing.T) {
+		service, _, roots := setup(t, 10, 64)
+		st, err := service.latestAncestor(ctx, roots[16])
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(0), st.Slot())
+	})
+	t.Run("unfinalized target not guarded", func(t *testing.T) {
+		service, _, roots := setup(t, 1, 64)
+		st, err := service.latestAncestor(ctx, roots[48])
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(0), st.Slot())
+	})
+}
