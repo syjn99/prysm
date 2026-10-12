@@ -2,11 +2,11 @@ package stategen
 
 import (
 	"context"
-	"slices"
 
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
+	"github.com/OffchainLabs/prysm/v7/time/slots"
 	"github.com/pkg/errors"
 )
 
@@ -18,11 +18,22 @@ type CanonicalBlockDB interface {
 }
 
 // CanonicalBlockAtOrBelow returns the highest canonical block at or below slot, skipping orphaned slots.
+// slot must not be above the start of the finalized epoch.
 func CanonicalBlockAtOrBelow(
 	ctx context.Context,
 	db CanonicalBlockDB,
 	slot, floor primitives.Slot,
 ) (primitives.Slot, [32]byte, error) {
+	cp, err := db.FinalizedCheckpoint(ctx)
+	if err != nil {
+		return 0, [32]byte{}, errors.Wrap(err, "could not read the finalized checkpoint")
+	}
+	cpRoot := bytesutil.ToBytes32(cp.Root)
+	cpEpochStart, err := slots.EpochStart(cp.Epoch)
+	if err != nil {
+		return 0, [32]byte{}, errors.Wrap(err, "could not compute the finalized epoch start slot")
+	}
+
 	// HighestRootsBelowSlot reports a strictly lower slot, so next decreases every round.
 	for next := slot + 1; ; {
 		high, roots, err := db.HighestRootsBelowSlot(ctx, next)
@@ -34,6 +45,12 @@ func CanonicalBlockAtOrBelow(
 		}
 		canonical := make([][32]byte, 0, 1)
 		for _, r := range roots {
+			// The finalized index holds every block of the finalized epoch, orphans too. The checkpoint root is
+			// the highest canonical block at or below the epoch start, so it is the only proven block there.
+			// Before the first finalization, no checkpoint has put an epoch in the index.
+			if cp.Epoch > 0 && high >= cpEpochStart && r != cpRoot {
+				continue
+			}
 			if db.IsFinalizedBlock(ctx, r) {
 				canonical = append(canonical, r)
 			}
@@ -48,24 +65,8 @@ func CanonicalBlockAtOrBelow(
 			}
 			next = high
 		default:
-			// The checkpoint root is authoritative for its own slot, so prefer it when it is here.
-			cpRoot, err := finalizedCheckpointRoot(ctx, db)
-			if err != nil {
-				return 0, [32]byte{}, err
-			}
-			if slices.Contains(canonical, cpRoot) {
-				return high, cpRoot, nil
-			}
 			return 0, [32]byte{}, errors.Wrapf(errUnknownBlock,
 				"slot %d has %d canonical candidates", high, len(canonical))
 		}
 	}
-}
-
-func finalizedCheckpointRoot(ctx context.Context, db CanonicalBlockDB) ([32]byte, error) {
-	cp, err := db.FinalizedCheckpoint(ctx)
-	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not read the finalized checkpoint")
-	}
-	return bytesutil.ToBytes32(cp.Root), nil
 }

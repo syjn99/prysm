@@ -138,19 +138,19 @@ func TestWalk_SkipsOrphanAtHighestPopulatedSlot(t *testing.T) {
 
 	// The canonical branch resumes at 33, building on slot 30.
 	canonical := stateAt30.Copy()
-	var wantRoot64, tipRoot [32]byte
-	var tipSlot primitives.Slot
+	var wantRoot64, root64 [32]byte
 	for slot := primitives.Slot(33); slot <= 70; slot++ {
-		canonical, tipRoot = applyBlock(t, ctx, store, canonical, keys, slot)
-		tipSlot = slot
+		var root [32]byte
+		canonical, root = applyBlock(t, ctx, store, canonical, keys, slot)
 		if slot == 64 {
+			root64 = root
 			wantRoot64, err = canonical.HashTreeRoot(ctx)
 			require.NoError(t, err)
 		}
 	}
 	// Slot 31 has to sit below the finalized epoch: IsFinalizedBlock reports every block inside the finalized
-	// epoch as finalized whether or not it is canonical.
-	indexFinalized(t, ctx, store, tipSlot, tipRoot)
+	// epoch as finalized whether or not it is canonical. The checkpoint root of epoch 2 is the block at slot 64.
+	indexFinalized(t, ctx, store, 64, root64)
 	require.Equal(t, false, store.IsFinalizedBlock(ctx, orphanRoot))
 
 	// Boundary 32 is a canonically empty slot, so its state is slot 30's advanced to 32.
