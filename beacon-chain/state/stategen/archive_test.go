@@ -255,20 +255,19 @@ func TestCompleteArchiveRegeneration(t *testing.T) {
 		require.Equal(t, next, service.migratedSlot)
 	})
 
-	// The chain has blocks at 32, 64, 96, 128, 159 and 192. The walk wrote the boundaries up to 128, so the
-	// next unwritten boundary is 160, and slot 160 is empty.
+	// The chain has blocks at 32, 64, 96, 128, 159 and 192. The walk wrote the boundaries up to 128 and recorded
+	// that in the archive status, so the next unwritten boundary is 160, and slot 160 is empty. Each boot follows
+	// the node startup: pending comes from the stored status, and the finalized state comes from StateByRoot.
 	t.Run("migrates across an empty first boundary after a restart during the walk", func(t *testing.T) {
 		hook := logTest.NewGlobal()
 		ctx := t.Context()
 		c := newHandoffChain(t)
-		service := New(c.db, doublylinkedtree.New())
-		service.SetArchivePending(true)
 		c.finalize(t, 1, 32)
-		_, err := service.Resume(ctx, c.states[32])
-		require.NoError(t, err)
+		service := c.boot(t)
+		require.Equal(t, true, service.ArchivePending())
 
 		c.finalize(t, 4, 128)
-		done, err := service.CompleteArchiveRegeneration(ctx, 160, func(context.Context) error { return nil })
+		done, err := service.CompleteArchiveRegeneration(ctx, 160, c.markComplete)
 		require.NoError(t, err)
 		require.Equal(t, true, done)
 
@@ -284,13 +283,36 @@ func TestCompleteArchiveRegeneration(t *testing.T) {
 		ctx := t.Context()
 		c := newHandoffChain(t)
 		c.finalize(t, 4, 128)
-		service := New(c.db, doublylinkedtree.New())
-		_, err := service.Resume(ctx, c.states[128])
+		done, err := c.boot(t).CompleteArchiveRegeneration(ctx, 160, c.markComplete)
 		require.NoError(t, err)
+		require.Equal(t, true, done)
+
+		service := c.boot(t)
+		require.Equal(t, false, service.ArchivePending())
+		c.finalize(t, 6, 192)
+		require.NoError(t, service.MigrateToCold(ctx, c.roots[192]))
+		c.requireBoundary(t, 160)
+	})
+
+	// The stored status stays incomplete, so the next boot keeps migration suppressed until the walk hands off again.
+	t.Run("hands off again after a restart when the completion was not stored", func(t *testing.T) {
+		ctx := t.Context()
+		c := newHandoffChain(t)
+		c.finalize(t, 4, 128)
+		writeErr := errors.New("status write failed")
+		_, err := c.boot(t).CompleteArchiveRegeneration(ctx, 160, func(context.Context) error { return writeErr })
+		require.ErrorIs(t, err, writeErr)
+
+		service := c.boot(t)
+		require.Equal(t, true, service.ArchivePending())
+		done, err := service.CompleteArchiveRegeneration(ctx, 160, c.markComplete)
+		require.NoError(t, err)
+		require.Equal(t, true, done)
 
 		c.finalize(t, 6, 192)
 		require.NoError(t, service.MigrateToCold(ctx, c.roots[192]))
 		c.requireBoundary(t, 160)
+		require.Equal(t, false, c.boot(t).ArchivePending())
 	})
 
 	// Resume sets the cursor to the finalized slot, so a boundary below it whose migration did not run before
@@ -299,10 +321,13 @@ func TestCompleteArchiveRegeneration(t *testing.T) {
 		ctx := t.Context()
 		c := newHandoffChain(t)
 		c.finalize(t, 4, 128)
-		c.finalize(t, 6, 192)
-		service := New(c.db, doublylinkedtree.New())
-		_, err := service.Resume(ctx, c.states[192])
+		done, err := c.boot(t).CompleteArchiveRegeneration(ctx, 160, c.markComplete)
 		require.NoError(t, err)
+		require.Equal(t, true, done)
+
+		c.finalize(t, 6, 192)
+		service := c.boot(t)
+		require.Equal(t, false, service.ArchivePending())
 		require.Equal(t, primitives.Slot(192), service.migratedSlot)
 
 		_, err = c.db.StateBySlotFromDiffTree(ctx, 160)
@@ -473,6 +498,8 @@ func newHandoffChain(t *testing.T) *handoffChain {
 	require.NoError(t, beaconDB.SaveGenesisBlockRoot(ctx, gRoot))
 	require.NoError(t, beaconDB.SaveStateSummary(ctx, &ethpb.StateSummary{Slot: 0, Root: gRoot[:]}))
 	require.NoError(t, beaconDB.SaveState(ctx, st, gRoot))
+	as := &kv.ArchiveStatus{OriginSlot: 0, RegeneratedThroughSlot: 0, OriginStateRoot: stRoot}
+	require.NoError(t, c.db.SaveArchiveStatus(ctx, as))
 
 	for _, slot := range []primitives.Slot{32, 64, 96, 128, 159, 192} {
 		b, err := util.GenerateFullBlock(st, pks, util.DefaultBlockGenConfig(), slot)
@@ -489,6 +516,8 @@ func newHandoffChain(t *testing.T) *handoffChain {
 		c.states[slot] = st.Copy()
 		if slot <= 128 {
 			require.NoError(t, beaconDB.SaveState(ctx, st, root))
+			as.RegeneratedThroughSlot = slot
+			require.NoError(t, c.db.SaveArchiveStatus(ctx, as))
 		}
 	}
 	return c
@@ -511,4 +540,31 @@ func (c *handoffChain) requireBoundary(t *testing.T, slot primitives.Slot) {
 	gotRoot, err := got.HashTreeRoot(ctx)
 	require.NoError(t, err)
 	require.Equal(t, wantRoot, gotRoot)
+}
+
+// boot starts a State the way the node does: pending from the stored archive status, the finalized state from
+// StateByRoot, and then Resume.
+func (c *handoffChain) boot(t *testing.T) *State {
+	ctx := t.Context()
+	as, err := c.db.ArchiveStatus(ctx)
+	require.NoError(t, err)
+	service := New(c.db, doublylinkedtree.New())
+	service.SetArchivePending(!as.Complete)
+	cp, err := c.db.FinalizedCheckpoint(ctx)
+	require.NoError(t, err)
+	fState, err := service.StateByRoot(ctx, [32]byte(cp.Root))
+	require.NoError(t, err)
+	_, err = service.Resume(ctx, fState)
+	require.NoError(t, err)
+	return service
+}
+
+// markComplete stores the completed status, as the archive service does at the handoff.
+func (c *handoffChain) markComplete(ctx context.Context) error {
+	as, err := c.db.ArchiveStatus(ctx)
+	if err != nil {
+		return err
+	}
+	as.Complete = true
+	return c.db.SaveArchiveStatus(ctx, as)
 }
