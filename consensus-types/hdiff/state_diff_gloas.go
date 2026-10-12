@@ -416,7 +416,8 @@ func (ret *stateDiff) readGloasFields(data *[]byte) error {
 }
 
 // applyGloasFields applies the Gloas-specific fields from the diff to the source state.
-func applyGloasFields(source state.BeaconState, diff *stateDiff) error {
+// sourceWasGloas tells if the source was a Gloas state before updateToVersion upgraded it.
+func applyGloasFields(source state.BeaconState, diff *stateDiff, sourceWasGloas bool) error {
 	// latestExecutionPayloadBid (override, always non-nil).
 	bid, err := blocks.WrappedROExecutionPayloadBid(diff.latestExecutionPayloadBid)
 	if err != nil {
@@ -427,10 +428,15 @@ func applyGloasFields(source state.BeaconState, diff *stateDiff) error {
 	}
 
 	// builders (sparse diff: patch changed indices).
-	if len(diff.builderDiffs) > 0 {
-		builders, err := source.Builders()
-		if err != nil {
-			return errors.Wrap(err, "failed to get builders")
+	// diffBuilders treats a pre-Gloas source as empty, so the diff holds the full target list.
+	// Start from an empty list to drop the builders that the upgrade onboarded from the source.
+	if len(diff.builderDiffs) > 0 || !sourceWasGloas {
+		builders := make([]*ethpb.Builder, 0, len(diff.builderDiffs))
+		if sourceWasGloas {
+			builders, err = source.Builders()
+			if err != nil {
+				return errors.Wrap(err, "failed to get builders")
+			}
 		}
 		for _, bd := range diff.builderDiffs {
 			idx := int(bd.index)

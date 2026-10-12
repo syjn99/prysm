@@ -2045,6 +2045,7 @@ func applyStateDiff(ctx context.Context, source state.BeaconState, diff *stateDi
 	var err error
 	// updateToVersion runs Gloas onboarding which drops builder deposits, so capture the pre-upgrade list the diff indexes.
 	var prevPendingDeposits []*ethpb.PendingDeposit
+	sourceWasGloas := source.Version() >= version.Gloas
 	if source.Version() >= version.Electra {
 		prevPendingDeposits, err = source.PendingDeposits()
 		if err != nil {
@@ -2201,7 +2202,7 @@ func applyStateDiff(ctx context.Context, source state.BeaconState, diff *stateDi
 	if diff.targetVersion < version.Gloas {
 		return source, nil
 	}
-	if err := applyGloasFields(source, diff); err != nil {
+	if err := applyGloasFields(source, diff, sourceWasGloas); err != nil {
 		return nil, errors.Wrap(err, "failed to apply Gloas fields")
 	}
 	return source, nil
