@@ -183,7 +183,7 @@ func (s *State) migrateToColdHdiff(ctx context.Context, fRoot [32]byte) error {
 			aRoot = cached.root
 			aState = cached.state
 		} else {
-			aRoot, err = s.canonicalRootAtOrBelow(ctx, slot, oldFSlot)
+			aRoot, err = s.canonicalRootAtOrBelow(ctx, slot, s.migrationFloor)
 			if err != nil {
 				return err
 			}
@@ -228,7 +228,10 @@ func (s *State) migrateToColdHdiff(ctx context.Context, fRoot [32]byte) error {
 	// The migration can complete without the finalized state being cached. Keep
 	// finalizedInfo coherent and advance its independent migration cursor. A call for an older checkpoint can
 	// run after the archive handoff set the cursor above fSlot, so never move the cursor back.
-	s.migratedSlot = max(s.migratedSlot, fSlot)
+	if fSlot >= s.migratedSlot {
+		s.migratedSlot = fSlot
+		s.migrationFloor = fSlot
+	}
 	return nil
 }
 

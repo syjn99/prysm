@@ -60,8 +60,10 @@ func (s *State) CompleteArchiveRegeneration(
 	}
 
 	// The walk wrote every tree slot below nextUnwrittenBoundary. Resume cold migration there, so that it does
-	// not write the walked boundaries again.
+	// not write the walked boundaries again. That slot can be empty, so the canonical block lookup must be able
+	// to go down to the finalized block.
 	s.migratedSlot = nextUnwrittenBoundary
+	s.migrationFloor = fState.Slot()
 	s.SetArchivePending(false)
 
 	if store, ok := s.beaconDB.(archiveResumeSnapshotStore); ok {

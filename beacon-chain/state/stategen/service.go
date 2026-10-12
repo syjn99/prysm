@@ -68,6 +68,7 @@ type State struct {
 	avb                     coverage.AvailableBlocker
 	migrationLock           *sync.Mutex
 	migratedSlot            primitives.Slot // guarded by migrationLock after initialization
+	migrationFloor          primitives.Slot // a canonical block slot at or below migratedSlot; guarded by migrationLock
 	fc                      forkchoice.ForkChoicer
 	archive                 *archiveState
 }
@@ -169,6 +170,7 @@ func (s *State) Resume(ctx context.Context, fState state.BeaconState) (state.Bea
 	}()
 
 	s.migratedSlot = st.Slot()
+	s.migrationFloor = st.Slot()
 	s.finalizedInfo = &finalizedInfo{root: fRoot, state: st.Copy()}
 	populatePubkeyCache(ctx, st)
 	return st, nil
