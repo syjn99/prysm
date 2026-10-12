@@ -94,7 +94,8 @@ func (s *Service) Start() {
 		return
 	}
 	s.setStatus(as)
-	// The walk sets the gauges only when it writes a boundary, so seed them for a restart.
+	// The walk sets the progress gauge when it writes a boundary, and a round sets the target gauge. A complete
+	// archive runs no round, and a pending one waits for backfill first, so seed the gauges for a restart.
 	regeneratedThroughSlot.Set(float64(as.RegeneratedThroughSlot))
 	if !s.sg.ArchivePending() {
 		regenTargetSlot.Set(float64(as.RegeneratedThroughSlot))
