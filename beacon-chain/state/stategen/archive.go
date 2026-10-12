@@ -59,6 +59,9 @@ func (s *State) CompleteArchiveRegeneration(
 		return false, errors.Wrap(err, "could not record archive regeneration as complete")
 	}
 
+	// The walk wrote every tree slot below nextUnwrittenBoundary. Resume cold migration there, so that it does
+	// not write the walked boundaries again.
+	s.migratedSlot = nextUnwrittenBoundary
 	s.SetArchivePending(false)
 
 	if store, ok := s.beaconDB.(archiveResumeSnapshotStore); ok {

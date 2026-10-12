@@ -226,8 +226,9 @@ func (s *State) migrateToColdHdiff(ctx context.Context, fRoot [32]byte) error {
 		s.SaveFinalizedState(fRoot, fInfo.state)
 	}
 	// The migration can complete without the finalized state being cached. Keep
-	// finalizedInfo coherent and advance its independent migration cursor.
-	s.migratedSlot = fSlot
+	// finalizedInfo coherent and advance its independent migration cursor. A call for an older checkpoint can
+	// run after the archive handoff set the cursor above fSlot, so never move the cursor back.
+	s.migratedSlot = max(s.migratedSlot, fSlot)
 	return nil
 }
 
