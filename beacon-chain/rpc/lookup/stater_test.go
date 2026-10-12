@@ -8,6 +8,7 @@ import (
 	"time"
 
 	chainMock "github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain/testing"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	testDB "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
 	statenative "github.com/OffchainLabs/prysm/v7/beacon-chain/state/state-native"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen"
@@ -532,6 +533,104 @@ func TestStateBySlot_ReplayNoDataForSlotReturnsNotFound(t *testing.T) {
 	require.ErrorContains(t, "historical data not available", err)
 	var stateNotFoundErr *StateNotFoundError
 	require.Equal(t, true, errors.As(err, &stateNotFoundErr))
+}
+
+func TestState_ArchiveRegenerationPending(t *testing.T) {
+	ctx := t.Context()
+	const (
+		archiveOrigin = primitives.Slot(512)
+		frontier      = primitives.Slot(1024)
+		syncOrigin    = primitives.Slot(4096)
+		gapSlot       = primitives.Slot(2000)
+	)
+	currentSlot := primitives.Slot(4200)
+
+	setup := func(t *testing.T, complete bool) (*BeaconDbStater, *kv.Store) {
+		db := testDB.SetupDB(t)
+		store, ok := db.(*kv.Store)
+		require.Equal(t, true, ok)
+		require.NoError(t, db.SaveBackfillStatus(ctx, &dbval.BackfillStatus{
+			LowSlot:    uint64(archiveOrigin),
+			OriginSlot: uint64(syncOrigin),
+		}))
+		require.NoError(t, store.SaveArchiveStatus(ctx, &kv.ArchiveStatus{
+			OriginSlot:             archiveOrigin,
+			RegeneratedThroughSlot: frontier,
+			Complete:               complete,
+		}))
+		replayer := mockstategen.NewReplayerBuilder()
+		for _, slot := range []primitives.Slot{frontier, gapSlot, syncOrigin} {
+			st, err := statenative.InitializeFromProtoPhase0(&ethpb.BeaconState{Slot: slot})
+			require.NoError(t, err)
+			replayer.SetMockStateForSlot(st, slot)
+		}
+		chain := &chainMock.ChainService{Slot: &currentSlot}
+		return &BeaconDbStater{
+			BeaconDB:           db,
+			ChainInfoFetcher:   chain,
+			GenesisTimeFetcher: chain,
+			ReplayerBuilder:    replayer,
+		}, store
+	}
+
+	t.Run("slot between frontier and sync origin is not found", func(t *testing.T) {
+		p, _ := setup(t, false)
+		_, err := p.StateBySlot(ctx, gapSlot)
+		require.ErrorContains(t, fmt.Sprintf("archive state regeneration has reached slot %d", frontier), err)
+		var notFoundErr *StateNotFoundError
+		require.Equal(t, true, errors.As(err, &notFoundErr))
+	})
+
+	t.Run("slot at frontier is served", func(t *testing.T) {
+		p, _ := setup(t, false)
+		st, err := p.StateBySlot(ctx, frontier)
+		require.NoError(t, err)
+		assert.Equal(t, frontier, st.Slot())
+	})
+
+	t.Run("slot at sync origin is served", func(t *testing.T) {
+		p, _ := setup(t, false)
+		st, err := p.StateBySlot(ctx, syncOrigin)
+		require.NoError(t, err)
+		assert.Equal(t, syncOrigin, st.Slot())
+	})
+
+	t.Run("slot in gap is served after regeneration completes", func(t *testing.T) {
+		p, _ := setup(t, true)
+		st, err := p.StateBySlot(ctx, gapSlot)
+		require.NoError(t, err)
+		assert.Equal(t, gapSlot, st.Slot())
+	})
+
+	t.Run("state root in gap is not found", func(t *testing.T) {
+		p, store := setup(t, false)
+		b := util.NewBeaconBlock()
+		b.Block.Slot = gapSlot
+		util.SaveBlock(t, ctx, store, b)
+		blockRoot, err := b.Block.HashTreeRoot()
+		require.NoError(t, err)
+
+		stateRoot := bytesutil.PadTo([]byte("gap state root"), 32)
+		headState, err := util.NewBeaconState(func(st *ethpb.BeaconState) error {
+			st.Slot = currentSlot
+			idx := gapSlot % params.BeaconConfig().SlotsPerHistoricalRoot
+			st.StateRoots[idx] = stateRoot
+			st.BlockRoots[idx] = blockRoot[:]
+			return nil
+		})
+		require.NoError(t, err)
+		gapState, err := statenative.InitializeFromProtoPhase0(&ethpb.BeaconState{Slot: gapSlot})
+		require.NoError(t, err)
+		stateGen := mockstategen.NewService()
+		stateGen.AddStateForRoot(gapState, blockRoot)
+		p.ChainInfoFetcher = &chainMock.ChainService{State: headState, Slot: &currentSlot}
+		p.StateGenService = stateGen
+
+		_, err = p.State(ctx, []byte(hexutil.Encode(stateRoot)))
+		require.ErrorContains(t, fmt.Sprintf("archive state regeneration has reached slot %d", frontier), err)
+		var notFoundErr *StateNotFoundError
+		require.Equal(t, true, errors.As(err, &notFoundErr))
+	})
 }
 
 func TestStateByEpoch(t *testing.T) {
