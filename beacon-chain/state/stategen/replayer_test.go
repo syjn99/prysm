@@ -98,6 +98,67 @@ func TestReplayBlocks_MissingHistoricalStateDiff(t *testing.T) {
 	}
 }
 
+func TestReplayBlocks_SkippedSlotStateDiffBoundary(t *testing.T) {
+	oldFlags := *flags.Get()
+	t.Cleanup(func() { flags.Init(&oldFlags) })
+	setStateDiffExponents() // Full snapshots at 64-slot intervals, diffs every 32 slots.
+	beaconDB := testDB.SetupDB(t)
+	require.NoError(t, beaconDB.(*kv.Store).InitStateDiffCacheForTesting(t, 0))
+	reset := features.InitWithReset(&features.Flags{EnableStateDiff: true})
+	t.Cleanup(reset)
+
+	// Boundaries 32 and 64 have no block.
+	hist := newMockHistory(t, []mockHistorySpec{
+		{slot: 10, canonicalBlock: true},
+		{slot: 40, canonicalBlock: true},
+		{slot: 70, canonicalBlock: true},
+	}, 71)
+	ctx := t.Context()
+	for _, slot := range []primitives.Slot{0, 10, 40, 70} {
+		require.NoError(t, beaconDB.SaveBlock(ctx, hist.blocks[hist.slotMap[slot]]))
+	}
+	genesisRoot := hist.slotMap[0]
+	require.NoError(t, beaconDB.SaveState(ctx, hist.states[genesisRoot], genesisRoot))
+	for _, b := range []struct{ parent, boundary primitives.Slot }{{10, 32}, {40, 64}} {
+		root := hist.slotMap[b.parent]
+		st, err := ReplayProcessSlots(ctx, hist.hiddenStates[root].Copy(), b.boundary)
+		require.NoError(t, err)
+		require.NoError(t, beaconDB.SaveState(ctx, st, root))
+	}
+
+	ch := NewCanonicalHistory(beaconDB, hist, hist)
+	cases := []struct {
+		name       string
+		target     primitives.Slot
+		wantBase   primitives.Slot
+		wantBlocks int
+	}{
+		{name: "boundary between the tail block and its parent", target: 70, wantBase: 64, wantBlocks: 1},
+		{name: "boundary above the tail block", target: 66, wantBase: 64, wantBlocks: 0},
+		{name: "older boundary", target: 45, wantBase: 32, wantBlocks: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base, descendants, err := ch.chainForSlot(ctx, tc.target)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantBase, base.Slot())
+			require.Equal(t, tc.wantBlocks, len(descendants))
+
+			got, err := ch.ReplayerForSlot(tc.target).ReplayBlocks(ctx)
+			require.NoError(t, err)
+			tailRoot, err := ch.BlockRootForSlot(ctx, tc.target)
+			require.NoError(t, err)
+			want, err := ReplayProcessSlots(ctx, hist.hiddenStates[tailRoot].Copy(), tc.target)
+			require.NoError(t, err)
+			wantRoot, err := want.HashTreeRoot(ctx)
+			require.NoError(t, err)
+			gotRoot, err := got.HashTreeRoot(ctx)
+			require.NoError(t, err)
+			require.Equal(t, wantRoot, gotRoot)
+		})
+	}
+}
+
 func TestReplayBlocks(t *testing.T) {
 	ctx := t.Context()
 	var zero, one, two, three, four, five primitives.Slot = 50, 51, 150, 151, 152, 200
