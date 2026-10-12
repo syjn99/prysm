@@ -158,6 +158,12 @@ func TestStartDB_RejectedArchiveOriginLeavesDataDirUsable(t *testing.T) {
 	store, err := kv.NewKVStore(context.Background(), dir)
 	require.NoError(t, err)
 	require.ErrorContains(t, "is above the sync origin slot", start(store, syncOrigin*4))
+	// Checkpoint initializers skip new checkpoint flags when an origin exists, so the rejected checkpoint must
+	// not be stored.
+	_, err = store.OriginCheckpointBlockRoot(ctx)
+	require.ErrorIs(t, err, kv.ErrNotFound)
+	_, err = store.BackfillStatus(ctx)
+	require.ErrorIs(t, err, kv.ErrNotFound)
 	require.NoError(t, store.Close())
 
 	store, err = kv.NewKVStore(context.Background(), dir)

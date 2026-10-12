@@ -174,7 +174,8 @@ func TestRound_NoHandoffBeforeOriginIsVerified(t *testing.T) {
 	require.Equal(t, false, persisted.Complete)
 }
 
-// The walk sets the gauges only when it writes a boundary, so a restart must seed them from the stored status.
+// The walk sets the progress gauge when it writes a boundary, and a round sets the target gauge. A complete archive
+// runs neither, and a pending one runs neither until backfill completes, so a restart must seed the gauges.
 func TestStart_SetsMetricsFromStoredStatus(t *testing.T) {
 	setStateDiffExponents([]int{11, 9, 5})
 	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
