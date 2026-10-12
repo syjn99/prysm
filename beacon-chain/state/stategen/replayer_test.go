@@ -7,6 +7,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	testDB "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/cmd/beacon-chain/flags"
 	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
@@ -14,6 +15,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/testing/require"
+	"github.com/pkg/errors"
 	logTest "github.com/sirupsen/logrus/hooks/test"
 )
 
@@ -98,16 +100,24 @@ func TestReplayBlocks_MissingHistoricalStateDiff(t *testing.T) {
 	}
 }
 
-func TestReplayBlocks_SkippedSlotStateDiffBoundary(t *testing.T) {
-	oldFlags := *flags.Get()
-	t.Cleanup(func() { flags.Init(&oldFlags) })
-	setStateDiffExponents() // Full snapshots at 64-slot intervals, diffs every 32 slots.
+// corruptDiffTree returns ErrStateDiffCorrupted for the tree entry at one slot. Slot 0 disables it.
+type corruptDiffTree struct {
+	db.Database
+	slot primitives.Slot
+}
+
+func (c *corruptDiffTree) StateBySlotFromDiffTree(ctx context.Context, slot primitives.Slot) (state.BeaconState, error) {
+	if c.slot != 0 && slot == c.slot {
+		return nil, errors.Wrap(kv.ErrStateDiffCorrupted, "empty state diff")
+	}
+	return c.Database.StateBySlotFromDiffTree(ctx, slot)
+}
+
+// skippedBoundaryHistory saves blocks at 10, 40 and 70, the genesis state, and the tree states at the given
+// boundaries. With exponents [6,5], boundary 32 is a diff, boundary 64 is a full snapshot, and neither has a block.
+func skippedBoundaryHistory(t *testing.T, boundaries ...primitives.Slot) (db.Database, *mockHistory) {
 	beaconDB := testDB.SetupDB(t)
 	require.NoError(t, beaconDB.(*kv.Store).InitStateDiffCacheForTesting(t, 0))
-	reset := features.InitWithReset(&features.Flags{EnableStateDiff: true})
-	t.Cleanup(reset)
-
-	// Boundaries 32 and 64 have no block.
 	hist := newMockHistory(t, []mockHistorySpec{
 		{slot: 10, canonicalBlock: true},
 		{slot: 40, canonicalBlock: true},
@@ -119,27 +129,49 @@ func TestReplayBlocks_SkippedSlotStateDiffBoundary(t *testing.T) {
 	}
 	genesisRoot := hist.slotMap[0]
 	require.NoError(t, beaconDB.SaveState(ctx, hist.states[genesisRoot], genesisRoot))
-	for _, b := range []struct{ parent, boundary primitives.Slot }{{10, 32}, {40, 64}} {
-		root := hist.slotMap[b.parent]
-		st, err := ReplayProcessSlots(ctx, hist.hiddenStates[root].Copy(), b.boundary)
+	parents := map[primitives.Slot]primitives.Slot{32: 10, 64: 40}
+	for _, boundary := range boundaries {
+		root := hist.slotMap[parents[boundary]]
+		st, err := ReplayProcessSlots(ctx, hist.hiddenStates[root].Copy(), boundary)
 		require.NoError(t, err)
 		require.NoError(t, beaconDB.SaveState(ctx, st, root))
 	}
+	return beaconDB, hist
+}
 
-	ch := NewCanonicalHistory(beaconDB, hist, hist)
+func TestReplayBlocks_SkippedSlotStateDiffBoundary(t *testing.T) {
+	oldFlags := *flags.Get()
+	t.Cleanup(func() { flags.Init(&oldFlags) })
+	setStateDiffExponents() // Full snapshots at 64-slot intervals, diffs every 32 slots.
+	reset := features.InitWithReset(&features.Flags{EnableStateDiff: true})
+	t.Cleanup(reset)
+	ctx := t.Context()
+
 	cases := []struct {
-		name       string
-		target     primitives.Slot
-		wantBase   primitives.Slot
-		wantBlocks int
+		name        string
+		stored      []primitives.Slot
+		corruptSlot primitives.Slot
+		target      primitives.Slot
+		wantBase    primitives.Slot
+		wantBlocks  int
+		wantErr     error
 	}{
-		{name: "boundary between the tail block and its parent", target: 70, wantBase: 64, wantBlocks: 1},
-		{name: "boundary above the tail block", target: 66, wantBase: 64, wantBlocks: 0},
-		{name: "older boundary", target: 45, wantBase: 32, wantBlocks: 1},
+		{name: "boundary between the tail block and its parent", stored: []primitives.Slot{32, 64}, target: 70, wantBase: 64, wantBlocks: 1},
+		{name: "boundary above the tail block", stored: []primitives.Slot{32, 64}, target: 66, wantBase: 64, wantBlocks: 0},
+		{name: "older boundary", stored: []primitives.Slot{32, 64}, target: 45, wantBase: 32, wantBlocks: 1},
+		{name: "missing diff falls back", stored: []primitives.Slot{64}, target: 45, wantBase: 0, wantBlocks: 2},
+		{name: "missing snapshot falls back", stored: []primitives.Slot{32}, target: 70, wantBase: 32, wantBlocks: 2},
+		{name: "corrupt entry returns an error", stored: []primitives.Slot{32, 64}, corruptSlot: 32, target: 45, wantErr: kv.ErrStateDiffCorrupted},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			beaconDB, hist := skippedBoundaryHistory(t, tc.stored...)
+			ch := NewCanonicalHistory(&corruptDiffTree{Database: beaconDB, slot: tc.corruptSlot}, hist, hist)
 			base, descendants, err := ch.chainForSlot(ctx, tc.target)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				return
+			}
 			require.NoError(t, err)
 			require.Equal(t, tc.wantBase, base.Slot())
 			require.Equal(t, tc.wantBlocks, len(descendants))
