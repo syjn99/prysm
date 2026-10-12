@@ -352,7 +352,6 @@ func (p *BeaconDbStater) StateBySlot(ctx context.Context, target primitives.Slot
 	return st, nil
 }
 
-// archiveFrontier reports whether an archive walk is in progress and the highest slot it has regenerated.
 func (p *BeaconDbStater) archiveFrontier() (primitives.Slot, bool) {
 	r, ok := p.BeaconDB.(interface {
 		ArchiveFrontier() (primitives.Slot, bool)
@@ -363,7 +362,6 @@ func (p *BeaconDbStater) archiveFrontier() (primitives.Slot, bool) {
 	return r.ArchiveFrontier()
 }
 
-// archiveGapError returns a not-found error that names the frontier for a slot in stategen.ArchiveGap.
 func (p *BeaconDbStater) archiveGapError(ctx context.Context, slot primitives.Slot) error {
 	frontier, inGap, err := stategen.ArchiveGap(ctx, p.BeaconDB, slot)
 	if err != nil {
