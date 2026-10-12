@@ -260,8 +260,7 @@ func (p *BeaconDbStater) stateByRoot(ctx context.Context, stateRoot []byte) (sta
 		idx := (startIdx - i + n) % n
 
 		if bytes.Equal(stateRoots[idx], stateRoot) {
-			blockRoot := blkRoots[idx]
-			return p.StateGenService.StateByRoot(ctx, bytesutil.ToBytes32(blockRoot))
+			return p.stateByBlockRoot(ctx, bytesutil.ToBytes32(blkRoots[idx]))
 		}
 
 		// this is to support fetching states by pre-payload state roots after gloas
@@ -275,13 +274,28 @@ func (p *BeaconDbStater) stateByRoot(ctx context.Context, stateRoot []byte) (sta
 				continue
 			}
 			if b.Block().StateRoot() == bytesutil.ToBytes32(stateRoot) {
-				return p.StateGenService.StateByRoot(ctx, r)
+				return p.stateByBlockRoot(ctx, r)
 			}
 		}
 	}
 
 	stateNotFoundErr := NewStateNotFoundError(len(headState.StateRoots()), stateRoot)
 	return nil, &stateNotFoundErr
+}
+
+func (p *BeaconDbStater) stateByBlockRoot(ctx context.Context, blockRoot [32]byte) (state.BeaconState, error) {
+	if _, pending := p.archiveFrontier(); pending {
+		b, err := p.BeaconDB.Block(ctx, blockRoot)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not get block %#x", blockRoot)
+		}
+		if b != nil && !b.IsNil() {
+			if err := p.archiveGapError(ctx, b.Block().Slot()); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return p.StateGenService.StateByRoot(ctx, blockRoot)
 }
 
 // StateBySlot returns the post-state for the requested slot. To generate the state, it uses the
@@ -317,6 +331,10 @@ func (p *BeaconDbStater) StateBySlot(ctx context.Context, target primitives.Slot
 		}
 	}
 
+	if err := p.archiveGapError(ctx, target); err != nil {
+		return nil, err
+	}
+
 	// An archive node holds a state at every state-diff tree boundary. Serve those directly: addressing the
 	// tree by slot also reaches boundaries whose slot had no block, which no root can identify.
 	if st, ok := p.stateFromDiffTree(ctx, target); ok {
@@ -332,6 +350,38 @@ func (p *BeaconDbStater) StateBySlot(ctx context.Context, target primitives.Slot
 		return nil, errors.Wrap(err, msg)
 	}
 	return st, nil
+}
+
+// archiveFrontier reports whether an archive walk is in progress and the highest slot it has regenerated.
+func (p *BeaconDbStater) archiveFrontier() (primitives.Slot, bool) {
+	r, ok := p.BeaconDB.(interface {
+		ArchiveFrontier() (primitives.Slot, bool)
+	})
+	if !ok {
+		return 0, false
+	}
+	return r.ArchiveFrontier()
+}
+
+// archiveGapError returns a not-found error for a slot above the archive walk frontier and below the sync origin.
+// No saved state exists in that range yet, so a replay starts at the frontier. That replay keeps every block in
+// memory, and a request far above the frontier can make the node run out of memory.
+func (p *BeaconDbStater) archiveGapError(ctx context.Context, slot primitives.Slot) error {
+	frontier, pending := p.archiveFrontier()
+	if !pending || slot <= frontier {
+		return nil
+	}
+	bs, err := p.BeaconDB.BackfillStatus(ctx)
+	if errors.Is(err, db.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "could not determine state availability")
+	}
+	if bs == nil || uint64(slot) >= bs.OriginSlot {
+		return nil
+	}
+	return newStateNotFoundErrorf("requested slot %d is not available yet; archive state regeneration has reached slot %d", slot, frontier)
 }
 
 // stateFromDiffTree returns the state at the given slot if it is a state-diff tree boundary that has been

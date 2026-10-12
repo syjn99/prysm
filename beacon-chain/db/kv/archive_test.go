@@ -90,16 +90,16 @@ func TestArchiveStatus_KeyDoesNotCollideWithTree(t *testing.T) {
 func TestArchivePending(t *testing.T) {
 	db := setupDB(t)
 
-	_, pending := db.archivePending()
+	_, pending := db.ArchiveFrontier()
 	require.Equal(t, false, pending)
 
 	db.setArchiveStatus(&ArchiveStatus{OriginSlot: 64, RegeneratedThroughSlot: 128})
-	frontier, pending := db.archivePending()
+	frontier, pending := db.ArchiveFrontier()
 	require.Equal(t, true, pending)
 	require.Equal(t, primitives.Slot(128), frontier)
 
 	db.setArchiveStatus(&ArchiveStatus{OriginSlot: 64, RegeneratedThroughSlot: 128, Complete: true})
-	_, pending = db.archivePending()
+	_, pending = db.ArchiveFrontier()
 	require.Equal(t, false, pending)
 }
 

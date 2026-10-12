@@ -57,7 +57,7 @@ func (s *Store) saveStateByDiff(ctx context.Context, st state.ReadOnlyBeaconStat
 	}
 
 	// While an archive walk is filling the tree, only the walk may write: above its frontier there is no anchor.
-	if frontier, pending := s.archivePending(); pending && uint64(slot) > uint64(frontier)+deepestDiffSpan() {
+	if frontier, pending := s.ArchiveFrontier(); pending && uint64(slot) > uint64(frontier)+deepestDiffSpan() {
 		return errors.Wrapf(ErrAboveArchiveFrontier, "slot %d is above the archive frontier %d", slot, frontier)
 	}
 

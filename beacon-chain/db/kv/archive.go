@@ -100,8 +100,8 @@ func (s *Store) setArchiveStatus(as *ArchiveStatus) {
 	s.archiveStatus = &cp
 }
 
-// archivePending reports whether an archive walk is in progress and the highest boundary slot it has written.
-func (s *Store) archivePending() (primitives.Slot, bool) {
+// ArchiveFrontier reports whether an archive walk is in progress and the highest boundary slot it has written.
+func (s *Store) ArchiveFrontier() (primitives.Slot, bool) {
 	s.archiveLock.RLock()
 	defer s.archiveLock.RUnlock()
 	if s.archiveStatus == nil || s.archiveStatus.Complete {
