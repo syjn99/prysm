@@ -15,6 +15,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/testing/require"
 	"github.com/OffchainLabs/prysm/v7/testing/util"
 	"github.com/pkg/errors"
+	logTest "github.com/sirupsen/logrus/hooks/test"
 )
 
 // While the archive walk owns the tree, the live chain must not migrate cold states into it: the anchors the
@@ -182,6 +183,73 @@ func TestCompleteArchiveRegeneration(t *testing.T) {
 	require.Equal(t, 1, marked)
 	require.Equal(t, fSlot, service.finalizedInfo.state.Slot())
 	require.Equal(t, fRoot, service.finalizedInfo.root)
+}
+
+// The walk has written every tree slot below the next unwritten boundary, so cold migration must resume there
+// and not at the finalized slot from startup. Otherwise it writes the walked boundaries again, which takes
+// hours after a long walk, and a restart in that time skips the boundaries above the walk end.
+func TestCompleteArchiveRegeneration_AdvancesMigrationCursor(t *testing.T) {
+	hook := logTest.NewGlobal()
+	ctx := t.Context()
+	setStateDiffExponents()
+	beaconDB := testDB.SetupDB(t)
+	require.NoError(t, beaconDB.(*kv.Store).InitStateDiffCacheForTesting(t, 0))
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true})
+	defer resetCfg()
+
+	service := New(beaconDB, doublylinkedtree.New())
+	service.SetArchivePending(true)
+
+	slotsPerEpoch := params.BeaconConfig().SlotsPerEpoch
+	fEpoch := primitives.Epoch(4)
+	fSlot := primitives.Slot(fEpoch) * slotsPerEpoch
+	// Resume sets the cursor to the finalized slot at startup, far below the walk end.
+	service.migratedSlot = slotsPerEpoch
+
+	st, _ := util.DeterministicGenesisState(t, 32)
+	genesisStateRoot, err := st.HashTreeRoot(ctx)
+	require.NoError(t, err)
+	genesisBlk := blocks.NewGenesisBlock(genesisStateRoot[:])
+	util.SaveBlock(t, ctx, beaconDB, genesisBlk)
+	gRoot, err := genesisBlk.Block.HashTreeRoot()
+	require.NoError(t, err)
+	require.NoError(t, beaconDB.SaveGenesisBlockRoot(ctx, gRoot))
+
+	require.NoError(t, st.SetSlot(fSlot))
+	stRoot, err := st.HashTreeRoot(ctx)
+	require.NoError(t, err)
+	blk := util.NewBeaconBlock()
+	blk.Block.Slot = fSlot
+	blk.Block.ParentRoot = gRoot[:]
+	blk.Block.StateRoot = stRoot[:]
+	util.SaveBlock(t, ctx, beaconDB, blk)
+	fRoot, err := blk.Block.HashTreeRoot()
+	require.NoError(t, err)
+	require.NoError(t, beaconDB.SaveStateSummary(ctx, &ethpb.StateSummary{Slot: fSlot, Root: fRoot[:]}))
+	require.NoError(t, beaconDB.SaveState(ctx, st, fRoot))
+	require.NoError(t, beaconDB.SaveFinalizedCheckpoint(ctx, &ethpb.Checkpoint{Epoch: fEpoch, Root: fRoot[:]}))
+	require.NoError(t, service.epochBoundaryStateCache.put(fRoot, st))
+
+	next := fSlot + slotsPerEpoch
+	done, err := service.CompleteArchiveRegeneration(ctx, next, func(context.Context) error { return nil })
+	require.NoError(t, err)
+	require.Equal(t, true, done)
+	require.Equal(t, next, service.migratedSlot)
+
+	hook.Reset()
+	// A migration for the handoff checkpoint can wait on the migration lock during the handoff.
+	require.NoError(t, service.MigrateToCold(ctx, fRoot))
+	require.Equal(t, next, service.migratedSlot)
+
+	later := util.NewBeaconBlock()
+	later.Block.Slot = next - 1
+	later.Block.ParentRoot = fRoot[:]
+	util.SaveBlock(t, ctx, beaconDB, later)
+	laterRoot, err := later.Block.HashTreeRoot()
+	require.NoError(t, err)
+	require.NoError(t, service.MigrateToCold(ctx, laterRoot))
+	require.LogsDoNotContain(t, hook, "Saved state in DB")
+	require.Equal(t, next, service.migratedSlot)
 }
 
 // If the handoff cannot be recorded, migration must stay suppressed rather than run against a closed gate.
