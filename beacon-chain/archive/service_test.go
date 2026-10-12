@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/OffchainLabs/prysm/v7/testing/require"
 	"github.com/OffchainLabs/prysm/v7/testing/util"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // A round walks to the finalized epoch start and then offers the handoff. The handoff is offered with the
@@ -169,4 +172,45 @@ func TestRound_NoHandoffBeforeOriginIsVerified(t *testing.T) {
 	persisted, err := store.ArchiveStatus(ctx)
 	require.NoError(t, err)
 	require.Equal(t, false, persisted.Complete)
+}
+
+// The walk sets the gauges only when it writes a boundary, so a restart must seed them from the stored status.
+func TestStart_SetsMetricsFromStoredStatus(t *testing.T) {
+	setStateDiffExponents([]int{11, 9, 5})
+	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
+	defer resetCfg()
+
+	setup := func(t *testing.T, through primitives.Slot, complete bool) *kv.Store {
+		regeneratedThroughSlot.Set(0)
+		regenTargetSlot.Set(0)
+		store := testDB.SetupDB(t).(*kv.Store)
+		genesisState, _ := util.DeterministicGenesisState(t, 64)
+		require.NoError(t, store.InitializeArchiveOrigin(t.Context(), genesisState))
+		require.NoError(t, store.SaveArchiveStatus(t.Context(), &kv.ArchiveStatus{
+			RegeneratedThroughSlot: through,
+			Complete:               complete,
+		}))
+		return store
+	}
+
+	t.Run("complete", func(t *testing.T) {
+		store := setup(t, 4096, true)
+		New(t.Context(), store, &mockStateManager{pending: false}, nil, nil).Start()
+		require.Equal(t, float64(4096), gaugeValue(t, regeneratedThroughSlot))
+		require.Equal(t, float64(4096), gaugeValue(t, regenTargetSlot))
+	})
+
+	t.Run("pending", func(t *testing.T) {
+		store := setup(t, 2048, false)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		New(ctx, store, &mockStateManager{pending: true}, startup.NewClockSynchronizer(), nil).Start()
+		require.Equal(t, float64(2048), gaugeValue(t, regeneratedThroughSlot))
+	})
+}
+
+func gaugeValue(t *testing.T, g prometheus.Gauge) float64 {
+	m := &dto.Metric{}
+	require.NoError(t, g.Write(m))
+	return m.GetGauge().GetValue()
 }

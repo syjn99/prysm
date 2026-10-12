@@ -321,3 +321,28 @@ func Test_setupBlockStorageType(t *testing.T) {
 		require.ErrorContains(t, fmt.Sprintf(errMsg, features.SaveFullExecutionPayloads.Name), err)
 	})
 }
+
+// Archive mode writes genesis data before the archive origin anchors the state-diff tree. Only a database created
+// in archive mode may have a head block and no state-diff offset.
+func TestStartStateDiff_HeadBlockWithoutOffset(t *testing.T) {
+	setDefaultStateDiffExponents()
+
+	t.Run("archive database before the archive origin anchors", func(t *testing.T) {
+		resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
+		defer resetCfg()
+		store := setupDB(t)
+		genesisState, _ := createState(t, 0, version.Phase0)
+		require.NoError(t, store.SaveGenesisData(t.Context(), genesisState))
+		require.NoError(t, store.startStateDiff(t.Context()))
+	})
+
+	t.Run("database created without state-diff", func(t *testing.T) {
+		resetCfg := features.InitWithReset(&features.Flags{})
+		defer resetCfg()
+		store := setupDB(t)
+		genesisState, _ := createState(t, 0, version.Phase0)
+		require.NoError(t, store.SaveGenesisData(t.Context(), genesisState))
+		features.Init(&features.Flags{EnableStateDiff: true, EnableArchive: true})
+		require.ErrorIs(t, store.startStateDiff(t.Context()), ErrStateDiffIncompatible)
+	})
+}
