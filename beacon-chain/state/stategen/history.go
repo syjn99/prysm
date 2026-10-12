@@ -6,6 +6,7 @@ import (
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
@@ -128,6 +129,9 @@ func (c *CanonicalHistory) chainForSlot(ctx context.Context, target primitives.S
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "unable to retrieve canonical block for slot, root=%#x", r)
 	}
+	if st := c.skippedBoundaryState(ctx, r, b.Block().Slot(), target); st != nil {
+		return st, nil, nil
+	}
 	s, descendants, err := c.ancestorChain(ctx, b)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to query for ancestor and descendant blocks")
@@ -195,8 +199,50 @@ func (c *CanonicalHistory) ancestorChain(ctx context.Context, tail interfaces.Re
 			return nil, nil, errors.Wrap(db.ErrNotFound, msg)
 		}
 		chain = append(chain, tail)
+		if st := c.skippedBoundaryState(ctx, b.ParentRoot(), parent.Block().Slot(), b.Slot()-1); st != nil {
+			reverseChain(chain)
+			return st, chain, nil
+		}
 		tail = parent
 	}
+}
+
+// skippedBoundaryState returns the state-diff tree state at the highest boundary slot in (low, high].
+// The block at slot low with root blockRoot must be the latest block header of that state.
+// The tree is keyed by slot, so a boundary without a block has no root that ancestorChain can look up.
+func (c *CanonicalHistory) skippedBoundaryState(ctx context.Context, blockRoot [32]byte, low, high primitives.Slot) state.BeaconState {
+	if !features.Get().EnableStateDiff {
+		return nil
+	}
+	tree, ok := c.h.(interface {
+		SlotInDiffTree(slot primitives.Slot) (uint64, int, error)
+		StateBySlotFromDiffTree(ctx context.Context, slot primitives.Slot) (state.BeaconState, error)
+	})
+	if !ok {
+		return nil
+	}
+	for slot := high; slot > low; slot-- {
+		_, lvl, err := tree.SlotInDiffTree(slot)
+		if err != nil {
+			// The slot is below the tree offset, and all lower slots are below it too.
+			return nil
+		}
+		if lvl < 0 {
+			continue
+		}
+		// A missing or unreadable entry is not an error: ancestorChain continues to an older state.
+		st, err := tree.StateBySlotFromDiffTree(ctx, slot)
+		if err != nil || st == nil || st.IsNil() {
+			continue
+		}
+		// process_slots fills the header state root after the block, so the header root is the block root.
+		headerRoot, err := st.LatestBlockHeader().HashTreeRoot()
+		if err != nil || headerRoot != blockRoot {
+			continue
+		}
+		return st
+	}
+	return nil
 }
 
 func reverseChain(c []interfaces.ReadOnlySignedBeaconBlock) {
