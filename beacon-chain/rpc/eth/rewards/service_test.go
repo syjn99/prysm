@@ -1,6 +1,7 @@
 package rewards
 
 import (
+	"net/http"
 	"strconv"
 	"testing"
 
@@ -8,7 +9,9 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/altair"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/transition"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	dbutil "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen"
 	mockstategen "github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen/mock"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	"github.com/OffchainLabs/prysm/v7/config/params"
@@ -16,6 +19,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/crypto/bls/common"
 	"github.com/OffchainLabs/prysm/v7/network/httputil"
+	"github.com/OffchainLabs/prysm/v7/proto/dbval"
 	enginev1 "github.com/OffchainLabs/prysm/v7/proto/engine/v1"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/testing/assert"
@@ -54,6 +58,68 @@ func TestGetStateForRewards_NextSlotCacheHit(t *testing.T) {
 	actual, err := result.HashTreeRoot(ctx)
 	require.NoError(t, err)
 	assert.DeepEqual(t, expected, actual)
+}
+
+func TestGetStateForRewards_ArchiveRegenerationPending(t *testing.T) {
+	ctx := t.Context()
+	const (
+		archiveOrigin = primitives.Slot(512)
+		frontier      = primitives.Slot(1024)
+		syncOrigin    = primitives.Slot(4096)
+		parentSlot    = primitives.Slot(2000)
+	)
+
+	setup := func(t *testing.T, complete bool) *BlockRewardService {
+		db := dbutil.SetupDB(t)
+		store, ok := db.(*kv.Store)
+		require.Equal(t, true, ok)
+		require.NoError(t, db.SaveBackfillStatus(ctx, &dbval.BackfillStatus{
+			LowSlot:    uint64(archiveOrigin),
+			OriginSlot: uint64(syncOrigin),
+		}))
+		require.NoError(t, store.SaveArchiveStatus(ctx, &kv.ArchiveStatus{
+			OriginSlot:             archiveOrigin,
+			RegeneratedThroughSlot: frontier,
+			Complete:               complete,
+		}))
+
+		// A real archive node has no state in the gap. The saved parent state makes the replay succeed, so a
+		// failure shows that the guard stops the request, not missing data.
+		parent := util.NewBeaconBlock()
+		parent.Block.Slot = parentSlot
+		util.SaveBlock(t, ctx, db, parent)
+		parentRoot, err := parent.Block.HashTreeRoot()
+		require.NoError(t, err)
+		parentState, err := util.NewBeaconState(func(st *ethpb.BeaconState) error {
+			st.Slot = parentSlot
+			return nil
+		})
+		require.NoError(t, err)
+		require.NoError(t, db.SaveState(ctx, parentState, parentRoot))
+
+		ch := stategen.NewCanonicalHistory(db, &mockstategen.CanonicalChecker{Is: true}, &mockstategen.CurrentSlotter{Slot: syncOrigin + 100})
+		return &BlockRewardService{Replayer: ch, DB: db}
+	}
+
+	blk := util.NewBeaconBlock()
+	blk.Block.Slot = parentSlot + 1
+	sbb, err := blocks.NewSignedBeaconBlock(blk)
+	require.NoError(t, err)
+
+	t.Run("block in gap is not found", func(t *testing.T) {
+		s := setup(t, false)
+		_, httpErr := s.GetStateForRewards(ctx, sbb.Block())
+		require.NotNil(t, httpErr)
+		assert.Equal(t, http.StatusNotFound, httpErr.Code)
+		assert.StringContains(t, "archive regeneration frontier 1024", httpErr.Message)
+	})
+
+	t.Run("block in gap is served after regeneration completes", func(t *testing.T) {
+		s := setup(t, true)
+		st, httpErr := s.GetStateForRewards(ctx, sbb.Block())
+		require.Equal(t, (*httputil.DefaultJsonError)(nil), httpErr)
+		assert.Equal(t, parentSlot+1, st.Slot())
+	})
 }
 
 func TestGetBlockRewardsData_GloasParentPayload(t *testing.T) {
