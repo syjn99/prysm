@@ -4,11 +4,13 @@ import (
 	"testing"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/gloas"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/signing"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
+	"github.com/OffchainLabs/prysm/v7/crypto/bls"
 	enginev1 "github.com/OffchainLabs/prysm/v7/proto/engine/v1"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/runtime/version"
@@ -295,6 +297,70 @@ func TestGloasCrossForkDiffOnboardsBuilderDeposit(t *testing.T) {
 	result, err := ApplyDiff(ctx, fuluSource.Copy(), hdiffBytes)
 	require.NoError(t, err)
 	requireEqualState(t, gloasTarget, result)
+}
+
+func validBuilderDeposit(t *testing.T) *ethpb.PendingDeposit {
+	sk, err := bls.RandKey()
+	require.NoError(t, err)
+	wc := make([]byte, fieldparams.RootLength)
+	wc[0] = params.BeaconConfig().BuilderWithdrawalPrefixByte
+	msg := &ethpb.DepositMessage{
+		PublicKey:             sk.PublicKey().Marshal(),
+		WithdrawalCredentials: wc,
+		Amount:                params.BeaconConfig().MinActivationBalance,
+	}
+	domain, err := signing.ComputeDomain(params.BeaconConfig().DomainDeposit, nil, nil)
+	require.NoError(t, err)
+	root, err := signing.ComputeSigningRoot(msg, domain)
+	require.NoError(t, err)
+	return &ethpb.PendingDeposit{
+		PublicKey:             msg.PublicKey,
+		WithdrawalCredentials: wc,
+		Amount:                msg.Amount,
+		Signature:             sk.Sign(root[:]).Marshal(),
+	}
+}
+
+func TestGloasCrossForkDiffBuildersNotInTarget(t *testing.T) {
+	// Applying the diff upgrades the Fulu anchor, which onboards its pending 0x03 deposits as builders.
+	// The target is upgraded from a later Fulu state where fewer of those deposits are still pending.
+	tests := []struct {
+		name          string
+		anchorPending int
+		targetPending int
+	}{
+		{name: "target has no builders", anchorPending: 1, targetPending: 0},
+		{name: "target has fewer builders", anchorPending: 2, targetPending: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			deposits := make([]*ethpb.PendingDeposit, tt.anchorPending)
+			for i := range deposits {
+				deposits[i] = validBuilderDeposit(t)
+			}
+			fuluSource, _ := util.DeterministicGenesisStateFulu(t, 64)
+			require.NoError(t, fuluSource.SetPendingDeposits(deposits))
+
+			atFork := fuluSource.Copy()
+			require.NoError(t, atFork.SetPendingDeposits(deposits[:tt.targetPending]))
+			gloasTarget, err := gloas.UpgradeToGloas(ctx, atFork)
+			require.NoError(t, err)
+			require.NoError(t, gloasTarget.SetSlot(fuluSource.Slot()+1))
+			tBuilders, err := gloasTarget.Builders()
+			require.NoError(t, err)
+			require.Equal(t, tt.targetPending, len(tBuilders))
+
+			hdiffBytes, err := Diff(fuluSource, gloasTarget)
+			require.NoError(t, err)
+			result, err := ApplyDiff(ctx, fuluSource.Copy(), hdiffBytes)
+			require.NoError(t, err)
+			rBuilders, err := result.Builders()
+			require.NoError(t, err)
+			require.Equal(t, tt.targetPending, len(rBuilders))
+			requireEqualState(t, gloasTarget, result)
+		})
+	}
 }
 
 func TestGloasSerializeDeserializeRoundTrip(t *testing.T) {
