@@ -341,6 +341,8 @@ func (c *stateDiffCache) setAnchor(level int, anchorState state.ReadOnlyBeaconSt
 	}
 	c.anchors[level] = anchor{slot: anchorState.Slot(), data: compressed}
 	c.memoDrop(level)
+	// A reader can still decode the replaced anchor. The new generation stops it from memoizing that stale state.
+	c.anchorGeneration++
 	stateDiffAnchorCacheBytes.WithLabelValues(strconv.Itoa(level)).Set(float64(len(compressed)))
 	return nil
 }
