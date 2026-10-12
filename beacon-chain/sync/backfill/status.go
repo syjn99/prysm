@@ -189,6 +189,28 @@ func (s *Store) originState(ctx context.Context) (state.BeaconState, error) {
 	return s.store.StateOrError(ctx, bytesutil.ToBytes32(s.status().OriginRoot))
 }
 
+// lowestBlockAboveEmptyFloor reports whether the lowest backfilled block is the first block above a floor slot
+// that has no block. When the floor slot has no block, process_slot has set the state_root of the floor state's
+// latest block header. Thus the header root is the root of the last block below the floor.
+func (s *Store) lowestBlockAboveEmptyFloor(ctx context.Context, floor primitives.Slot) (bool, error) {
+	st, err := s.store.StateBySlotFromDiffTree(ctx, floor)
+	if err != nil {
+		return false, err
+	}
+	if st == nil || st.IsNil() {
+		return false, fmt.Errorf("nil state at floor slot %d", floor)
+	}
+	header := st.LatestBlockHeader()
+	if header.Slot >= floor {
+		return false, nil
+	}
+	root, err := header.HashTreeRoot()
+	if err != nil {
+		return false, err
+	}
+	return root == bytesutil.ToBytes32(s.status().LowParentRoot), nil
+}
+
 // BeaconDB describes the set of DB methods that the StatusUpdater type needs to function.
 type BeaconDB interface {
 	SaveBackfillStatus(context.Context, *dbval.BackfillStatus) error
@@ -198,4 +220,5 @@ type BeaconDB interface {
 	Block(context.Context, [32]byte) (interfaces.ReadOnlySignedBeaconBlock, error)
 	SaveROBlocks(ctx context.Context, blks []blocks.ROBlock, cache bool) error
 	StateOrError(ctx context.Context, blockRoot [32]byte) (state.BeaconState, error)
+	StateBySlotFromDiffTree(ctx context.Context, slot primitives.Slot) (state.BeaconState, error)
 }

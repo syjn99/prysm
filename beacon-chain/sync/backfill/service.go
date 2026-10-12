@@ -10,6 +10,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p/peers"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/startup"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/verification"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -305,6 +306,20 @@ func (s *Service) Start() {
 			Info("Exiting backfill service; minimum block retention slot >= lowest backfilled block")
 		s.markComplete()
 		return
+	}
+	// LowSlot is the slot of the lowest block. When the archive origin slot has no block, LowSlot is above the
+	// floor and the check above misses. Peers cannot fill the empty range, so the request repeats forever.
+	if features.Get().EnableArchive {
+		reached, err := s.store.lowestBlockAboveEmptyFloor(ctx, needs.Block.Begin)
+		if err != nil {
+			log.WithError(err).Warn("Could not compare the lowest backfilled block with the archive origin state")
+		}
+		if reached {
+			log.WithField("backfillLowestSlot", status.LowSlot).
+				Info("Exiting backfill service; the parent of the lowest backfilled block is the archive origin block")
+			s.markComplete()
+			return
+		}
 	}
 
 	if s.initSyncWaiter != nil {

@@ -297,6 +297,14 @@ func (p *BeaconDbStater) StateBySlot(ctx context.Context, target primitives.Slot
 		return nil, newStateNotFoundErrorf("requested slot is in the future (requested %d, current %d)", target, currentSlot)
 	}
 
+	// The availability checks below use block slots. An archive origin at a skipped slot has a state in the
+	// tree but no block, so archive mode looks in the tree first.
+	if features.Get().EnableArchive {
+		if st, ok := p.stateFromDiffTree(ctx, target); ok {
+			return st, nil
+		}
+	}
+
 	if p.BeaconDB != nil {
 		earliestSlot, err := p.BeaconDB.EarliestSlot(ctx)
 		if err != nil && !errors.Is(err, db.ErrNotFound) {
