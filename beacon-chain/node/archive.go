@@ -113,7 +113,7 @@ func archiveOriginBelowSyncOrigin(archiveOrigin, syncOrigin primitives.Slot) err
 }
 
 // archiveOriginGuard checks the checkpoint block against the archive origin before SaveOrigin writes anything.
-// A partial write leaves a head block without a state-diff offset, and the next start then disables state-diff.
+// Rejected checkpoints must not persist because checkpoint initializers ignore new flags when an origin exists.
 type archiveOriginGuard struct {
 	db.Database
 	archiveOriginSlot primitives.Slot
