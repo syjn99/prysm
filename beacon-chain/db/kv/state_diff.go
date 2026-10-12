@@ -77,7 +77,12 @@ func (s *Store) saveStateByDiff(ctx context.Context, st state.ReadOnlyBeaconStat
 
 // StateBySlotFromDiffTree returns the state at the given slot from the tree; slot must be a saving point.
 func (s *Store) StateBySlotFromDiffTree(ctx context.Context, slot primitives.Slot) (state.BeaconState, error) {
-	return s.stateByDiff(ctx, slot)
+	st, err := s.stateByDiff(ctx, slot)
+	if errors.Is(err, errSnapshotNotFound) {
+		// A missing snapshot is a missing state, the same as a missing diff.
+		return nil, fmt.Errorf("%w: %w", ErrNotFoundState, err)
+	}
+	return st, err
 }
 
 // stateByDiff retrieves the full state for a given slot.

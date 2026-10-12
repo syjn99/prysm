@@ -129,7 +129,11 @@ func (c *CanonicalHistory) chainForSlot(ctx context.Context, target primitives.S
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "unable to retrieve canonical block for slot, root=%#x", r)
 	}
-	if st := c.skippedBoundaryState(ctx, r, b.Block().Slot(), target); st != nil {
+	st, err := c.skippedBoundaryState(ctx, r, b.Block().Slot(), target)
+	if err != nil {
+		return nil, nil, err
+	}
+	if st != nil {
 		return st, nil, nil
 	}
 	s, descendants, err := c.ancestorChain(ctx, b)
@@ -199,7 +203,11 @@ func (c *CanonicalHistory) ancestorChain(ctx context.Context, tail interfaces.Re
 			return nil, nil, errors.Wrap(db.ErrNotFound, msg)
 		}
 		chain = append(chain, tail)
-		if st := c.skippedBoundaryState(ctx, b.ParentRoot(), parent.Block().Slot(), b.Slot()-1); st != nil {
+		st, err = c.skippedBoundaryState(ctx, b.ParentRoot(), parent.Block().Slot(), b.Slot()-1)
+		if err != nil {
+			return nil, nil, err
+		}
+		if st != nil {
 			reverseChain(chain)
 			return st, chain, nil
 		}
@@ -207,42 +215,49 @@ func (c *CanonicalHistory) ancestorChain(ctx context.Context, tail interfaces.Re
 	}
 }
 
-// skippedBoundaryState returns the state-diff tree state at the highest boundary slot in (low, high].
-// The block at slot low with root blockRoot must be the latest block header of that state.
 // The tree is keyed by slot, so a boundary without a block has no root that ancestorChain can look up.
-func (c *CanonicalHistory) skippedBoundaryState(ctx context.Context, blockRoot [32]byte, low, high primitives.Slot) state.BeaconState {
+func (c *CanonicalHistory) skippedBoundaryState(ctx context.Context, blockRoot [32]byte, low, high primitives.Slot) (state.BeaconState, error) {
 	if !features.Get().EnableStateDiff {
-		return nil
+		return nil, nil
 	}
 	tree, ok := c.h.(interface {
 		SlotInDiffTree(slot primitives.Slot) (uint64, int, error)
 		StateBySlotFromDiffTree(ctx context.Context, slot primitives.Slot) (state.BeaconState, error)
 	})
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	for slot := high; slot > low; slot-- {
 		_, lvl, err := tree.SlotInDiffTree(slot)
 		if err != nil {
 			// The slot is below the tree offset, and all lower slots are below it too.
-			return nil
+			return nil, nil
 		}
 		if lvl < 0 {
 			continue
 		}
-		// A missing or unreadable entry is not an error: ancestorChain continues to an older state.
 		st, err := tree.StateBySlotFromDiffTree(ctx, slot)
-		if err != nil || st == nil || st.IsNil() {
+		// A missing entry is not an error: ancestorChain continues to an older state.
+		if errors.Is(err, db.ErrNotFoundState) {
+			continue
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not read state-diff boundary state at slot %d", slot)
+		}
+		if st == nil || st.IsNil() {
 			continue
 		}
 		// process_slots fills the header state root after the block, so the header root is the block root.
 		headerRoot, err := st.LatestBlockHeader().HashTreeRoot()
-		if err != nil || headerRoot != blockRoot {
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not compute latest block header root at slot %d", slot)
+		}
+		if headerRoot != blockRoot {
 			continue
 		}
-		return st
+		return st, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func reverseChain(c []interfaces.ReadOnlySignedBeaconBlock) {
