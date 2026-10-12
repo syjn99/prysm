@@ -111,120 +111,118 @@ func TestWalk_ResumesFromFrontier(t *testing.T) {
 }
 
 // Orphans stay in the slot index, so a boundary state has to be built from the canonical block below one.
-func TestWalk_SkipsOrphanAtHighestPopulatedSlot(t *testing.T) {
+func TestWalk_SkipsOrphans(t *testing.T) {
 	setStateDiffExponents([]int{11, 9, 5})
 	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
 	defer resetCfg()
 
-	ctx := t.Context()
-	store := testDB.SetupDB(t).(*kv.Store)
+	t.Run("highest populated slot", func(t *testing.T) {
+		ctx := t.Context()
+		store := testDB.SetupDB(t).(*kv.Store)
 
-	genesisState, keys := util.DeterministicGenesisState(t, 64)
-	require.NoError(t, store.InitializeArchiveOrigin(ctx, genesisState))
-	saveGenesisBlock(t, ctx, store, genesisState)
+		genesisState, keys := util.DeterministicGenesisState(t, 64)
+		require.NoError(t, store.InitializeArchiveOrigin(ctx, genesisState))
+		saveGenesisBlock(t, ctx, store, genesisState)
 
-	// Canonical chain up to slot 30.
-	working := genesisState.Copy()
-	for slot := primitives.Slot(1); slot <= 30; slot++ {
-		working, _ = applyBlock(t, ctx, store, working, keys, slot)
-	}
-	stateAt30 := working.Copy()
-
-	// A valid child of slot 30 that lost the fork choice race, at slot 31. Nothing ever deletes it, and it is
-	// the only block in (30, 32]: slots 31 and 32 are canonically empty.
-	orphan, err := util.GenerateFullBlock(stateAt30.Copy(), keys, util.DefaultBlockGenConfig(), 31)
-	require.NoError(t, err)
-	orphanRoot := saveBlock(t, ctx, store, orphan)
-
-	// The canonical branch resumes at 33, building on slot 30.
-	canonical := stateAt30.Copy()
-	var wantRoot64, root64 [32]byte
-	for slot := primitives.Slot(33); slot <= 70; slot++ {
-		var root [32]byte
-		canonical, root = applyBlock(t, ctx, store, canonical, keys, slot)
-		if slot == 64 {
-			root64 = root
-			wantRoot64, err = canonical.HashTreeRoot(ctx)
-			require.NoError(t, err)
+		// Canonical chain up to slot 30.
+		working := genesisState.Copy()
+		for slot := primitives.Slot(1); slot <= 30; slot++ {
+			working, _ = applyBlock(t, ctx, store, working, keys, slot)
 		}
-	}
-	// Slot 31 has to sit below the finalized epoch: IsFinalizedBlock reports every block inside the finalized
-	// epoch as finalized whether or not it is canonical. The checkpoint root of epoch 2 is the block at slot 64.
-	indexFinalized(t, ctx, store, 64, root64)
-	require.Equal(t, false, store.IsFinalizedBlock(ctx, orphanRoot))
+		stateAt30 := working.Copy()
 
-	// Boundary 32 is a canonically empty slot, so its state is slot 30's advanced to 32.
-	wantAt32, err := transition.ProcessSlots(ctx, stateAt30.Copy(), 32)
-	require.NoError(t, err)
-	wantRoot32, err := wantAt32.HashTreeRoot(ctx)
-	require.NoError(t, err)
+		// A valid child of slot 30 that lost the fork choice race, at slot 31. Nothing ever deletes it, and it is
+		// the only block in (30, 32]: slots 31 and 32 are canonically empty.
+		orphan, err := util.GenerateFullBlock(stateAt30.Copy(), keys, util.DefaultBlockGenConfig(), 31)
+		require.NoError(t, err)
+		orphanRoot := saveBlock(t, ctx, store, orphan)
 
-	// Both boundaries must regenerate, which they cannot do if the orphan is replayed.
-	require.NoError(t, newTestService(t, store).walk(ctx, 64))
+		// The canonical branch resumes at 33, building on slot 30.
+		canonical := stateAt30.Copy()
+		var wantRoot64, root64 [32]byte
+		for slot := primitives.Slot(33); slot <= 70; slot++ {
+			var root [32]byte
+			canonical, root = applyBlock(t, ctx, store, canonical, keys, slot)
+			if slot == 64 {
+				root64 = root
+				wantRoot64, err = canonical.HashTreeRoot(ctx)
+				require.NoError(t, err)
+			}
+		}
+		// Slot 31 has to sit below the finalized epoch: IsFinalizedBlock reports every block inside the finalized
+		// epoch as finalized whether or not it is canonical. The checkpoint root of epoch 2 is the block at slot 64.
+		indexFinalized(t, ctx, store, 64, root64)
+		require.Equal(t, false, store.IsFinalizedBlock(ctx, orphanRoot))
 
-	got32, err := store.StateBySlotFromDiffTree(ctx, 32)
-	require.NoError(t, err)
-	gotRoot32, err := got32.HashTreeRoot(ctx)
-	require.NoError(t, err)
-	require.Equal(t, wantRoot32, gotRoot32, "boundary 32 was not built from the canonical block at slot 30")
+		// Boundary 32 is a canonically empty slot, so its state is slot 30's advanced to 32.
+		wantAt32, err := transition.ProcessSlots(ctx, stateAt30.Copy(), 32)
+		require.NoError(t, err)
+		wantRoot32, err := wantAt32.HashTreeRoot(ctx)
+		require.NoError(t, err)
 
-	got64, err := store.StateBySlotFromDiffTree(ctx, 64)
-	require.NoError(t, err)
-	gotRoot64, err := got64.HashTreeRoot(ctx)
-	require.NoError(t, err)
-	require.Equal(t, wantRoot64, gotRoot64, "boundary 64 differs from the canonical chain")
-}
+		// Both boundaries must regenerate, which they cannot do if the orphan is replayed.
+		require.NoError(t, newTestService(t, store).walk(ctx, 64))
 
-// The walk target is the start of the finalized epoch, and the finalized index holds every block of that epoch,
-// orphans too. A lone orphan at the target slot must not supply the boundary state.
-func TestWalk_SkipsOrphanAtFinalizedEpochStart(t *testing.T) {
-	setStateDiffExponents([]int{11, 9, 5})
-	resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: true})
-	defer resetCfg()
+		got32, err := store.StateBySlotFromDiffTree(ctx, 32)
+		require.NoError(t, err)
+		gotRoot32, err := got32.HashTreeRoot(ctx)
+		require.NoError(t, err)
+		require.Equal(t, wantRoot32, gotRoot32, "boundary 32 was not built from the canonical block at slot 30")
 
-	ctx := t.Context()
-	store := testDB.SetupDB(t).(*kv.Store)
-	genesisState, keys := util.DeterministicGenesisState(t, 64)
-	require.NoError(t, store.InitializeArchiveOrigin(ctx, genesisState))
-	saveGenesisBlock(t, ctx, store, genesisState)
+		got64, err := store.StateBySlotFromDiffTree(ctx, 64)
+		require.NoError(t, err)
+		gotRoot64, err := got64.HashTreeRoot(ctx)
+		require.NoError(t, err)
+		require.Equal(t, wantRoot64, gotRoot64, "boundary 64 differs from the canonical chain")
+	})
 
-	working := genesisState.Copy()
-	var root62 [32]byte
-	for slot := primitives.Slot(1); slot <= 62; slot++ {
-		working, root62 = applyBlock(t, ctx, store, working, keys, slot)
-	}
-	stateAt62 := working.Copy()
+	// The walk target is the start of the finalized epoch, and the finalized index holds every block of that
+	// epoch, orphans too. A lone orphan at the target slot must not supply the boundary state.
+	t.Run("finalized epoch start", func(t *testing.T) {
+		ctx := t.Context()
+		store := testDB.SetupDB(t).(*kv.Store)
+		genesisState, keys := util.DeterministicGenesisState(t, 64)
+		require.NoError(t, store.InitializeArchiveOrigin(ctx, genesisState))
+		saveGenesisBlock(t, ctx, store, genesisState)
 
-	// An orphan at slot 64 builds on 62. The canonical chain skips 63 and 64 and resumes at 65.
-	orphan, err := util.GenerateFullBlock(stateAt62.Copy(), keys, util.DefaultBlockGenConfig(), 64)
-	require.NoError(t, err)
-	orphanRoot := saveBlock(t, ctx, store, orphan)
-	canonical := stateAt62.Copy()
-	for slot := primitives.Slot(65); slot <= 70; slot++ {
-		canonical, _ = applyBlock(t, ctx, store, canonical, keys, slot)
-	}
+		working := genesisState.Copy()
+		var root62 [32]byte
+		for slot := primitives.Slot(1); slot <= 62; slot++ {
+			working, root62 = applyBlock(t, ctx, store, working, keys, slot)
+		}
+		stateAt62 := working.Copy()
 
-	// The checkpoint root of epoch 2 is the highest canonical block at or below slot 64, which is 62.
-	require.NoError(t, store.SaveFinalizedCheckpoint(ctx, &ethpb.Checkpoint{Epoch: 2, Root: root62[:]}))
-	require.Equal(t, true, store.IsFinalizedBlock(ctx, orphanRoot), "the orphan must be in the finalized index for this test to mean anything")
+		// An orphan at slot 64 builds on 62. The canonical chain skips 63 and 64 and resumes at 65.
+		orphan, err := util.GenerateFullBlock(stateAt62.Copy(), keys, util.DefaultBlockGenConfig(), 64)
+		require.NoError(t, err)
+		orphanRoot := saveBlock(t, ctx, store, orphan)
+		canonical := stateAt62.Copy()
+		for slot := primitives.Slot(65); slot <= 70; slot++ {
+			canonical, _ = applyBlock(t, ctx, store, canonical, keys, slot)
+		}
 
-	want, err := transition.ProcessSlots(ctx, stateAt62.Copy(), 64)
-	require.NoError(t, err)
-	wantRoot, err := want.HashTreeRoot(ctx)
-	require.NoError(t, err)
+		// The checkpoint root of epoch 2 is the highest canonical block at or below slot 64, which is 62.
+		require.NoError(t, store.SaveFinalizedCheckpoint(ctx, &ethpb.Checkpoint{Epoch: 2, Root: root62[:]}))
+		require.Equal(t, true, store.IsFinalizedBlock(ctx, orphanRoot), "the orphan must be in the finalized index for this test to mean anything")
 
-	svc := newTestService(t, store)
-	target, err := svc.target(ctx)
-	require.NoError(t, err)
-	require.Equal(t, primitives.Slot(64), target)
-	require.NoError(t, svc.walk(ctx, target))
+		want, err := transition.ProcessSlots(ctx, stateAt62.Copy(), 64)
+		require.NoError(t, err)
+		wantRoot, err := want.HashTreeRoot(ctx)
+		require.NoError(t, err)
 
-	got, err := store.StateBySlotFromDiffTree(ctx, 64)
-	require.NoError(t, err)
-	gotRoot, err := got.HashTreeRoot(ctx)
-	require.NoError(t, err)
-	require.Equal(t, primitives.Slot(62), got.LatestBlockHeader().Slot, "boundary 64 was built from the orphan")
-	require.Equal(t, wantRoot, gotRoot)
+		svc := newTestService(t, store)
+		target, err := svc.target(ctx)
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(64), target)
+		require.NoError(t, svc.walk(ctx, target))
+
+		got, err := store.StateBySlotFromDiffTree(ctx, 64)
+		require.NoError(t, err)
+		gotRoot, err := got.HashTreeRoot(ctx)
+		require.NoError(t, err)
+		require.Equal(t, primitives.Slot(62), got.LatestBlockHeader().Slot, "boundary 64 was built from the orphan")
+		require.Equal(t, wantRoot, gotRoot)
+	})
 }
 
 // A wrong origin state produces a state root that does not match what the first block commits to. This is the
