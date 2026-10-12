@@ -29,10 +29,19 @@ type mockBackfillDB struct {
 	status                    *dbval.BackfillStatus
 	err                       error
 	states                    map[[32]byte]state.BeaconState
+	diffTreeStates            map[primitives.Slot]state.BeaconState
 	blocks                    map[[32]byte]blocks.ROBlock
 }
 
 var _ BeaconDB = &mockBackfillDB{}
+
+func (d *mockBackfillDB) StateBySlotFromDiffTree(_ context.Context, slot primitives.Slot) (state.BeaconState, error) {
+	st, ok := d.diffTreeStates[slot]
+	if !ok {
+		return nil, db.ErrNotFoundState
+	}
+	return st, nil
+}
 
 func (d *mockBackfillDB) StateOrError(_ context.Context, blockRoot [32]byte) (state.BeaconState, error) {
 	st, ok := d.states[blockRoot]

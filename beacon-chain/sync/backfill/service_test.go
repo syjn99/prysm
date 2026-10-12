@@ -1,6 +1,7 @@
 package backfill
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -11,10 +12,12 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/startup"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/verification"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/proto/dbval"
+	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/testing/require"
 	"github.com/OffchainLabs/prysm/v7/testing/util"
 )
@@ -105,14 +108,49 @@ func TestServiceCompletesOnRestartAtPinnedFloor(t *testing.T) {
 	for _, tc := range []struct {
 		name                  string
 		oldest, archiveOrigin *primitives.Slot
+		// headerSlot is the slot of the archive origin state's latest block header. It is below the floor
+		// when the origin slot has no block.
+		headerSlot primitives.Slot
+		// lowSlot is the slot of the lowest imported block. parentIsHeader makes its parent the origin header.
+		lowSlot        primitives.Slot
+		parentIsHeader bool
+		complete       bool
 	}{
-		{name: "archive origin", archiveOrigin: &floor},
-		{name: "backfill oldest slot", oldest: &floor},
+		{name: "archive origin", archiveOrigin: &floor, headerSlot: floor, lowSlot: floor, complete: true},
+		{name: "backfill oldest slot", oldest: &floor, lowSlot: floor, complete: true},
+		{name: "archive origin at a skipped slot", archiveOrigin: &floor, headerSlot: floor - 1, lowSlot: floor + 1,
+			parentIsHeader: true, complete: true},
+		{name: "archive origin at a skipped slot, parent is another block", archiveOrigin: &floor, headerSlot: floor - 1,
+			lowSlot: floor + 1},
+		{name: "archive origin block not imported", archiveOrigin: &floor, headerSlot: floor, lowSlot: floor + 1,
+			parentIsHeader: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			resetCfg := features.InitWithReset(&features.Flags{EnableArchive: tc.archiveOrigin != nil})
+			defer resetCfg()
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
-			su, err := NewUpdater(ctx, &mockBackfillDB{status: &dbval.BackfillStatus{LowSlot: uint64(floor)}})
+
+			bdb := &mockBackfillDB{status: &dbval.BackfillStatus{LowSlot: uint64(tc.lowSlot), LowParentRoot: make([]byte, 32)}}
+			if tc.archiveOrigin != nil {
+				originState, err := util.NewBeaconState()
+				require.NoError(t, err)
+				require.NoError(t, originState.SetSlot(*tc.archiveOrigin))
+				header := &ethpb.BeaconBlockHeader{
+					Slot:       tc.headerSlot,
+					ParentRoot: make([]byte, 32),
+					StateRoot:  bytes.Repeat([]byte{0x01}, 32),
+					BodyRoot:   make([]byte, 32),
+				}
+				require.NoError(t, originState.SetLatestBlockHeader(header))
+				bdb.diffTreeStates = map[primitives.Slot]state.BeaconState{*tc.archiveOrigin: originState}
+				if tc.parentIsHeader {
+					root, err := header.HashTreeRoot()
+					require.NoError(t, err)
+					bdb.status.LowParentRoot = root[:]
+				}
+			}
+			su, err := NewUpdater(ctx, bdb)
 			require.NoError(t, err)
 			cw := startup.NewClockSynchronizer()
 			clock := startup.NewClock(time.Now(), [32]byte{}, startup.WithSlotAsNow(floor+2_000_000))
@@ -121,12 +159,29 @@ func TestServiceCompletesOnRestartAtPinnedFloor(t *testing.T) {
 				return das.NewSyncNeeds(clock.CurrentSlot, tc.oldest, tc.archiveOrigin, 0)
 			}
 			srv, err := NewService(ctx, su, nil, nil, cw, nil, &mockAssigner{},
-				WithWorkerCount(2), WithEnableBackfill(true), WithSyncNeedsWaiter(snw))
+				WithBatchSize(32), WithWorkerCount(2), WithEnableBackfill(true), WithSyncNeedsWaiter(snw))
 			require.NoError(t, err)
-			srv.pool = &mockPool{todoChan: make(chan batch, 2)}
+			pool := &mockPool{todoChan: make(chan batch, 8), finishedErr: make(chan error, 1)}
+			srv.pool = pool
 			srv.workerCfg = &workerCfg{}
-			go srv.Start()
-			require.NoError(t, srv.WaitForCompletion())
+			stopped := make(chan struct{})
+			go func() {
+				srv.Start()
+				close(stopped)
+			}()
+			// The run loop blocks in pool.complete(), which does not watch the context. errEndSequence ends it.
+			defer func() {
+				pool.finishedErr <- errEndSequence
+				<-stopped
+			}()
+
+			if tc.complete {
+				require.NoError(t, srv.WaitForCompletion())
+				return
+			}
+			// A block can still exist between the floor and the lowest block, so backfill must request it.
+			todo := testReadN(ctx, t, pool.todoChan, 1, nil)
+			require.Equal(t, floor, todo[0].begin)
 		})
 	}
 }

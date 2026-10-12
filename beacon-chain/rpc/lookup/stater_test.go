@@ -8,10 +8,13 @@ import (
 	"time"
 
 	chainMock "github.com/OffchainLabs/prysm/v7/beacon-chain/blockchain/testing"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	testDB "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
 	statenative "github.com/OffchainLabs/prysm/v7/beacon-chain/state/state-native"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen"
 	mockstategen "github.com/OffchainLabs/prysm/v7/beacon-chain/state/stategen/mock"
+	"github.com/OffchainLabs/prysm/v7/cmd/beacon-chain/flags"
+	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -514,6 +517,52 @@ func TestStateBySlot_BeforeBackfillLowSlot(t *testing.T) {
 	require.ErrorContains(t, fmt.Sprintf("backfill starts at slot %d", lowSlot), err)
 	var stateNotFoundErr *StateNotFoundError
 	require.Equal(t, true, errors.As(err, &stateNotFoundErr))
+}
+
+// A state-diff tree can hold a state below the earliest block, for example an archive origin at a skipped
+// slot. Archive mode serves that state. Other modes keep the block-based availability checks.
+func TestStateBySlot_DiffTreeStateBelowEarliestBlock(t *testing.T) {
+	prevFlags := flags.Get()
+	flags.Init(&flags.GlobalFlags{StateDiffExponents: []int{11, 9, 5}})
+	defer flags.Init(prevFlags)
+
+	for _, tc := range []struct {
+		name    string
+		archive bool
+	}{
+		{name: "archive mode serves the origin state", archive: true},
+		{name: "state-diff mode keeps the availability check", archive: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetCfg := features.InitWithReset(&features.Flags{EnableStateDiff: true, EnableArchive: tc.archive})
+			defer resetCfg()
+
+			ctx := t.Context()
+			db := testDB.SetupDB(t)
+			origin := primitives.Slot(64)
+			originState, _ := util.DeterministicGenesisState(t, 64)
+			require.NoError(t, originState.SetSlot(origin))
+			require.NoError(t, db.(*kv.Store).InitializeArchiveOrigin(ctx, originState))
+
+			b := util.NewBeaconBlock()
+			b.Block.Slot = origin + 1
+			util.SaveBlock(t, ctx, db, b)
+			require.NoError(t, db.SaveBackfillStatus(ctx, &dbval.BackfillStatus{LowSlot: uint64(origin + 1)}))
+
+			currentSlot := origin + 2
+			p := BeaconDbStater{
+				BeaconDB:           db,
+				GenesisTimeFetcher: &chainMock.ChainService{Slot: &currentSlot},
+			}
+			st, err := p.StateBySlot(ctx, origin)
+			if !tc.archive {
+				require.ErrorContains(t, fmt.Sprintf("earliest available slot is %d", origin+1), err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, origin, st.Slot())
+		})
+	}
 }
 
 func TestStateBySlot_ReplayNoDataForSlotReturnsNotFound(t *testing.T) {
