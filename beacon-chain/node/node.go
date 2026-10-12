@@ -407,7 +407,8 @@ func registerServices(cliCtx *cli.Context, beacon *BeaconNode, synchronizer *sta
 		return errors.Wrap(err, "could not register Back Fill service")
 	}
 
-	if beacon.archiveRegenPending {
+	// The service also runs when regeneration is complete, to report the stored status in its metrics.
+	if beacon.ArchiveOriginSlot != nil {
 		log.Debugln("Registering Archive State Regeneration Service")
 		if err := beacon.registerArchiveService(); err != nil {
 			return errors.Wrap(err, "could not register archive service")
@@ -625,7 +626,11 @@ func (b *BeaconNode) startDB(cliCtx *cli.Context, depositAddress string) error {
 
 	if b.CheckpointInitializer != nil {
 		log.Info("Checkpoint sync - Downloading origin state and block")
-		if err := b.CheckpointInitializer.Initialize(b.ctx, b.db); err != nil {
+		d := b.db
+		if b.ArchiveOriginSlot != nil {
+			d = &archiveOriginGuard{Database: b.db, archiveOriginSlot: *b.ArchiveOriginSlot}
+		}
+		if err := b.CheckpointInitializer.Initialize(b.ctx, d); err != nil {
 			return err
 		}
 	}

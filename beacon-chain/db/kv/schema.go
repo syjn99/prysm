@@ -72,6 +72,9 @@ var (
 	// tracking data about an ongoing archive state regeneration; lives in stateDiffBucket alongside
 	// offsetKey/exponentsKey, which is collision-free because tree keys are always 16 or 18 bytes.
 	archiveStatusKey = []byte("archive-status")
+	// marks a database created in archive mode, which has a head block before the archive origin anchors the
+	// state-diff tree; lives in stateDiffBucket.
+	archiveAnchorPendingKey = []byte("archive-anchor-pending")
 
 	// Deprecated: This index key was migrated in PR 6461. Do not use, except for migrations.
 	lastArchivedIndexKey = []byte("last-archived")

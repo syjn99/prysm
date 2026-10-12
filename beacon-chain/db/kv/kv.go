@@ -320,11 +320,30 @@ func (kv *Store) startStateDiff(ctx context.Context) error {
 		// New database - will be initialized later during checkpoint/genesis sync.
 		// stateDiffCache stays nil until SaveOrigin or SaveGenesisData initializes it.
 		log.Info("State-diff enabled: will be initialized during checkpoint or genesis sync")
-	} else {
-		// Existing database without state-diff - return store with error for caller to handle.
-		return ErrStateDiffIncompatible
+		if features.Get().EnableArchive {
+			// Genesis and checkpoint data are written before the archive origin anchors the tree. The marker
+			// keeps a failed first start from looking like a database without state-diff support.
+			return kv.db.Update(func(tx *bolt.Tx) error {
+				return tx.Bucket(stateDiffBucket).Put(archiveAnchorPendingKey, []byte{1})
+			})
+		}
+		return nil
 	}
-	return nil
+	if features.Get().EnableArchive {
+		var pending bool
+		if err := kv.db.View(func(tx *bolt.Tx) error {
+			pending = tx.Bucket(stateDiffBucket).Get(archiveAnchorPendingKey) != nil
+			return nil
+		}); err != nil {
+			return err
+		}
+		if pending {
+			log.Info("State-diff enabled: will be initialized at the archive origin")
+			return nil
+		}
+	}
+	// Existing database without state-diff - return store with error for caller to handle.
+	return ErrStateDiffIncompatible
 }
 
 // ClearDB removes the previously stored database in the data directory.

@@ -6,12 +6,14 @@ import (
 	"fmt"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/archive"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/db"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/db/kv"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/sync/backfill"
 	"github.com/OffchainLabs/prysm/v7/cmd/beacon-chain/flags"
 	"github.com/OffchainLabs/prysm/v7/config/features"
 	"github.com/OffchainLabs/prysm/v7/config/params"
+	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/ssz/detect"
 	"github.com/OffchainLabs/prysm/v7/genesis"
 	"github.com/OffchainLabs/prysm/v7/io/file"
@@ -32,7 +34,7 @@ type archiveOriginInitializer interface {
 // initArchiveOrigin loads and validates the archive origin state, but deliberately writes nothing.
 func (b *BeaconNode) initArchiveOrigin(cliCtx *cli.Context) (state.BeaconState, error) {
 	if !features.Get().EnableArchive {
-		return nil, nil
+		return nil, b.checkArchiveNotPending(b.ctx)
 	}
 	if cliCtx.Bool(flags.BeaconDBPruning.Name) {
 		return nil, fmt.Errorf("--enable-archive cannot be combined with --%s: pruning deletes the history the "+
@@ -99,9 +101,56 @@ func (b *BeaconNode) checkArchiveOriginBelowSyncOrigin(ctx context.Context) erro
 	if err != nil {
 		return errors.Wrap(err, "could not read backfill status")
 	}
-	if uint64(*b.ArchiveOriginSlot) > bf.OriginSlot {
+	return archiveOriginBelowSyncOrigin(*b.ArchiveOriginSlot, primitives.Slot(bf.OriginSlot))
+}
+
+func archiveOriginBelowSyncOrigin(archiveOrigin, syncOrigin primitives.Slot) error {
+	if archiveOrigin > syncOrigin {
 		return fmt.Errorf("archive origin state slot %d is above the sync origin slot %d; the archive origin "+
-			"must be a state the node can backfill down to", *b.ArchiveOriginSlot, bf.OriginSlot)
+			"must be a state the node can backfill down to", archiveOrigin, syncOrigin)
+	}
+	return nil
+}
+
+// archiveOriginGuard checks the checkpoint block against the archive origin before SaveOrigin writes anything.
+// A partial write leaves a head block without a state-diff offset, and the next start then disables state-diff.
+type archiveOriginGuard struct {
+	db.Database
+	archiveOriginSlot primitives.Slot
+}
+
+func (g *archiveOriginGuard) SaveOrigin(ctx context.Context, serState, serBlock []byte) error {
+	cf, err := detect.FromBlock(serBlock)
+	if err != nil {
+		return errors.Wrap(err, "could not detect the config and fork of the checkpoint block")
+	}
+	blk, err := cf.UnmarshalBeaconBlock(serBlock)
+	if err != nil {
+		return errors.Wrap(err, "could not unmarshal the checkpoint block")
+	}
+	if err := archiveOriginBelowSyncOrigin(g.archiveOriginSlot, blk.Block().Slot()); err != nil {
+		return err
+	}
+	return g.Database.SaveOrigin(ctx, serState, serBlock)
+}
+
+// checkArchiveNotPending fails when the database has an incomplete archive walk and archive mode is off. The
+// database blocks cold-state migration above the archive frontier, and only archive mode moves the frontier.
+func (b *BeaconNode) checkArchiveNotPending(ctx context.Context) error {
+	initializer, ok := b.db.(archiveOriginInitializer)
+	if !ok {
+		return nil
+	}
+	as, err := initializer.ArchiveStatus(ctx)
+	if errors.Is(err, kv.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "could not read the archive status")
+	}
+	if !as.Complete {
+		return fmt.Errorf("this database has an incomplete archive state regeneration (regenerated through slot %d); "+
+			"restart with --%s to finish it, or use a fresh data directory", as.RegeneratedThroughSlot, features.EnableArchive.Name)
 	}
 	return nil
 }

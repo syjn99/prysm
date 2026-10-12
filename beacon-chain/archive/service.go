@@ -86,10 +86,6 @@ func New(ctx context.Context, d Database, sg StateManager, cw startup.ClockWaite
 // the normal finalization-driven path, or the node shuts down.
 func (s *Service) Start() {
 	defer close(s.done)
-	if !s.sg.ArchivePending() {
-		log.Debug("Archive state regeneration is not pending; service is idle")
-		return
-	}
 	ctx := helpers.WithIsolatedCaches(s.ctx)
 
 	as, err := s.db.ArchiveStatus(ctx)
@@ -98,6 +94,13 @@ func (s *Service) Start() {
 		return
 	}
 	s.setStatus(as)
+	// The walk sets the gauges only when it writes a boundary, so seed them for a restart.
+	regeneratedThroughSlot.Set(float64(as.RegeneratedThroughSlot))
+	if !s.sg.ArchivePending() {
+		regenTargetSlot.Set(float64(as.RegeneratedThroughSlot))
+		log.Debug("Archive state regeneration is not pending; service is idle")
+		return
+	}
 
 	if _, err := s.cw.WaitForClock(ctx); err != nil {
 		log.WithError(err).Error("Service failed to start while waiting for genesis data")
