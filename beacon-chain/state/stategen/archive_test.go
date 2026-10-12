@@ -255,9 +255,9 @@ func TestCompleteArchiveRegeneration(t *testing.T) {
 		require.Equal(t, next, service.migratedSlot)
 	})
 
-	// The chain has blocks at 32, 64, 96, 128, 159 and 192. The walk wrote the boundaries up to 128 and recorded
-	// that in the archive status, so the next unwritten boundary is 160, and slot 160 is empty. Each boot follows
-	// the node startup: pending comes from the stored status, and the finalized state comes from StateByRoot.
+	// The chain has blocks at 32, 64, 96, 128, 159 and 192. The walk wrote boundaries through slot 128 and stored
+	// its progress. The next unwritten boundary is 160. Slot 160 is empty. Each boot follows the node startup:
+	// pending comes from the stored status, and the finalized state comes from StateByRoot.
 	t.Run("migrates across an empty first boundary after a restart during the walk", func(t *testing.T) {
 		hook := logTest.NewGlobal()
 		ctx := t.Context()
