@@ -53,9 +53,15 @@ func checkAllBlocksBuildOnEmpty(blks []blocks.BlockWithROSidecars) error {
 // not consistent.
 func (f *blocksFetcher) validatePayloadBlockConsistency(r *fetchRequestResponse) {
 	if len(r.envelopes) == 0 {
-		// Only downscore with bad payload if the same peer provided available blocks
-		if err := checkAllBlocksBuildOnEmpty(r.bwb); err != nil && r.blocksFrom == r.payloadsFrom {
-			f.downscorePeer(r.blocksFrom, errors.Wrap(prysmsync.ErrInvalidFetchedData, err.Error()))
+		// If the blocks build on payloads and the peer sent no envelopes, fail the request so
+		// that the batch is fetched again. Without the envelopes the import fails in forkchoice.
+		// The queue penalizes the peer only when it served both the blocks and the envelopes.
+		if err := checkAllBlocksBuildOnEmpty(r.bwb); err != nil {
+			if r.blocksFrom == r.payloadsFrom {
+				r.err = errors.Wrap(prysmsync.ErrInvalidFetchedData, err.Error())
+			} else {
+				r.err = errors.Wrap(err, "no envelopes for blocks that build on payloads")
+			}
 		}
 		return
 	}
