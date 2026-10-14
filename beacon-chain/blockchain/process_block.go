@@ -135,9 +135,9 @@ func getStateVersionAndPayload(st state.BeaconState) (int, interfaces.ExecutionD
 	var preStateHeader interfaces.ExecutionData
 	var err error
 	preStateVersion := st.Version()
-	switch preStateVersion {
-	case version.Phase0, version.Altair, version.Gloas:
-	default:
+	// Only Bellatrix through Fulu states carry a latest execution payload header.
+	// Gloas and later states carry a bid instead, so the header stays nil for them.
+	if preStateVersion >= version.Bellatrix && preStateVersion < version.Gloas {
 		preStateHeader, err = st.LatestExecutionPayloadHeader()
 		if err != nil {
 			return 0, nil, err
