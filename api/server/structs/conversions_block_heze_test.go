@@ -19,6 +19,7 @@ func TestSignedBeaconBlockHezeRoundTrip(t *testing.T) {
 	encoded, err := json.Marshal(jsonBlock)
 	require.NoError(t, err)
 	require.Equal(t, true, strings.Contains(string(encoded), `"inclusion_list_bits":"0x0180"`))
+	require.Equal(t, false, strings.Contains(string(encoded), "eth1_data"))
 
 	decoded := &SignedBeaconBlockHeze{}
 	require.NoError(t, json.Unmarshal(encoded, decoded))
