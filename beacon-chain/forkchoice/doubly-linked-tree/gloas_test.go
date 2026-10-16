@@ -2138,6 +2138,8 @@ func TestUpdateBalances_SlotChangeMovesBalance(t *testing.T) {
 	// payloadStatus and root are unchanged, only the slot changes.
 	laterSlot := primitives.Slot(140)
 	f.votes[0].nextSlot = laterSlot
+	// Direct writes bypass ProcessAttestation, so mark the vote dirty.
+	f.dirtyVotes.add(0)
 	// nextRoot is still B, nextPayloadStatus is still false.
 
 	// Step 3: updateBalances should detect the slot change and reprocess.
@@ -2152,6 +2154,7 @@ func TestUpdateBalances_SlotChangeMovesBalance(t *testing.T) {
 	// The subtract from B should now correctly target PayloadNode.balance (non-pending).
 	f.votes[0].nextRoot = rootC
 	f.votes[0].nextSlot = slotC
+	f.dirtyVotes.add(0)
 	require.NoError(t, f.updateBalances())
 
 	// B's balances should both be zero (balance was correctly subtracted).

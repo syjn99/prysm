@@ -18,6 +18,7 @@ type ForkChoice struct {
 	votes             []Vote                      // tracks individual validator's last vote.
 	balances          []uint64                    // tracks individual validator's balances last accounted in votes.
 	justifiedBalances []uint64                    // tracks individual validator's last justified balances.
+	dirtyVotes        indexSet                    // votes whose next vote changed since the last balance update.
 	balancesByRoot    forkchoice.BalancesByRooter // handler to obtain balances for the state with a given root
 }
 

@@ -2,6 +2,8 @@ package doublylinkedtree
 
 import (
 	"fmt"
+	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/OffchainLabs/prysm/v7/config/params"
@@ -68,4 +70,117 @@ func TestIndexSet(t *testing.T) {
 			require.Equal(t, false, s.has(i), i)
 		}
 	})
+}
+
+// TestUpdateBalances_DirtyMatchesFullScan replays random votes, balances, slashings, blocks and
+// payloads on two stores and checks the dirty-vote path against a forced full scan.
+func TestUpdateBalances_DirtyMatchesFullScan(t *testing.T) {
+	const numValidators, numBlocks, steps = 96, 12, 400
+	for seed := range uint64(20) {
+		t.Run(fmt.Sprintf("seed=%d", seed), func(t *testing.T) {
+			ctx := t.Context()
+			rng := rand.New(rand.NewPCG(seed, 0))
+			dirty, full := setupGloas(t, 1, 1), setupGloas(t, 1, 1)
+			driftGenesisTime(dirty, 4*steps, 0)
+			driftGenesisTime(full, 4*steps, 0)
+
+			roots := make([][32]byte, numBlocks)
+			parents := make([][32]byte, numBlocks)
+			for i := range roots {
+				roots[i] = indexToHash(uint64(i + 1))
+				parents[i] = params.BeaconConfig().ZeroHash
+				if i > 0 {
+					parents[i] = roots[rng.IntN(i)]
+				}
+			}
+			inserted, withPayload := 0, 0
+			insertBlock := func() {
+				for _, f := range []*ForkChoice{dirty, full} {
+					st, blk, err := prepareGloasForkchoiceState(ctx, primitives.Slot(inserted+1), roots[inserted], parents[inserted], indexToHash(uint64(100+inserted)), params.BeaconConfig().ZeroHash, 1, 1)
+					require.NoError(t, err)
+					require.NoError(t, f.InsertNode(ctx, st, blk))
+				}
+				inserted++
+			}
+			insertPayload := func() {
+				for _, f := range []*ForkChoice{dirty, full} {
+					pe, err := prepareGloasForkchoicePayload(roots[withPayload])
+					require.NoError(t, err)
+					require.NoError(t, f.InsertPayload(pe))
+				}
+				withPayload++
+			}
+			newBalances := func() {
+				b := make([]uint64, numValidators-rng.IntN(8))
+				for i := range b {
+					b[i] = rng.Uint64N(4) * 8
+				}
+				dirty.justifiedBalances, full.justifiedBalances = b, slices.Clone(b)
+			}
+			for range numBlocks / 3 {
+				insertBlock()
+			}
+			newBalances()
+
+			for step := range steps {
+				switch op := rng.IntN(100); {
+				case op < 55:
+					indices := make([]uint64, 1+rng.IntN(16))
+					for i := range indices {
+						indices[i] = rng.Uint64N(numValidators + 4)
+					}
+					// Unknown roots exercise votes whose block arrives later.
+					root := roots[rng.IntN(numBlocks)]
+					slot := primitives.Slot(1 + step*rng.IntN(5))
+					status := rng.IntN(2) == 0
+					dirty.ProcessAttestation(ctx, indices, root, slot, status)
+					full.ProcessAttestation(ctx, indices, root, slot, status)
+				case op < 63:
+					newBalances()
+				case op < 66:
+					idx := primitives.ValidatorIndex(rng.Uint64N(numValidators))
+					dirty.InsertSlashedIndex(ctx, idx)
+					full.InsertSlashedIndex(ctx, idx)
+				case op < 72 && inserted < numBlocks:
+					insertBlock()
+				case op < 76 && withPayload < inserted:
+					insertPayload()
+				default:
+					// Reference: the pre-dirty-tracking full scan, then Head finds nothing dirty.
+					for i := range full.votes {
+						full.updateVoteBalance(i, full.justifiedBalances)
+					}
+					full.balances = full.justifiedBalances
+					clear(full.dirtyVotes)
+					dh, err := dirty.Head(ctx)
+					require.NoError(t, err)
+					fh, err := full.Head(ctx)
+					require.NoError(t, err)
+					require.Equal(t, fh, dh, "step %d", step)
+					requireSameWeights(t, full, dirty, step)
+				}
+			}
+		})
+	}
+}
+
+func requireSameWeights(t *testing.T, want, got *ForkChoice, step int) {
+	t.Helper()
+	require.Equal(t, true, slices.Equal(want.votes, got.votes), "step %d votes", step)
+	require.Equal(t, len(want.store.emptyNodeByRoot), len(got.store.emptyNodeByRoot))
+	for root, w := range want.store.emptyNodeByRoot {
+		g := got.store.emptyNodeByRoot[root]
+		require.NotNil(t, g)
+		require.Equal(t, w.balance, g.balance, "step %d empty balance %#x", step, root)
+		require.Equal(t, w.weight, g.weight, "step %d empty weight %#x", step, root)
+		require.Equal(t, w.node.balance, g.node.balance, "step %d node balance %#x", step, root)
+		require.Equal(t, w.node.weight, g.node.weight, "step %d node weight %#x", step, root)
+	}
+	require.Equal(t, len(want.store.fullNodeByRoot), len(got.store.fullNodeByRoot))
+	for root, w := range want.store.fullNodeByRoot {
+		g := got.store.fullNodeByRoot[root]
+		require.NotNil(t, g)
+		require.Equal(t, w.balance, g.balance, "step %d full balance %#x", step, root)
+		require.Equal(t, w.weight, g.weight, "step %d full weight %#x", step, root)
+	}
 }

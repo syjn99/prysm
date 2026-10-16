@@ -115,6 +115,7 @@ func (f *ForkChoice) ProcessAttestation(ctx context.Context, validatorIndices []
 			vote.nextSlot = slot
 			vote.nextRoot = blockRoot
 			vote.nextPayloadStatus = payloadStatus
+			f.dirtyVotes.add(index)
 		}
 	}
 
@@ -312,94 +313,116 @@ func (f *ForkChoice) IsViableForCheckpoint(cp *forkchoicetypes.Checkpoint) (bool
 }
 
 // updateBalances updates the balances that directly voted for each block taking into account the
-// validators' latest votes.
+// validators' latest votes. A vote with an unchanged next vote and balance adds zero, so only
+// dirty votes are visited unless the balances source changed.
 func (f *ForkChoice) updateBalances() error {
 	newBalances := f.justifiedBalances
-	zHash := params.BeaconConfig().ZeroHash
-
-	for index := 0; index < len(f.votes); index++ {
-		// Skip if validator has been slashed
-		if f.store.slashedIndices.has(uint64(index)) {
-			continue
-		}
-		vote := &f.votes[index]
-		// Skip if validator has never voted for current root and next root (i.e. if the
-		// votes are zero hash aka genesis block), there's nothing to compute.
-		if vote.currentRoot == zHash && vote.nextRoot == zHash {
-			continue
-		}
-
-		oldBalance := uint64(0)
-		newBalance := uint64(0)
-		// If the validator index did not exist in `f.balances` or
-		// `newBalances` list above, the balance is just 0.
-		if index < len(f.balances) {
-			oldBalance = f.balances[index]
-		}
-		if index < len(newBalances) {
-			newBalance = newBalances[index]
-		}
-
-		if oldBalance != newBalance || vote.currentRoot != vote.nextRoot ||
-			vote.currentSlot != vote.nextSlot || vote.currentPayloadStatus != vote.nextPayloadStatus {
-			// Add new balance to the next vote target if the root is known.
-			pn, pending := f.store.resolveVoteNode(vote.nextRoot, vote.nextSlot, vote.nextPayloadStatus)
-			if pn != nil && vote.nextRoot != zHash {
-				if pending {
-					pn.node.balance += newBalance
-				} else {
-					pn.balance += newBalance
+	if sameBacking(f.balances, newBalances) {
+		// Visit in index order, as the full scan does, so underflow clamping matches.
+		for w, word := range f.dirtyVotes {
+			for ; word != 0; word &= word - 1 {
+				if index := w*64 + bits.TrailingZeros64(word); index < len(f.votes) {
+					f.updateVoteBalance(index, newBalances)
 				}
 			}
+		}
+	} else {
+		for index := range f.votes {
+			f.updateVoteBalance(index, newBalances)
+		}
+	}
+	clear(f.dirtyVotes)
+	f.balances = newBalances
+	return nil
+}
 
-			// Subtract old balance from the current vote target if the root is known.
-			pn, pending = f.store.resolveVoteNode(vote.currentRoot, vote.currentSlot, vote.currentPayloadStatus)
-			if pn != nil && vote.currentRoot != zHash {
-				if pending {
-					if pn.node.balance < oldBalance {
-						if pn.node.slot == 0 {
-							log.WithField("nodeRoot", fmt.Sprintf("%#x", bytesutil.Trunc(vote.currentRoot[:]))).
-								Debug("Genesis node pending balance underflow, clamping to zero")
-						} else {
-							log.WithFields(logrus.Fields{
-								"nodeRoot":                   fmt.Sprintf("%#x", bytesutil.Trunc(vote.currentRoot[:])),
-								"oldBalance":                 oldBalance,
-								"nodeBalance":                pn.node.balance,
-								"nodeWeight":                 pn.node.weight,
-								"proposerBoostRoot":          fmt.Sprintf("%#x", bytesutil.Trunc(f.store.proposerBoostRoot[:])),
-								"previousProposerBoostRoot":  fmt.Sprintf("%#x", bytesutil.Trunc(f.store.previousProposerBoostRoot[:])),
-								"previousProposerBoostScore": f.store.previousProposerBoostScore,
-							}).Warning("node with invalid balance, setting it to zero")
-						}
-						pn.node.balance = 0
+// sameBacking reports whether a and b are the same slice, so no balance can differ between them.
+func sameBacking(a, b []uint64) bool {
+	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
+}
+
+// updateVoteBalance moves the weight of one validator from its current vote to its next vote.
+func (f *ForkChoice) updateVoteBalance(index int, newBalances []uint64) {
+	var zHash [fieldparams.RootLength]byte
+	// Skip if validator has been slashed
+	if f.store.slashedIndices.has(uint64(index)) {
+		return
+	}
+	vote := &f.votes[index]
+	// Skip if validator has never voted for current root and next root (i.e. if the
+	// votes are zero hash aka genesis block), there's nothing to compute.
+	if vote.currentRoot == zHash && vote.nextRoot == zHash {
+		return
+	}
+
+	oldBalance := uint64(0)
+	newBalance := uint64(0)
+	// If the validator index did not exist in `f.balances` or
+	// `newBalances` list above, the balance is just 0.
+	if index < len(f.balances) {
+		oldBalance = f.balances[index]
+	}
+	if index < len(newBalances) {
+		newBalance = newBalances[index]
+	}
+
+	if oldBalance != newBalance || vote.currentRoot != vote.nextRoot ||
+		vote.currentSlot != vote.nextSlot || vote.currentPayloadStatus != vote.nextPayloadStatus {
+		// Add new balance to the next vote target if the root is known.
+		pn, pending := f.store.resolveVoteNode(vote.nextRoot, vote.nextSlot, vote.nextPayloadStatus)
+		if pn != nil && vote.nextRoot != zHash {
+			if pending {
+				pn.node.balance += newBalance
+			} else {
+				pn.balance += newBalance
+			}
+		}
+
+		// Subtract old balance from the current vote target if the root is known.
+		pn, pending = f.store.resolveVoteNode(vote.currentRoot, vote.currentSlot, vote.currentPayloadStatus)
+		if pn != nil && vote.currentRoot != zHash {
+			if pending {
+				if pn.node.balance < oldBalance {
+					if pn.node.slot == 0 {
+						log.WithField("nodeRoot", fmt.Sprintf("%#x", bytesutil.Trunc(vote.currentRoot[:]))).
+							Debug("Genesis node pending balance underflow, clamping to zero")
 					} else {
-						pn.node.balance -= oldBalance
-					}
-				} else {
-					if pn.balance < oldBalance {
 						log.WithFields(logrus.Fields{
 							"nodeRoot":                   fmt.Sprintf("%#x", bytesutil.Trunc(vote.currentRoot[:])),
 							"oldBalance":                 oldBalance,
-							"nodeBalance":                pn.balance,
-							"nodeWeight":                 pn.weight,
+							"nodeBalance":                pn.node.balance,
+							"nodeWeight":                 pn.node.weight,
 							"proposerBoostRoot":          fmt.Sprintf("%#x", bytesutil.Trunc(f.store.proposerBoostRoot[:])),
 							"previousProposerBoostRoot":  fmt.Sprintf("%#x", bytesutil.Trunc(f.store.previousProposerBoostRoot[:])),
 							"previousProposerBoostScore": f.store.previousProposerBoostScore,
 						}).Warning("node with invalid balance, setting it to zero")
-						pn.balance = 0
-					} else {
-						pn.balance -= oldBalance
 					}
+					pn.node.balance = 0
+				} else {
+					pn.node.balance -= oldBalance
+				}
+			} else {
+				if pn.balance < oldBalance {
+					log.WithFields(logrus.Fields{
+						"nodeRoot":                   fmt.Sprintf("%#x", bytesutil.Trunc(vote.currentRoot[:])),
+						"oldBalance":                 oldBalance,
+						"nodeBalance":                pn.balance,
+						"nodeWeight":                 pn.weight,
+						"proposerBoostRoot":          fmt.Sprintf("%#x", bytesutil.Trunc(f.store.proposerBoostRoot[:])),
+						"previousProposerBoostRoot":  fmt.Sprintf("%#x", bytesutil.Trunc(f.store.previousProposerBoostRoot[:])),
+						"previousProposerBoostScore": f.store.previousProposerBoostScore,
+					}).Warning("node with invalid balance, setting it to zero")
+					pn.balance = 0
+				} else {
+					pn.balance -= oldBalance
 				}
 			}
 		}
-		// Rotate the validator vote.
-		f.votes[index].currentRoot = vote.nextRoot
-		f.votes[index].currentSlot = vote.nextSlot
-		f.votes[index].currentPayloadStatus = vote.nextPayloadStatus
 	}
-	f.balances = newBalances
-	return nil
+	// Rotate the validator vote.
+	f.votes[index].currentRoot = vote.nextRoot
+	f.votes[index].currentSlot = vote.nextSlot
+	f.votes[index].currentPayloadStatus = vote.nextPayloadStatus
 }
 
 // Tips returns a list of possible heads from fork choice store, it returns the
