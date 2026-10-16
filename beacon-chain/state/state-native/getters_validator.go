@@ -201,14 +201,16 @@ func (b *BeaconState) PublicKeys() ([][fieldparams.BLSPubkeyLength]byte, error) 
 	b.lock.RLock()
 	defer b.lock.RUnlock()
 
-	l := b.validatorsLen()
-	res := make([][fieldparams.BLSPubkeyLength]byte, l)
-	for i := range l {
-		val, err := b.validatorsMultiValue.At(b, uint64(i))
-		if err != nil {
-			return nil, err
-		}
-		res[i] = val.PublicKey
+	res := make([][fieldparams.BLSPubkeyLength]byte, b.validatorsLen())
+	if b.validatorsMultiValue != nil {
+		b.validatorsMultiValue.Range(b, func(i int, val stateutil.CompactValidator) bool {
+			// A concurrent append can make the registry longer than res.
+			if i >= len(res) {
+				return false
+			}
+			res[i] = val.PublicKey
+			return true
+		})
 	}
 	return res, nil
 }
@@ -235,18 +237,10 @@ func (b *BeaconState) ValidatorsReadOnlySeq() iter.Seq2[primitives.ValidatorInde
 		}
 
 		rov := new(readOnlyValidator)
-		for i := range b.validatorsMultiValue.Len(b) {
-			v, err := b.validatorsMultiValue.At(b, uint64(i))
-			if err != nil {
-				log.WithError(err).WithField("index", i).Error("Failed to get validator, should never happen")
-				return
-			}
-
+		b.validatorsMultiValue.Range(b, func(i int, v stateutil.CompactValidator) bool {
 			rov.validator = v
-			if !yield(primitives.ValidatorIndex(i), rov) {
-				return
-			}
-		}
+			return yield(primitives.ValidatorIndex(i), rov)
+		})
 	}
 }
 

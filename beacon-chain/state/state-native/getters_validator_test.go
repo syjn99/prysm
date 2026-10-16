@@ -234,3 +234,33 @@ func BenchmarkAggregateKeyFromIndices(b *testing.B) {
 		require.NoError(b, err)
 	}
 }
+
+func TestPublicKeys_ConcurrentAppend(t *testing.T) {
+	vals := make([]*ethpb.Validator, 3000)
+	for i := range vals {
+		vals[i] = &ethpb.Validator{PublicKey: []byte{byte(i), byte(i >> 8)}, WithdrawalCredentials: make([]byte, 32)}
+	}
+	st, err := statenative.InitializeFromProtoUnsafeDeneb(&ethpb.BeaconStateDeneb{Validators: vals})
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 2000 {
+			assert.NoError(t, st.AppendValidator(&ethpb.Validator{PublicKey: []byte{byte(i), 0xff}, WithdrawalCredentials: make([]byte, 32)}))
+		}
+	}()
+	for {
+		select {
+		case <-done:
+			keys, err := st.PublicKeys()
+			require.NoError(t, err)
+			require.Equal(t, 5000, len(keys))
+			return
+		default:
+			keys, err := st.PublicKeys()
+			require.NoError(t, err)
+			require.Equal(t, byte(1), keys[1][0])
+		}
+	}
+}

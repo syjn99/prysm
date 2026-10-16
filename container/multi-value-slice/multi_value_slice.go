@@ -233,8 +233,8 @@ type override[V any] struct {
 
 // Range calls f with the index and value of each item for the input object, in order, until f returns false.
 // It visits the items that Value returns without collecting them into one slice. Items are copied in chunks
-// under the read lock and f runs without the lock, so f may read the slice or update the item it was given.
-// Updates to items that Range has not visited yet may not be seen.
+// under the read lock and f runs without the lock. Values may reflect the start of the iteration or a later
+// chunk read, so updates made during the iteration may not be visible.
 func (s *Slice[V]) Range(obj Identifiable, f func(i int, v V) bool) {
 	id := obj.Id()
 	l, overrides, sparse := s.rangeStart(id)
