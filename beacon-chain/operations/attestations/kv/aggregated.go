@@ -120,7 +120,12 @@ func (c *AttCaches) SaveAggregatedAttestation(att ethpb.Att) error {
 	if !att.IsAggregated() {
 		return errors.New("attestation is not aggregated")
 	}
-	has, err := c.HasAggregatedAttestation(att)
+	id, err := attestation.NewId(att, attestation.Data)
+	if err != nil {
+		// Same message as when HasAggregatedAttestation computed the ID.
+		return fmt.Errorf("has aggregated att: could not create attestation ID: %w", err)
+	}
+	has, err := c.hasAggregatedAttestation(id, att)
 	if err != nil {
 		return err
 	}
@@ -128,7 +133,7 @@ func (c *AttCaches) SaveAggregatedAttestation(att ethpb.Att) error {
 		return nil
 	}
 
-	seen, err := c.hasSeenBit(att)
+	seen, err := c.hasSeenBit(id, att)
 	if err != nil {
 		return err
 	}
@@ -136,10 +141,6 @@ func (c *AttCaches) SaveAggregatedAttestation(att ethpb.Att) error {
 		return nil
 	}
 
-	id, err := attestation.NewId(att, attestation.Data)
-	if err != nil {
-		return errors.Wrap(err, "could not create attestation ID")
-	}
 	copiedAtt := att.Clone()
 
 	c.aggregatedAttLock.Lock()
@@ -253,13 +254,12 @@ func (c *AttCaches) DeleteAggregatedAttestation(att ethpb.Att) error {
 		return errors.New("attestation is not aggregated")
 	}
 
-	if err := c.insertSeenBit(att); err != nil {
-		return err
-	}
-
 	id, err := attestation.NewId(att, attestation.Data)
 	if err != nil {
 		return errors.Wrap(err, "could not create attestation ID")
+	}
+	if err := c.insertSeenBit(id, att); err != nil {
+		return err
 	}
 
 	c.aggregatedAttLock.Lock()
@@ -277,7 +277,7 @@ func (c *AttCaches) DeleteAggregatedAttestation(att ethpb.Att) error {
 		}
 
 		if contains {
-			if err := c.insertSeenAggregatedAtt(a); err != nil {
+			if err := c.insertSeenAggregatedAtt(id, a); err != nil {
 				return fmt.Errorf("insert aggregated att: %w", err)
 			}
 
@@ -303,7 +303,16 @@ func (c *AttCaches) HasAggregatedAttestation(att ethpb.Att) (bool, error) {
 		return false, err
 	}
 
-	has, err := c.hasAggregatedAtt(att)
+	id, err := attestation.NewId(att, attestation.Data)
+	if err != nil {
+		return false, fmt.Errorf("has aggregated att: could not create attestation ID: %w", err)
+	}
+	return c.hasAggregatedAttestation(id, att)
+}
+
+// hasAggregatedAttestation is HasAggregatedAttestation for an attestation whose data ID is id.
+func (c *AttCaches) hasAggregatedAttestation(id attestation.Id, att ethpb.Att) (bool, error) {
+	has, err := c.hasAggregatedAtt(id, att)
 	if err != nil {
 		return false, fmt.Errorf("has aggregated att: %w", err)
 	}
@@ -312,7 +321,7 @@ func (c *AttCaches) HasAggregatedAttestation(att ethpb.Att) (bool, error) {
 		return true, nil
 	}
 
-	has, err = c.hasBlockAtt(att)
+	has, err = c.hasBlockAtt(id, att)
 	if err != nil {
 		return false, fmt.Errorf("has block att: %w", err)
 	}
@@ -321,7 +330,7 @@ func (c *AttCaches) HasAggregatedAttestation(att ethpb.Att) (bool, error) {
 		return true, nil
 	}
 
-	has, err = c.hasSeenAggregatedAtt(att)
+	has, err = c.hasSeenAggregatedAtt(id, att)
 	if err != nil {
 		return false, fmt.Errorf("has seen aggregated att: %w", err)
 	}
@@ -335,12 +344,7 @@ func (c *AttCaches) HasAggregatedAttestation(att ethpb.Att) (bool, error) {
 }
 
 // hasAggregatedAtt checks if the attestation bits are contained in the aggregated attestation cache.
-func (c *AttCaches) hasAggregatedAtt(att ethpb.Att) (bool, error) {
-	id, err := attestation.NewId(att, attestation.Data)
-	if err != nil {
-		return false, fmt.Errorf("could not create attestation ID: %w", err)
-	}
-
+func (c *AttCaches) hasAggregatedAtt(id attestation.Id, att ethpb.Att) (bool, error) {
 	c.aggregatedAttLock.RLock()
 	defer c.aggregatedAttLock.RUnlock()
 
@@ -364,12 +368,7 @@ func (c *AttCaches) hasAggregatedAtt(att ethpb.Att) (bool, error) {
 }
 
 // hasBlockAtt checks if the attestation bits are contained in the block attestation cache.
-func (c *AttCaches) hasBlockAtt(att ethpb.Att) (bool, error) {
-	id, err := attestation.NewId(att, attestation.Data)
-	if err != nil {
-		return false, fmt.Errorf("could not create attestation ID: %w", err)
-	}
-
+func (c *AttCaches) hasBlockAtt(id attestation.Id, att ethpb.Att) (bool, error) {
 	c.blockAttLock.RLock()
 	defer c.blockAttLock.RUnlock()
 
@@ -393,12 +392,7 @@ func (c *AttCaches) hasBlockAtt(att ethpb.Att) (bool, error) {
 }
 
 // hasSeenAggregatedAtt checks if the attestation bits are contained in the seen aggregated cache.
-func (c *AttCaches) hasSeenAggregatedAtt(att ethpb.Att) (bool, error) {
-	id, err := attestation.NewId(att, attestation.Data)
-	if err != nil {
-		return false, fmt.Errorf("could not create attestation ID: %w", err)
-	}
-
+func (c *AttCaches) hasSeenAggregatedAtt(id attestation.Id, att ethpb.Att) (bool, error) {
 	c.seenAggregatedAttLock.RLock()
 	defer c.seenAggregatedAttLock.RUnlock()
 
@@ -428,13 +422,8 @@ func (c *AttCaches) AggregatedAttestationCount() int {
 	return len(c.aggregatedAtt)
 }
 
-// insertSeenAggregatedAtt inserts an attestation into the seen aggregated cache.
-func (c *AttCaches) insertSeenAggregatedAtt(att ethpb.Att) error {
-	id, err := attestation.NewId(att, attestation.Data)
-	if err != nil {
-		return fmt.Errorf("new ID: %w", err)
-	}
-
+// insertSeenAggregatedAtt inserts an attestation, whose data ID is id, into the seen aggregated cache.
+func (c *AttCaches) insertSeenAggregatedAtt(id attestation.Id, att ethpb.Att) error {
 	c.seenAggregatedAttLock.Lock()
 	defer c.seenAggregatedAttLock.Unlock()
 

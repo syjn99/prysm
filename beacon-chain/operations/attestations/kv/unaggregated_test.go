@@ -224,7 +224,7 @@ func TestKV_Unaggregated_DeleteSeenUnaggregatedAttestations(t *testing.T) {
 		require.NoError(t, cache.SaveUnaggregatedAttestations(atts))
 		assert.Equal(t, 3, cache.UnaggregatedAttestationCount())
 
-		require.NoError(t, cache.insertSeenBit(atts[1]))
+		require.NoError(t, cache.insertSeenAtt(t, atts[1]))
 
 		// Only seen attestations must be deleted.
 		count, err := cache.DeleteSeenUnaggregatedAttestations()
@@ -248,9 +248,9 @@ func TestKV_Unaggregated_DeleteSeenUnaggregatedAttestations(t *testing.T) {
 		require.NoError(t, cache.SaveUnaggregatedAttestations(atts))
 		assert.Equal(t, 3, cache.UnaggregatedAttestationCount())
 
-		require.NoError(t, cache.insertSeenBit(atts[0]))
-		require.NoError(t, cache.insertSeenBit(atts[1]))
-		require.NoError(t, cache.insertSeenBit(atts[2]))
+		require.NoError(t, cache.insertSeenAtt(t, atts[0]))
+		require.NoError(t, cache.insertSeenAtt(t, atts[1]))
+		require.NoError(t, cache.insertSeenAtt(t, atts[2]))
 
 		// All attestations have been processed -- all should be removed.
 		count, err := cache.DeleteSeenUnaggregatedAttestations()

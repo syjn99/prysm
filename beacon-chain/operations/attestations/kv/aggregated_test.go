@@ -670,8 +670,8 @@ func TestKV_SeenAggregated_Cache(t *testing.T) {
 		att2 := util.HydrateAttestation(&ethpb.Attestation{Data: &ethpb.AttestationData{Slot: 1}, AggregationBits: bitfield.Bitlist{0b11100}})
 
 		// Directly insert into seen aggregated cache to test the append path
-		require.NoError(t, cache.insertSeenAggregatedAtt(att1))
-		require.NoError(t, cache.insertSeenAggregatedAtt(att2))
+		require.NoError(t, cache.insertSeenAggregatedAtt(dataID(t, att1), att1))
+		require.NoError(t, cache.insertSeenAggregatedAtt(dataID(t, att2), att2))
 
 		// Seen aggregated cache should have one key with two attestations (since bits don't overlap)
 		assert.Equal(t, 1, cache.SeenAggregatedAttestationCount(), "seen aggregated cache should have one key")
@@ -703,12 +703,12 @@ func TestKV_SeenAggregated_Cache(t *testing.T) {
 
 		// Insert an attestation with some aggregation bits
 		att := util.HydrateAttestation(&ethpb.Attestation{Data: &ethpb.AttestationData{Slot: 1}, AggregationBits: bitfield.Bitlist{0b11111}})
-		require.NoError(t, cache.insertSeenAggregatedAtt(att))
+		require.NoError(t, cache.insertSeenAggregatedAtt(dataID(t, att), att))
 		assert.Equal(t, 1, cache.SeenAggregatedAttestationCount(), "seen aggregated cache should have one key")
 
 		// Try to insert a subset attestation (bits are contained in the existing attestation)
 		attSubset := util.HydrateAttestation(&ethpb.Attestation{Data: &ethpb.AttestationData{Slot: 1}, AggregationBits: bitfield.Bitlist{0b10011}})
-		require.NoError(t, cache.insertSeenAggregatedAtt(attSubset))
+		require.NoError(t, cache.insertSeenAggregatedAtt(dataID(t, attSubset), attSubset))
 
 		// Cache should still have only one key (subset was not added)
 		assert.Equal(t, 1, cache.SeenAggregatedAttestationCount(), "seen aggregated cache should still have one key after inserting subset")
@@ -727,8 +727,8 @@ func TestKV_SeenAggregated_Cache(t *testing.T) {
 		att2 := util.HydrateAttestation(&ethpb.Attestation{Data: &ethpb.AttestationData{Slot: 2}, AggregationBits: bitfield.Bitlist{0b11100}})
 
 		// Insert both into seen aggregated cache
-		require.NoError(t, cache.insertSeenAggregatedAtt(att1))
-		require.NoError(t, cache.insertSeenAggregatedAtt(att2))
+		require.NoError(t, cache.insertSeenAggregatedAtt(dataID(t, att1), att1))
+		require.NoError(t, cache.insertSeenAggregatedAtt(dataID(t, att2), att2))
 
 		// Verify both are in the cache (different keys due to different slots)
 		assert.Equal(t, 2, cache.SeenAggregatedAttestationCount(), "seen aggregated cache should have two keys")
@@ -749,4 +749,73 @@ func TestKV_SeenAggregated_Cache(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, true, has, "Remaining attestation should still be found")
 	})
+}
+
+// BenchmarkAggregatedPool saves aggregates for 64 attestation data and checks each again, as gossip validation does.
+func BenchmarkAggregatedPool(b *testing.B) {
+	const datas, perData, size = 64, 8, 128
+	sk, err := bls.RandKey()
+	require.NoError(b, err)
+	sig := sk.Sign([]byte("data")).Marshal()
+	atts := make([]ethpb.Att, 0, datas*perData)
+	for d := range datas {
+		for p := range perData {
+			bits := bitfield.NewBitlist(size)
+			for i := range size / perData {
+				bits.SetBitAt(uint64(p*(size/perData)+i), true)
+			}
+			atts = append(atts, util.HydrateAttestation(&ethpb.Attestation{Data: &ethpb.AttestationData{Slot: primitives.Slot(d)}, AggregationBits: bits, Signature: sig}))
+		}
+	}
+	b.Run("save", func(b *testing.B) {
+		for b.Loop() {
+			c := NewAttCaches()
+			for _, att := range atts {
+				if err := c.SaveAggregatedAttestation(att); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+	b.Run("has miss", func(b *testing.B) {
+		// Unaggregated attestations from gossip are usually not in the pool, so every cache is checked.
+		c := NewAttCaches()
+		misses := make([]ethpb.Att, len(atts))
+		for i, att := range atts {
+			bits := bitfield.NewBitlist(size)
+			bits.SetBitAt(uint64(i%size), true)
+			misses[i] = util.HydrateAttestation(&ethpb.Attestation{Data: att.GetData(), AggregationBits: bits, Signature: sig})
+		}
+		for b.Loop() {
+			for _, att := range misses {
+				if _, err := c.HasAggregatedAttestation(att); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+	b.Run("has", func(b *testing.B) {
+		c := NewAttCaches()
+		for _, att := range atts {
+			require.NoError(b, c.SaveAggregatedAttestation(att))
+		}
+		for b.Loop() {
+			for _, att := range atts {
+				if _, err := c.HasAggregatedAttestation(att); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+}
+
+func TestAggregatedAttestation_IDErrorMessage(t *testing.T) {
+	// An Electra aggregate without committee bits has no data ID.
+	att := util.HydrateAttestationElectra(&ethpb.AttestationElectra{AggregationBits: bitfield.Bitlist{0b111}})
+	att.CommitteeBits = bitfield.NewBitvector64()
+	c := NewAttCaches()
+	const want = "has aggregated att: could not create attestation ID: no committee bits are set"
+	_, err := c.HasAggregatedAttestation(att)
+	require.Equal(t, want, err.Error())
+	require.Equal(t, want, c.SaveAggregatedAttestation(att).Error())
 }

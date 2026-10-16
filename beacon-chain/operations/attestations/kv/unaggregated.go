@@ -20,7 +20,11 @@ func (c *AttCaches) SaveUnaggregatedAttestation(att ethpb.Att) error {
 		return errors.New("attestation is aggregated")
 	}
 
-	seen, err := c.hasSeenBit(att)
+	dataId, err := attestation.NewId(att, attestation.Data)
+	if err != nil {
+		return errors.Wrap(err, "could not create attestation ID")
+	}
+	seen, err := c.hasSeenBit(dataId, att)
 	if err != nil {
 		return err
 	}
@@ -58,7 +62,7 @@ func (c *AttCaches) UnaggregatedAttestations() []ethpb.Att {
 	unAggregatedAtts := c.unAggregatedAtt
 	atts := make([]ethpb.Att, 0, len(unAggregatedAtts))
 	for _, att := range unAggregatedAtts {
-		seen, err := c.hasSeenBit(att)
+		seen, err := c.hasSeenAtt(att)
 		if err != nil {
 			log.WithError(err).Debug("Could not check if unaggregated attestation's bit has been seen. Attestation will not be returned")
 			continue
@@ -136,7 +140,9 @@ func (c *AttCaches) DeleteUnaggregatedAttestation(att ethpb.Att) error {
 		return errors.New("attestation is aggregated")
 	}
 
-	if err := c.insertSeenBit(att); err != nil {
+	if dataId, err := attestation.NewId(att, attestation.Data); err != nil {
+		log.WithError(errors.Wrap(err, "could not create attestation ID")).Debug("Could not insert seen bit of unaggregated attestation. Attestation will be deleted")
+	} else if err := c.insertSeenBit(dataId, att); err != nil {
 		log.WithError(err).Debug("Could not insert seen bit of unaggregated attestation. Attestation will be deleted")
 	}
 
@@ -163,7 +169,7 @@ func (c *AttCaches) DeleteSeenUnaggregatedAttestations() (int, error) {
 		if att == nil || att.IsNil() || att.IsAggregated() {
 			continue
 		}
-		seen, err := c.hasSeenBit(att)
+		seen, err := c.hasSeenAtt(att)
 		if err != nil {
 			log.WithError(err).Debug("Could not check if unaggregated attestation's bit has been seen. Attestation will be deleted")
 			seen = true

@@ -19,8 +19,8 @@ func TestAttCaches_hasSeenBit(t *testing.T) {
 
 	seenA1 := util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bitfield.Bitlist{0b10000011}})
 	seenA2 := util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bitfield.Bitlist{0b11100000}})
-	require.NoError(t, c.insertSeenBit(seenA1))
-	require.NoError(t, c.insertSeenBit(seenA2))
+	require.NoError(t, c.insertSeenAtt(t, seenA1))
+	require.NoError(t, c.insertSeenAtt(t, seenA2))
 	tests := []struct {
 		att  *ethpb.Attestation
 		want bool
@@ -33,7 +33,7 @@ func TestAttCaches_hasSeenBit(t *testing.T) {
 		{att: util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bitfield.Bitlist{0b11110111}}), want: false},
 	}
 	for _, tt := range tests {
-		got, err := c.hasSeenBit(tt.att)
+		got, err := c.hasSeenAtt(tt.att)
 		require.NoError(t, err)
 		if got != tt.want {
 			t.Errorf("hasSeenBit() got = %v, want %v", got, tt.want)
@@ -46,14 +46,14 @@ func TestAttCaches_insertSeenBitDuplicates(t *testing.T) {
 	att1 := util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bitfield.Bitlist{0b10000011}})
 	id, err := attestation.NewId(att1, attestation.Data)
 	require.NoError(t, err)
-	require.NoError(t, c.insertSeenBit(att1))
+	require.NoError(t, c.insertSeenAtt(t, att1))
 	require.Equal(t, 1, c.seenAtt.ItemCount())
 
 	_, expirationTime1, ok := c.seenAtt.GetWithExpiration(id.String())
 	require.Equal(t, true, ok)
 
 	// Make sure that duplicates are not inserted, but expiration time gets updated.
-	require.NoError(t, c.insertSeenBit(att1))
+	require.NoError(t, c.insertSeenAtt(t, att1))
 	require.Equal(t, 1, c.seenAtt.ItemCount())
 	_, expirationprysmTime, ok := c.seenAtt.GetWithExpiration(id.String())
 	require.Equal(t, true, ok)
@@ -101,13 +101,13 @@ func TestSeenBits_MatchesListModel(t *testing.T) {
 			for step := range 400 {
 				att := util.HydrateAttestation(&ethpb.Attestation{AggregationBits: randomBits()})
 				if rng.IntN(2) == 0 {
-					require.NoError(t, c.insertSeenBit(att))
+					require.NoError(t, c.insertSeenAtt(t, att))
 					if !modelHas(att.AggregationBits) {
 						model = append(model, att.AggregationBits)
 					}
 					continue
 				}
-				got, err := c.hasSeenBit(att)
+				got, err := c.hasSeenAtt(att)
 				require.NoError(t, err)
 				require.Equal(t, modelHas(att.AggregationBits), got, "step %d bits %08b", step, []byte(att.AggregationBits))
 			}
@@ -127,10 +127,10 @@ func BenchmarkSeenBits(b *testing.B) {
 	for b.Loop() {
 		c := NewAttCaches()
 		for _, att := range atts {
-			if _, err := c.hasSeenBit(att); err != nil {
+			if _, err := c.hasSeenAtt(att); err != nil {
 				b.Fatal(err)
 			}
-			if err := c.insertSeenBit(att); err != nil {
+			if err := c.insertSeenAtt(b, att); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -143,8 +143,8 @@ func TestInsertSeenBit_EmptyBits(t *testing.T) {
 			c := NewAttCaches()
 			att := util.HydrateAttestation(&ethpb.Attestation{})
 			att.AggregationBits = bits
-			require.NoError(t, c.insertSeenBit(att))
-			require.NoError(t, c.insertSeenBit(att))
+			require.NoError(t, c.insertSeenAtt(t, att))
+			require.NoError(t, c.insertSeenAtt(t, att))
 		})
 	}
 	t.Run("single attestation", func(t *testing.T) {
@@ -163,15 +163,26 @@ func TestInsertSeenBit_Concurrent(t *testing.T) {
 		wg.Go(func() {
 			bits := bitfield.NewBitlist(size)
 			bits.SetBitAt(uint64(i), true)
-			assert.NoError(t, c.insertSeenBit(util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bits})))
+			assert.NoError(t, c.insertSeenAtt(t, util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bits})))
 		})
 	}
 	wg.Wait()
 	for i := range size {
 		bits := bitfield.NewBitlist(size)
 		bits.SetBitAt(uint64(i), true)
-		seen, err := c.hasSeenBit(util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bits}))
+		seen, err := c.hasSeenAtt(util.HydrateAttestation(&ethpb.Attestation{AggregationBits: bits}))
 		require.NoError(t, err)
 		require.Equal(t, true, seen, "bit %d lost", i)
 	}
+}
+
+// insertSeenAtt is insertSeenBit for tests that do not have the data ID.
+func (c *AttCaches) insertSeenAtt(t testing.TB, att ethpb.Att) error {
+	return c.insertSeenBit(dataID(t, att), att)
+}
+
+func dataID(t testing.TB, att ethpb.Att) attestation.Id {
+	id, err := attestation.NewId(att, attestation.Data)
+	require.NoError(t, err)
+	return id
 }

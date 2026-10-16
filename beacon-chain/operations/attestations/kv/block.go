@@ -69,7 +69,7 @@ func (c *AttCaches) DeleteBlockAttestation(att ethpb.Att) error {
 	// Insert all attestations into the seen aggregated cache before deleting
 	if cacheAtts, ok := c.blockAtt[id]; ok {
 		for _, cacheAtt := range cacheAtts {
-			if err := c.insertSeenAggregatedAtt(cacheAtt); err != nil {
+			if err := c.insertSeenAggregatedAtt(id, cacheAtt); err != nil {
 				return fmt.Errorf("insert seen aggregated att: %w", err)
 			}
 		}

@@ -36,11 +36,8 @@ func (s seenBits) contains(b bitfield.Bitlist) (bool, error) {
 	return false, nil
 }
 
-func (c *AttCaches) insertSeenBit(att ethpb.Att) error {
-	id, err := attestation.NewId(att, attestation.Data)
-	if err != nil {
-		return errors.Wrap(err, "could not create attestation ID")
-	}
+// insertSeenBit records the aggregation bits of att, whose data ID is id.
+func (c *AttCaches) insertSeenBit(id attestation.Id, att ethpb.Att) error {
 	bits := att.GetAggregationBits()
 
 	// Concurrent inserts for one attestation data must not drop each other's bits.
@@ -79,11 +76,8 @@ func (c *AttCaches) insertSeenBit(att ethpb.Att) error {
 	return nil
 }
 
-func (c *AttCaches) hasSeenBit(att ethpb.Att) (bool, error) {
-	id, err := attestation.NewId(att, attestation.Data)
-	if err != nil {
-		return false, errors.Wrap(err, "could not create attestation ID")
-	}
+// hasSeenBit reports whether the aggregation bits of att, whose data ID is id, were seen.
+func (c *AttCaches) hasSeenBit(id attestation.Id, att ethpb.Att) (bool, error) {
 	seen, err := c.seenBitsFor(id)
 	if err != nil || seen == nil {
 		return false, err
@@ -101,4 +95,13 @@ func (c *AttCaches) seenBitsFor(id attestation.Id) (*seenBits, error) {
 		return nil, errors.New("could not convert to seen bits type")
 	}
 	return &seen, nil
+}
+
+// hasSeenAtt is hasSeenBit for an attestation whose data ID the caller does not have.
+func (c *AttCaches) hasSeenAtt(att ethpb.Att) (bool, error) {
+	id, err := attestation.NewId(att, attestation.Data)
+	if err != nil {
+		return false, errors.Wrap(err, "could not create attestation ID")
+	}
+	return c.hasSeenBit(id, att)
 }
