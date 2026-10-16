@@ -26,7 +26,7 @@ func TestKV_Unaggregated_UnaggregatedAttestations(t *testing.T) {
 		require.NoError(t, cache.SaveUnaggregatedAttestation(att))
 		cache.seenAtt.Delete(id.String())
 		// cache a bitlist whose length is different from the attestation bitlist's length
-		cache.seenAtt.Set(id.String(), []bitfield.Bitlist{{0b1001}}, c.DefaultExpiration)
+		cache.seenAtt.Set(id.String(), seenOf(bitfield.Bitlist{0b1001}), c.DefaultExpiration)
 
 		atts := cache.UnaggregatedAttestations()
 		assert.Equal(t, 0, len(atts))
@@ -80,7 +80,7 @@ func TestKV_Unaggregated_SaveUnaggregatedAttestation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache := NewAttCaches()
-			cache.seenAtt.Set(id.String(), []bitfield.Bitlist{{0xff}}, c.DefaultExpiration)
+			cache.seenAtt.Set(id.String(), seenOf(bitfield.Bitlist{0xff}), c.DefaultExpiration)
 			assert.Equal(t, 0, len(cache.unAggregatedAtt), "Invalid start pool, atts: %d", len(cache.unAggregatedAtt))
 
 			if tt.att != nil && tt.att.GetSignature() == nil {
@@ -180,7 +180,7 @@ func TestKV_Unaggregated_DeleteUnaggregatedAttestation(t *testing.T) {
 		require.NoError(t, cache.SaveUnaggregatedAttestation(att))
 		cache.seenAtt.Delete(id.String())
 		// cache a bitlist whose length is different from the attestation bitlist's length
-		cache.seenAtt.Set(id.String(), []bitfield.Bitlist{{0b1001}}, c.DefaultExpiration)
+		cache.seenAtt.Set(id.String(), seenOf(bitfield.Bitlist{0b1001}), c.DefaultExpiration)
 
 		require.NoError(t, cache.DeleteUnaggregatedAttestation(att))
 		assert.Equal(t, 0, len(cache.unAggregatedAtt), "Attestation was not deleted")
@@ -270,7 +270,7 @@ func TestKV_Unaggregated_DeleteSeenUnaggregatedAttestations(t *testing.T) {
 		require.NoError(t, cache.SaveUnaggregatedAttestation(att))
 		cache.seenAtt.Delete(id.String())
 		// cache a bitlist whose length is different from the attestation bitlist's length
-		cache.seenAtt.Set(id.String(), []bitfield.Bitlist{{0b1001}}, c.DefaultExpiration)
+		cache.seenAtt.Set(id.String(), seenOf(bitfield.Bitlist{0b1001}), c.DefaultExpiration)
 
 		count, err := cache.DeleteSeenUnaggregatedAttestations()
 		require.NoError(t, err)

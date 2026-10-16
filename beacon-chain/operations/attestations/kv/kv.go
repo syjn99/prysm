@@ -25,6 +25,7 @@ type AttCaches struct {
 	blockAttLock          sync.RWMutex
 	blockAtt              map[attestation.Id][]ethpb.Att
 	seenAtt               *cache.Cache
+	seenAttLock           sync.Mutex
 	seenAggregatedAttLock sync.RWMutex
 	seenAggregatedAtt     map[attestation.Id][]ethpb.Att
 }
