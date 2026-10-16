@@ -2,6 +2,7 @@ package trace
 
 import (
 	"context"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -19,9 +20,27 @@ func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) 
 		// Return an empty span if tracing has been disabled.
 		return ctx, noop.Span{}
 	}
-	tracer := otel.Tracer("")
-	ctx, span := tracer.Start(ctx, name, opts...)
-	return ctx, span
+	return tracer().Start(ctx, name, opts...)
+}
+
+// providerTracer is the tracer obtained from one provider.
+type providerTracer struct {
+	provider trace.TracerProvider
+	tracer   trace.Tracer
+}
+
+var cachedTracer atomic.Pointer[providerTracer]
+
+// tracer returns the current provider's tracer. otel.Tracer goes through the provider's mutex on every call, so the
+// tracer is kept until the global provider changes.
+func tracer() trace.Tracer {
+	p := otel.GetTracerProvider()
+	if c := cachedTracer.Load(); c != nil && c.provider == p {
+		return c.tracer
+	}
+	t := p.Tracer("")
+	cachedTracer.Store(&providerTracer{provider: p, tracer: t})
+	return t
 }
 
 // NewContext is a wrapper which returns back the parent context

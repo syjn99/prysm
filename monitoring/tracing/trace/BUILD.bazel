@@ -1,4 +1,4 @@
-load("@prysm//tools/go:def.bzl", "go_library")
+load("@prysm//tools/go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "go_default_library",
@@ -10,5 +10,17 @@ go_library(
         "@io_opentelemetry_go_otel//attribute:go_default_library",
         "@io_opentelemetry_go_otel_trace//:go_default_library",
         "@io_opentelemetry_go_otel_trace//noop:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["span_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//testing/require:go_default_library",
+        "@io_opentelemetry_go_otel//:go_default_library",
+        "@io_opentelemetry_go_otel_sdk//trace:go_default_library",
+        "@io_opentelemetry_go_otel_sdk//trace/tracetest:go_default_library",
     ],
 )
