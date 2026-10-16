@@ -116,6 +116,7 @@ func (f *ForkChoice) ProcessAttestation(ctx context.Context, validatorIndices []
 			vote.nextRoot = blockRoot
 			vote.nextPayloadStatus = payloadStatus
 			f.dirtyVotes.add(index)
+			f.changedVotes.add(index)
 		}
 	}
 
@@ -1046,16 +1047,35 @@ func (f *ForkChoice) SlashedIndices() map[primitives.ValidatorIndex]bool {
 	return result
 }
 
-// VoteSnapshot appends a copy of the latest votes to buf so callers can reuse a buffer across slots.
-func (f *ForkChoice) VoteSnapshot(buf []forkchoicetypes.VoteData) []forkchoicetypes.VoteData {
-	for _, v := range f.votes {
-		buf = append(buf, forkchoicetypes.VoteData{
-			Root:          v.nextRoot,
-			Slot:          v.nextSlot,
-			PayloadStatus: v.nextPayloadStatus,
-		})
+// VoteChanges appends to buf the latest votes changed since the previous call, or every latest vote when all is set,
+// and returns the number of votes. Each call clears the set, so there must be a single consumer.
+// The caller must hold the forkchoice read lock.
+func (f *ForkChoice) VoteChanges(buf []forkchoicetypes.VoteChange, all bool) ([]forkchoicetypes.VoteChange, int) {
+	f.changedVotesMu.Lock()
+	defer f.changedVotesMu.Unlock()
+	if all {
+		for i := range f.votes {
+			buf = append(buf, f.voteChange(i))
+		}
+	} else {
+		for w, word := range f.changedVotes {
+			for ; word != 0; word &= word - 1 {
+				if i := w*64 + bits.TrailingZeros64(word); i < len(f.votes) {
+					buf = append(buf, f.voteChange(i))
+				}
+			}
+		}
 	}
-	return buf
+	clear(f.changedVotes)
+	return buf, len(f.votes)
+}
+
+func (f *ForkChoice) voteChange(i int) forkchoicetypes.VoteChange {
+	v := &f.votes[i]
+	return forkchoicetypes.VoteChange{
+		Index: uint64(i),
+		Vote:  forkchoicetypes.VoteData{Root: v.nextRoot, Slot: v.nextSlot, PayloadStatus: v.nextPayloadStatus},
+	}
 }
 
 // ConfirmedPayloadBlockHash resolves the Gloas empty/full payload ambiguity the same way as the justified and finalized hashes.

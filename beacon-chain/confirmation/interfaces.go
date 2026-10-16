@@ -24,7 +24,7 @@ type ForkchoiceReader interface {
 	IsAncestor(root [32]byte, ancestorRoot [32]byte) (bool, error)
 	UnrealizedJustification(root [32]byte) (*forkchoicetypes.Checkpoint, error)
 	VotingSource(root [32]byte) (*forkchoicetypes.Checkpoint, error)
-	VoteSnapshot(buf []forkchoicetypes.VoteData) []forkchoicetypes.VoteData
+	VoteChanges(buf []forkchoicetypes.VoteChange, all bool) ([]forkchoicetypes.VoteChange, int)
 	SlashedIndices() map[primitives.ValidatorIndex]bool
 }
 

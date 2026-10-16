@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	forkchoicetypes "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/types"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/testing/require"
@@ -121,6 +122,10 @@ func TestUpdateBalances_DirtyMatchesFullScan(t *testing.T) {
 				insertBlock()
 			}
 			newBalances()
+			// A VoteChanges consumer must always mirror the latest votes.
+			var mirror []forkchoicetypes.VoteData
+			var changes []forkchoicetypes.VoteChange
+			synced := false
 
 			for step := range steps {
 				switch op := rng.IntN(100); {
@@ -158,6 +163,17 @@ func TestUpdateBalances_DirtyMatchesFullScan(t *testing.T) {
 					require.NoError(t, err)
 					require.Equal(t, fh, dh, "step %d", step)
 					requireSameWeights(t, full, dirty, step)
+
+					var n int
+					changes, n = dirty.VoteChanges(changes[:0], !synced)
+					synced = true
+					mirror = append(mirror, make([]forkchoicetypes.VoteData, n-len(mirror))...)
+					for _, c := range changes {
+						mirror[c.Index] = c.Vote
+					}
+					for i, v := range dirty.votes {
+						require.Equal(t, forkchoicetypes.VoteData{Root: v.nextRoot, Slot: v.nextSlot, PayloadStatus: v.nextPayloadStatus}, mirror[i], "step %d vote %d", step, i)
+					}
 				}
 			}
 		})
@@ -182,5 +198,35 @@ func requireSameWeights(t *testing.T, want, got *ForkChoice, step int) {
 		require.NotNil(t, g)
 		require.Equal(t, w.balance, g.balance, "step %d full balance %#x", step, root)
 		require.Equal(t, w.weight, g.weight, "step %d full weight %#x", step, root)
+	}
+}
+
+// BenchmarkVoteChanges compares copying every latest vote with copying the 1/32 that changed.
+func BenchmarkVoteChanges(b *testing.B) {
+	for _, n := range []uint64{1_200_000, 2_200_000} {
+		f := setup(1, 1)
+		indices := make([]uint64, n)
+		for i := range indices {
+			indices[i] = uint64(i)
+		}
+		f.ProcessAttestation(b.Context(), indices, [32]byte{'a'}, 1, false)
+		chunk := n / uint64(params.BeaconConfig().SlotsPerEpoch)
+		var buf []forkchoicetypes.VoteChange
+		b.Run(fmt.Sprintf("all/validators=%d", n), func(b *testing.B) {
+			for b.Loop() {
+				buf, _ = f.VoteChanges(buf[:0], true)
+			}
+		})
+		b.Run(fmt.Sprintf("changed/validators=%d", n), func(b *testing.B) {
+			i := 0
+			for b.Loop() {
+				b.StopTimer()
+				start := (uint64(i) * chunk) % (n - chunk)
+				f.ProcessAttestation(b.Context(), indices[start:start+chunk], [32]byte{'b'}, primitives.Slot(uint64(i+1)*32), false)
+				i++
+				b.StartTimer()
+				buf, _ = f.VoteChanges(buf[:0], false)
+			}
+		})
 	}
 }

@@ -3,6 +3,8 @@ package confirmation
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	forkchoicetypes "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/types"
 	"github.com/OffchainLabs/prysm/v7/config/params"
@@ -74,16 +76,20 @@ func (t *epochSlotTable) assignedSlot(v primitives.ValidatorIndex) (primitives.S
 // totalSupport backs get_attestation_score (a vote credits every ancestor);
 type SupportMap struct {
 	votes           []forkchoicetypes.VoteData
+	voters          map[[32]byte][]uint32 // validator indices by voted root
+	voterPos        []uint32              // position of each validator in voters[votes[i].Root]
 	balances        []uint64
 	slashedBalances map[primitives.ValidatorIndex]uint64
 	equivocating    map[primitives.ValidatorIndex]bool
 	tables          []*epochSlotTable
 	rootWeights     map[[32]byte]uint64
 	totalSupport    map[[32]byte]uint64
+	weighed         bool // rootWeights match votes, balances and equivocating
 }
 
 func NewSupportMap() *SupportMap {
 	return &SupportMap{
+		voters:       make(map[[32]byte][]uint32),
 		rootWeights:  make(map[[32]byte]uint64),
 		totalSupport: make(map[[32]byte]uint64),
 	}
@@ -98,26 +104,125 @@ func (s *SupportMap) Build(
 	equivocating map[primitives.ValidatorIndex]bool,
 ) {
 	s.votes = votes
+	clear(s.voters)
+	s.voterPos = slices.Grow(s.voterPos[:0], len(votes))[:len(votes)]
+	for i, vote := range votes {
+		s.addVoter(uint32(i), vote.Root)
+	}
+	s.reweigh(balances, slashedBalances, tables, equivocating)
+}
+
+// BuildShared aggregates weights for other balances over the votes of base, which must not change while s is in use.
+func (s *SupportMap) BuildShared(
+	base *SupportMap,
+	balances []uint64,
+	slashedBalances map[primitives.ValidatorIndex]uint64,
+	tables []*epochSlotTable,
+	equivocating map[primitives.ValidatorIndex]bool,
+) {
+	s.votes, s.voters, s.voterPos = base.votes, base.voters, base.voterPos
+	s.reweigh(balances, slashedBalances, tables, equivocating)
+}
+
+// Update applies the latest vote changes and moves only their weight. A different balances slice or
+// equivocating set reweighs every vote. Callers must not mutate either in place once passed in.
+func (s *SupportMap) Update(
+	changes []forkchoicetypes.VoteChange,
+	numVotes int,
+	balances []uint64,
+	slashedBalances map[primitives.ValidatorIndex]uint64,
+	tables []*epochSlotTable,
+	equivocating map[primitives.ValidatorIndex]bool,
+) {
+	incremental := s.weighed && sameBacking(s.balances, balances) && maps.Equal(s.equivocating, equivocating)
+	s.growVotes(uint64(numVotes))
+	for _, c := range changes {
+		s.growVotes(c.Index + 1)
+		old := s.votes[c.Index]
+		if incremental {
+			if w := s.voteWeight(c.Index, old.Root); w > 0 {
+				if s.rootWeights[old.Root] -= w; s.rootWeights[old.Root] == 0 {
+					delete(s.rootWeights, old.Root)
+				}
+			}
+			if w := s.voteWeight(c.Index, c.Vote.Root); w > 0 {
+				s.rootWeights[c.Vote.Root] += w
+			}
+		}
+		s.removeVoter(uint32(c.Index), old.Root)
+		s.addVoter(uint32(c.Index), c.Vote.Root)
+		s.votes[c.Index] = c.Vote
+	}
+	if incremental {
+		s.slashedBalances, s.tables = slashedBalances, tables
+		return
+	}
+	s.reweigh(balances, slashedBalances, tables, equivocating)
+}
+
+func (s *SupportMap) reweigh(
+	balances []uint64,
+	slashedBalances map[primitives.ValidatorIndex]uint64,
+	tables []*epochSlotTable,
+	equivocating map[primitives.ValidatorIndex]bool,
+) {
 	s.balances = balances
 	s.slashedBalances = slashedBalances
 	s.tables = tables
 	s.equivocating = equivocating
-
-	hasEquivocating := len(equivocating) > 0
-
 	clear(s.rootWeights)
-	for i, vote := range votes {
-		if vote.Root == ([32]byte{}) {
-			continue
+	for i, vote := range s.votes {
+		if w := s.voteWeight(uint64(i), vote.Root); w > 0 {
+			s.rootWeights[vote.Root] += w
 		}
-		if i >= len(balances) || balances[i] == 0 {
-			continue
-		}
-		if hasEquivocating && equivocating[primitives.ValidatorIndex(i)] {
-			continue
-		}
-		s.rootWeights[vote.Root] += balances[i]
 	}
+	s.weighed = true
+}
+
+// voteWeight is the balance validator i adds to root, zero when the vote does not count.
+func (s *SupportMap) voteWeight(i uint64, root [32]byte) uint64 {
+	if root == ([32]byte{}) || i >= uint64(len(s.balances)) {
+		return 0
+	}
+	if len(s.equivocating) > 0 && s.equivocating[primitives.ValidatorIndex(i)] {
+		return 0
+	}
+	return s.balances[i]
+}
+
+func (s *SupportMap) growVotes(n uint64) {
+	if n > uint64(len(s.votes)) {
+		s.votes = append(s.votes, make([]forkchoicetypes.VoteData, n-uint64(len(s.votes)))...)
+		s.voterPos = append(s.voterPos, make([]uint32, n-uint64(len(s.voterPos)))...)
+	}
+}
+
+func (s *SupportMap) addVoter(i uint32, root [32]byte) {
+	if root == ([32]byte{}) {
+		return
+	}
+	s.voterPos[i] = uint32(len(s.voters[root]))
+	s.voters[root] = append(s.voters[root], i)
+}
+
+func (s *SupportMap) removeVoter(i uint32, root [32]byte) {
+	if root == ([32]byte{}) {
+		return
+	}
+	list := s.voters[root]
+	last := list[len(list)-1]
+	list[s.voterPos[i]] = last
+	s.voterPos[last] = s.voterPos[i]
+	if len(list) == 1 {
+		delete(s.voters, root)
+		return
+	}
+	s.voters[root] = list[:len(list)-1]
+}
+
+// sameBacking reports whether a and b are the same slice.
+func sameBacking(a, b []uint64) bool {
+	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
 }
 
 func (s *SupportMap) Accumulate(fc ForkchoiceReader) {
@@ -155,15 +260,13 @@ func (s *SupportMap) NodeSupportBetweenSlots(root [32]byte, rootSlot primitives.
 	gloas := slots.ToEpoch(rootSlot) >= params.BeaconConfig().GloasForkEpoch
 	hasEquivocating := len(s.equivocating) > 0
 	total := uint64(0)
-	for i, vote := range s.votes {
-		if vote.Root != root {
-			continue
-		}
+	for _, i := range s.voters[root] {
+		vote := s.votes[i]
 		// Gloas votes support the full or empty variant only when cast after the block's slot.
 		if gloas && (vote.Slot <= rootSlot || vote.PayloadStatus != full) {
 			continue
 		}
-		if i >= len(s.balances) || s.balances[i] == 0 {
+		if uint64(i) >= uint64(len(s.balances)) || s.balances[i] == 0 {
 			continue
 		}
 		if hasEquivocating && s.equivocating[primitives.ValidatorIndex(i)] {

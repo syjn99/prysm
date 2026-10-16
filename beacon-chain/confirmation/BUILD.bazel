@@ -35,6 +35,7 @@ go_test(
         "restart_realfc_test.go",
         "safety_test.go",
         "support_test.go",
+        "support_update_test.go",
     ],
     embed = [":go_default_library"],
     deps = [

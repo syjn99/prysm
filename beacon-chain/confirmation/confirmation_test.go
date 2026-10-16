@@ -66,8 +66,8 @@ func (m *mockForkchoiceReader) VotingSource(_ [32]byte) (*forkchoicetypes.Checkp
 func (m *mockForkchoiceReader) TargetRootForEpoch(_ [32]byte, _ primitives.Epoch) ([32]byte, error) {
 	return [32]byte{}, nil
 }
-func (m *mockForkchoiceReader) VoteSnapshot(buf []forkchoicetypes.VoteData) []forkchoicetypes.VoteData {
-	return buf
+func (m *mockForkchoiceReader) VoteChanges(buf []forkchoicetypes.VoteChange, _ bool) ([]forkchoicetypes.VoteChange, int) {
+	return buf, 0
 }
 func (m *mockForkchoiceReader) SlashedIndices() map[primitives.ValidatorIndex]bool {
 	return nil

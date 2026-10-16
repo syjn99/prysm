@@ -72,7 +72,7 @@ type Getter interface {
 	SlashedIndices() map[primitives.ValidatorIndex]bool
 	Tips() ([][32]byte, []primitives.Slot)
 	UnrealizedJustification(root [32]byte) (*forkchoicetypes.Checkpoint, error)
-	VoteSnapshot(buf []forkchoicetypes.VoteData) []forkchoicetypes.VoteData
+	VoteChanges(buf []forkchoicetypes.VoteChange, all bool) ([]forkchoicetypes.VoteChange, int)
 	VotingSource(root [32]byte) (*forkchoicetypes.Checkpoint, error)
 }
 

@@ -31,6 +31,8 @@ func addTestSupport(sm *SupportMap, slot primitives.Slot, root [32]byte, balance
 	idx := primitives.ValidatorIndex(len(sm.balances))
 	sm.balances = append(sm.balances, balance)
 	sm.votes = append(sm.votes, forkchoicetypes.VoteData{Root: root, Slot: slot})
+	sm.voterPos = append(sm.voterPos, 0)
+	sm.addVoter(uint32(idx), root)
 
 	epochStart, err := slots.EpochStart(slots.ToEpoch(slot))
 	if err != nil {

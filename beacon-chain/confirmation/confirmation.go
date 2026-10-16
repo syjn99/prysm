@@ -28,7 +28,8 @@ type FastConfirmationRule struct {
 
 	support        *SupportMap
 	prevSupportBuf *SupportMap
-	votesBuf       []forkchoicetypes.VoteData
+	changesBuf     []forkchoicetypes.VoteChange
+	votesSynced    bool // support holds every latest vote, later runs fetch only changes
 
 	// Assignment tables for epochs [current-2, current], keyed by shuffling seed.
 	tables []*epochSlotTable
@@ -201,11 +202,15 @@ func (f *FastConfirmationRule) OnFastConfirmation(ctx context.Context, currentSl
 
 	f.fc.RLock()
 	equivocating := f.fc.SlashedIndices()
-	f.votesBuf = f.fc.VoteSnapshot(f.votesBuf[:0])
+	changes, numVotes := f.fc.VoteChanges(f.changesBuf[:0], !f.votesSynced)
 	f.fc.RUnlock()
-	votes := f.votesBuf
-
-	f.support.Build(votes, balances, info.SlashedBalances, f.tables, equivocating)
+	f.support.Update(changes, numVotes, balances, info.SlashedBalances, f.tables, equivocating)
+	// Keep only incremental buffers, the first full copy would pin a second vote set.
+	if f.votesSynced {
+		f.changesBuf = changes
+	}
+	f.votesSynced = true
+	votes := f.support.votes
 
 	equivScorer := EquivocationScorer(f.support.EquivocationScore)
 
@@ -217,7 +222,7 @@ func (f *FastConfirmationRule) OnFastConfirmation(ctx context.Context, currentSl
 			f.prevSupportBuf = NewSupportMap()
 		}
 		ps := f.prevSupportBuf
-		ps.Build(votes, prevInfo.Balances, prevInfo.SlashedBalances, f.tables, equivocating)
+		ps.BuildShared(f.support, prevInfo.Balances, prevInfo.SlashedBalances, f.tables, equivocating)
 		prevSupport = ps
 		prevTotalActiveBalance = prevInfo.TotalActiveBalance
 		prevEquivScorer = EquivocationScorer(ps.EquivocationScore)

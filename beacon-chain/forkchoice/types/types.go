@@ -22,6 +22,12 @@ type VoteData struct {
 	PayloadStatus bool
 }
 
+// VoteChange is a validator's latest vote reported by VoteChanges.
+type VoteChange struct {
+	Index uint64
+	Vote  VoteData
+}
+
 // BlockAndCheckpoints to call the InsertOptimisticChain function
 type BlockAndCheckpoints struct {
 	Block               consensus_blocks.ROBlock

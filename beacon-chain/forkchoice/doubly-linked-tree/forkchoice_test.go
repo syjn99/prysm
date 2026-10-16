@@ -3,6 +3,7 @@ package doublylinkedtree
 import (
 	"context"
 	"encoding/binary"
+	"slices"
 	"testing"
 	"time"
 
@@ -1263,27 +1264,41 @@ func TestForkChoice_SlashedIndices(t *testing.T) {
 	require.Equal(t, 1, len(si2))
 }
 
-func TestForkChoice_VoteSnapshot(t *testing.T) {
+func TestForkChoice_VoteChanges(t *testing.T) {
 	f := setup(1, 1)
 	ctx := t.Context()
 	st, roblock, err := prepareForkchoiceState(ctx, 1, indexToHash(1), params.BeaconConfig().ZeroHash, params.BeaconConfig().ZeroHash, 1, 1)
 	require.NoError(t, err)
 	require.NoError(t, f.InsertNode(ctx, st, roblock))
+	f.ProcessAttestation(ctx, []uint64{0, 2}, indexToHash(1), 5, true)
+	want := forkchoicetypes.VoteData{Root: indexToHash(1), Slot: 5, PayloadStatus: true}
 
-	f.ProcessAttestation(ctx, []uint64{0, 1, 2}, indexToHash(1), 5, true)
-
-	snap := f.VoteSnapshot(nil)
-	require.Equal(t, 3, len(snap))
-	for _, v := range snap {
-		require.Equal(t, indexToHash(1), v.Root)
-		require.Equal(t, primitives.Slot(5), v.Slot)
-		require.Equal(t, true, v.PayloadStatus)
-	}
-
-	// Snapshot is a copy — modifying it doesn't affect forkchoice
-	snap[0].Root = [32]byte{0xff}
-	snap2 := f.VoteSnapshot(nil)
-	require.Equal(t, indexToHash(1), snap2[0].Root)
+	t.Run("all returns every vote", func(t *testing.T) {
+		changes, n := f.VoteChanges(nil, true)
+		require.Equal(t, 3, n)
+		require.Equal(t, true, slices.Equal([]forkchoicetypes.VoteChange{{Index: 0, Vote: want}, {Index: 1}, {Index: 2, Vote: want}}, changes), changes)
+	})
+	t.Run("no change since last call", func(t *testing.T) {
+		changes, n := f.VoteChanges(nil, false)
+		require.Equal(t, 3, n)
+		require.Equal(t, 0, len(changes))
+	})
+	t.Run("only changed votes", func(t *testing.T) {
+		f.ProcessAttestation(ctx, []uint64{2, 4}, indexToHash(1), 40, false)
+		// An older epoch does not replace the latest vote.
+		f.ProcessAttestation(ctx, []uint64{0}, indexToHash(1), 1, false)
+		changes, n := f.VoteChanges(nil, false)
+		require.Equal(t, 5, n)
+		newer := forkchoicetypes.VoteData{Root: indexToHash(1), Slot: 40}
+		require.Equal(t, true, slices.Equal([]forkchoicetypes.VoteChange{{Index: 2, Vote: newer}, {Index: 4, Vote: newer}}, changes), changes)
+	})
+	t.Run("independent of updateBalances", func(t *testing.T) {
+		f.ProcessAttestation(ctx, []uint64{1}, indexToHash(1), 64, false)
+		require.NoError(t, f.updateBalances())
+		changes, _ := f.VoteChanges(nil, false)
+		require.Equal(t, 1, len(changes))
+		require.Equal(t, uint64(1), changes[0].Index)
+	})
 }
 
 func TestForkChoice_ConfirmedPayloadBlockHash(t *testing.T) {
