@@ -41,7 +41,7 @@ type Store struct {
 	headNode                      *Node                                         // last head Node
 	emptyNodeByRoot               map[[fieldparams.RootLength]byte]*PayloadNode // nodes indexed by roots.
 	fullNodeByRoot                map[[fieldparams.RootLength]byte]*PayloadNode // full nodes (the payload was present) indexed by beacon block root.
-	slashedIndices                map[primitives.ValidatorIndex]bool            // the list of equivocating validator indices
+	slashedIndices                indexSet                                      // the set of equivocating validator indices
 	blockRootsBySlotProposer      map[proposerSlotKey][][32]byte                // up to two block roots observed for a (slot, proposer); pruned at finalization.
 	genesisTime                   time.Time
 	highestReceivedNode           *Node                                      // The highest slot node.
@@ -98,4 +98,20 @@ type Vote struct {
 	currentSlot          primitives.Slot              // slot of the current voting period.
 	nextPayloadStatus    bool                         // whether the next vote is for a full or empty payload
 	currentPayloadStatus bool                         // whether the current vote is for a full or empty payload
+}
+
+// indexSet is a growable bitset of validator indices.
+type indexSet []uint64
+
+func (s indexSet) has(i uint64) bool {
+	w := i / 64
+	return w < uint64(len(s)) && s[w]&(1<<(i%64)) != 0
+}
+
+func (s *indexSet) add(i uint64) {
+	w := int(i / 64)
+	if w >= len(*s) {
+		*s = append(*s, make([]uint64, w+1-len(*s))...)
+	}
+	(*s)[w] |= 1 << (i % 64)
 }

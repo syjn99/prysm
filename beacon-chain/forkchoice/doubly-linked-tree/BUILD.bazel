@@ -63,6 +63,7 @@ go_test(
         "reorg_late_blocks_test.go",
         "store_test.go",
         "unrealized_justification_test.go",
+        "update_balances_test.go",
         "vote_test.go",
     ],
     embed = [":go_default_library"],

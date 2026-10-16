@@ -3,7 +3,7 @@ package doublylinkedtree
 import (
 	"context"
 	"fmt"
-	"maps"
+	"math/bits"
 	"slices"
 	"time"
 
@@ -36,7 +36,6 @@ func New() *ForkChoice {
 		proposerBoostRoot:             [32]byte{},
 		emptyNodeByRoot:               make(map[[fieldparams.RootLength]byte]*PayloadNode),
 		fullNodeByRoot:                make(map[[fieldparams.RootLength]byte]*PayloadNode),
-		slashedIndices:                make(map[primitives.ValidatorIndex]bool),
 		blockRootsBySlotProposer:      make(map[proposerSlotKey][][32]byte),
 		receivedBlocksLastEpoch:       [fieldparams.SlotsPerEpoch]primitives.Slot{},
 	}
@@ -320,7 +319,7 @@ func (f *ForkChoice) updateBalances() error {
 
 	for index := 0; index < len(f.votes); index++ {
 		// Skip if validator has been slashed
-		if f.store.slashedIndices[primitives.ValidatorIndex(index)] {
+		if f.store.slashedIndices.has(uint64(index)) {
 			continue
 		}
 		vote := &f.votes[index]
@@ -451,10 +450,10 @@ func (f *ForkChoice) SetOptimisticToInvalid(ctx context.Context, root, parentRoo
 // in forkchoice.
 func (f *ForkChoice) InsertSlashedIndex(_ context.Context, index primitives.ValidatorIndex) {
 	// return early if the index was already included:
-	if f.store.slashedIndices[index] {
+	if f.store.slashedIndices.has(uint64(index)) {
 		return
 	}
-	f.store.slashedIndices[index] = true
+	f.store.slashedIndices.add(uint64(index))
 
 	// Subtract last vote from this equivocating validator
 
@@ -1015,8 +1014,12 @@ func (f *ForkChoice) ParentRoot(root [32]byte) ([32]byte, error) {
 
 // SlashedIndices returns a copy of the slashed validator indices set.
 func (f *ForkChoice) SlashedIndices() map[primitives.ValidatorIndex]bool {
-	result := make(map[primitives.ValidatorIndex]bool, len(f.store.slashedIndices))
-	maps.Copy(result, f.store.slashedIndices)
+	result := make(map[primitives.ValidatorIndex]bool)
+	for w, word := range f.store.slashedIndices {
+		for ; word != 0; word &= word - 1 {
+			result[primitives.ValidatorIndex(w*64+bits.TrailingZeros64(word))] = true
+		}
+	}
 	return result
 }
 

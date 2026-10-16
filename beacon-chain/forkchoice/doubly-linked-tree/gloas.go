@@ -532,7 +532,7 @@ func (f *ForkChoice) InsertPayload(pe interfaces.ROExecutionPayloadEnvelope) err
 func (f *ForkChoice) updateNewFullNodeWeight(fn *PayloadNode) {
 	for index, vote := range f.votes {
 		// Equivocating validators carry no weight.
-		if f.store.slashedIndices[primitives.ValidatorIndex(index)] {
+		if f.store.slashedIndices.has(uint64(index)) {
 			continue
 		}
 
