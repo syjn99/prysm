@@ -48,6 +48,8 @@ func ProcessRegistryUpdates(ctx context.Context, st state.BeaconState) error {
 	eligibleForEjection := make([]primitives.ValidatorIndex, 0)
 	eligibleForActivation := make([]primitives.ValidatorIndex, 0)
 
+	// Read before the loop, which holds the state's read lock.
+	finalizedEpoch := st.FinalizedCheckpointEpoch()
 	for idx, val := range st.ValidatorsReadOnlySeq() {
 		// Collect validators eligible to enter the activation queue.
 		if helpers.IsEligibleForActivationQueue(val, currentEpoch) {
@@ -60,7 +62,7 @@ func ProcessRegistryUpdates(ctx context.Context, st state.BeaconState) error {
 		}
 
 		// Collect validators eligible for activation and not yet dequeued for activation.
-		if helpers.IsEligibleForActivationUsingROVal(st, val) {
+		if helpers.IsEligibleForActivationUsingROVal(finalizedEpoch, val) {
 			eligibleForActivation = append(eligibleForActivation, idx)
 		}
 	}

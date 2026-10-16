@@ -2,6 +2,7 @@ package electra_test
 
 import (
 	"context"
+	"iter"
 	"testing"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/electra"
@@ -167,5 +168,55 @@ func Benchmark_ProcessRegistryUpdates_MassEjection(b *testing.B) {
 		if err := electra.ProcessRegistryUpdates(context.TODO(), st); err != nil {
 			panic(err)
 		}
+	}
+}
+
+// lockCheckingState fails the test when the finalized epoch is read while validators are iterated, because the
+// iteration holds the state's read lock and a second read lock deadlocks behind a waiting writer.
+type lockCheckingState struct {
+	state.BeaconState
+	t         *testing.T
+	iterating bool
+}
+
+func (s *lockCheckingState) ValidatorsReadOnlySeq() iter.Seq2[primitives.ValidatorIndex, state.ReadOnlyValidator] {
+	return func(yield func(primitives.ValidatorIndex, state.ReadOnlyValidator) bool) {
+		s.iterating = true
+		defer func() { s.iterating = false }()
+		for i, v := range s.BeaconState.ValidatorsReadOnlySeq() {
+			if !yield(i, v) {
+				return
+			}
+		}
+	}
+}
+
+func (s *lockCheckingState) FinalizedCheckpointEpoch() primitives.Epoch {
+	if s.iterating {
+		s.t.Error("FinalizedCheckpointEpoch called while iterating validators")
+	}
+	return s.BeaconState.FinalizedCheckpointEpoch()
+}
+
+func TestProcessRegistryUpdates_NoStateReadsWhileIterating(t *testing.T) {
+	base := &eth.BeaconStateElectra{
+		Slot:                5 * params.BeaconConfig().SlotsPerEpoch,
+		FinalizedCheckpoint: &eth.Checkpoint{Epoch: 4, Root: make([]byte, fieldparams.RootLength)},
+	}
+	for range 4 {
+		base.Validators = append(base.Validators, &eth.Validator{
+			ActivationEligibilityEpoch: 3,
+			ActivationEpoch:            params.BeaconConfig().FarFutureEpoch,
+			ExitEpoch:                  params.BeaconConfig().FarFutureEpoch,
+			EffectiveBalance:           params.BeaconConfig().MinActivationBalance,
+		})
+		base.Balances = append(base.Balances, params.BeaconConfig().MinActivationBalance)
+	}
+	st, err := state_native.InitializeFromProtoElectra(base)
+	require.NoError(t, err)
+	wrapped := &lockCheckingState{BeaconState: st, t: t}
+	require.NoError(t, electra.ProcessRegistryUpdates(t.Context(), wrapped))
+	for i, val := range st.Validators() {
+		require.Equal(t, helpers.ActivationExitEpoch(5), val.ActivationEpoch, "validator %d not activated", i)
 	}
 }

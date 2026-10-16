@@ -431,8 +431,9 @@ func IsEligibleForActivation(state state.ReadOnlyCheckpoint, validator *ethpb.Va
 }
 
 // IsEligibleForActivationUsingROVal checks if the validator is eligible for activation using the provided read only validator.
-func IsEligibleForActivationUsingROVal(state state.ReadOnlyCheckpoint, validator state.ReadOnlyValidator) bool {
-	return isEligibleForActivation(validator.ActivationEligibilityEpoch(), validator.ActivationEpoch(), state.FinalizedCheckpointEpoch())
+// The caller reads the finalized epoch once, it may be iterating validators under the state's read lock.
+func IsEligibleForActivationUsingROVal(finalizedEpoch primitives.Epoch, validator state.ReadOnlyValidator) bool {
+	return isEligibleForActivation(validator.ActivationEligibilityEpoch(), validator.ActivationEpoch(), finalizedEpoch)
 }
 
 // isEligibleForActivation carries out the logic for IsEligibleForActivation*
