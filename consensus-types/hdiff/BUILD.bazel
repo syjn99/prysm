@@ -40,6 +40,7 @@ go_library(
 go_test(
     name = "go_default_test",
     srcs = [
+        "apply_bounds_test.go",
         "fuzz_test.go",
         "property_test.go",
         "security_test.go",
