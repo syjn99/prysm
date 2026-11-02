@@ -604,6 +604,7 @@ func (s *Service) beaconEndpoints(
 		SyncChecker:                s.cfg.SyncService,
 		ExecutionReconstructor:     s.cfg.ExecutionReconstructor,
 		BLSChangesPool:             s.cfg.BLSChangesPool,
+		PQKeyPool:                  s.cfg.PQKeyPool,
 		PayloadAttestationPool:     s.cfg.PayloadAttestationPool,
 		PayloadAttestationReceiver: s.cfg.PayloadAttestationReceiver,
 		FinalizationFetcher:        s.cfg.FinalizationFetcher,
@@ -777,6 +778,27 @@ func (s *Service) beaconEndpoints(
 				middleware.AcceptEncodingHeaderHandler(),
 			},
 			handler: server.SubmitVoluntaryExit,
+			methods: []string{http.MethodPost},
+		},
+		{
+			template: "/eth/v1/beacon/pool/pq_key_registrations",
+			name:     namespace + ".ListPQKeyRegistrations",
+			middleware: []middleware.Middleware{
+				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
+				middleware.AcceptEncodingHeaderHandler(),
+			},
+			handler: server.ListPQKeyRegistrations,
+			methods: []string{http.MethodGet},
+		},
+		{
+			template: "/eth/v1/beacon/pool/pq_key_registrations",
+			name:     namespace + ".SubmitPQKeyRegistrations",
+			middleware: []middleware.Middleware{
+				middleware.ContentTypeHandler([]string{api.JsonMediaType}),
+				middleware.AcceptHeaderHandler([]string{api.JsonMediaType}),
+				middleware.AcceptEncodingHeaderHandler(),
+			},
+			handler: server.SubmitPQKeyRegistrations,
 			methods: []string{http.MethodPost},
 		},
 		{

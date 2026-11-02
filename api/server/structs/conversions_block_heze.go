@@ -36,6 +36,10 @@ func BeaconBlockHezeFromConsensus(b *eth.BeaconBlockHeze) (*BeaconBlockHeze, err
 	for i, pa := range b.Body.PayloadAttestations {
 		payloadAttestations[i] = PayloadAttestationFromConsensus(pa)
 	}
+	pqKeyRegistrations := make([]*SignedPQKeyRegistration, len(b.Body.PqKeyRegistrations))
+	for i, r := range b.Body.PqKeyRegistrations {
+		pqKeyRegistrations[i] = SignedPQKeyRegistrationFromConsensus(r)
+	}
 
 	return &BeaconBlockHeze{
 		Slot:          fmt.Sprintf("%d", b.Slot),
@@ -56,6 +60,7 @@ func BeaconBlockHezeFromConsensus(b *eth.BeaconBlockHeze) (*BeaconBlockHeze, err
 			SignedExecutionPayloadBid: SignedExecutionPayloadBidHezeFromConsensus(b.Body.SignedExecutionPayloadBid),
 			PayloadAttestations:       payloadAttestations,
 			ParentExecutionRequests:   ExecutionRequestsGloasFromConsensus(b.Body.ParentExecutionRequests),
+			PQKeyRegistrations:        pqKeyRegistrations,
 		},
 	}, nil
 }
@@ -281,6 +286,16 @@ func (b *BeaconBlockBodyHeze) ToConsensus() (*eth.BeaconBlockBodyHeze, error) {
 			return nil, server.NewDecodeError(err, "ParentExecutionRequests")
 		}
 	}
+	pqKeyRegistrations := make([]*eth.SignedPQKeyRegistration, len(b.PQKeyRegistrations))
+	for i, r := range b.PQKeyRegistrations {
+		if r == nil {
+			return nil, server.NewDecodeError(errNilValue, fmt.Sprintf("PQKeyRegistrations[%d]", i))
+		}
+		pqKeyRegistrations[i], err = r.ToConsensus()
+		if err != nil {
+			return nil, server.NewDecodeError(err, fmt.Sprintf("PQKeyRegistrations[%d]", i))
+		}
+	}
 
 	return &eth.BeaconBlockBodyHeze{
 		RandaoReveal: randaoReveal,
@@ -303,6 +318,7 @@ func (b *BeaconBlockBodyHeze) ToConsensus() (*eth.BeaconBlockBodyHeze, error) {
 		SignedExecutionPayloadBid: signedBid,
 		PayloadAttestations:       payloadAttestations,
 		ParentExecutionRequests:   parentExecutionRequests,
+		PqKeyRegistrations:        pqKeyRegistrations,
 	}, nil
 }
 

@@ -4,3 +4,4 @@
 - EIP-8450: `process_pq_key_registration` in Heze block processing, with a Go port of the leanXMSS verifier in `crypto/xmss`.
 - EIP-8450: `pq_key_registration` gossip topic with the EIP's validations, and an operation pool for registrations.
 - EIP-8450: proposers pack up to `MAX_PQ_KEY_REGISTRATIONS` pooled registrations into Heze blocks.
+- EIP-8450: `GET`/`POST /eth/v1/beacon/pool/pq_key_registrations`, and `pq_key_registrations` in Heze block JSON.

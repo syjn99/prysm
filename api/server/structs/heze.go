@@ -37,6 +37,7 @@ type BeaconBlockBodyHeze struct {
 	SignedExecutionPayloadBid *SignedExecutionPayloadBidHeze `json:"signed_execution_payload_bid"`
 	PayloadAttestations       []*PayloadAttestation          `json:"payload_attestations"`
 	ParentExecutionRequests   *ExecutionRequestsGloas        `json:"parent_execution_requests"`
+	PQKeyRegistrations        []*SignedPQKeyRegistration     `json:"pq_key_registrations"`
 }
 
 type BeaconBlockHeze struct {
