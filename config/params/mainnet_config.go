@@ -230,7 +230,7 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	BeaconStateElectraFieldCount:   37,
 	BeaconStateFuluFieldCount:      38,
 	BeaconStateGloasFieldCount:     46,
-	BeaconStateHezeFieldCount:      46,
+	BeaconStateHezeFieldCount:      50,
 
 	// Slasher related values.
 	WeakSubjectivityPeriod:          54000,
@@ -387,6 +387,7 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	// Values related to heze
 	InclusionListDueBPS:                  primitives.BP(6667),
 	MaxRequestInclusionList:              16,
+	MaxPQKeyRegistrations:                8,
 	MinSlotsForInclusionListsRequests:    1,
 	MaxTransactionsBytesPerInclusionList: 8192,
 

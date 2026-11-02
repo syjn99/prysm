@@ -312,5 +312,9 @@ func (st *BeaconStateHeze) Copy() *BeaconStateHeze {
 	cp.LatestExecutionPayloadBid = st.LatestExecutionPayloadBid.Copy()
 	cp.PayloadExpectedWithdrawals = CopySlice(st.PayloadExpectedWithdrawals)
 	cp.PtcWindow = CopyPTCWindow(st.PtcWindow)
+	cp.PostQuantumKeyMaterial = CopySlice(st.PostQuantumKeyMaterial)
+	cp.PostQuantumKeyChangeEpochs = slices.Clone(st.PostQuantumKeyChangeEpochs)
+	cp.BuilderPostQuantumKeyMaterial = CopySlice(st.BuilderPostQuantumKeyMaterial)
+	cp.BuilderPostQuantumKeyChangeEpochs = slices.Clone(st.BuilderPostQuantumKeyChangeEpochs)
 	return &cp
 }

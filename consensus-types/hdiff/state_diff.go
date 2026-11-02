@@ -147,6 +147,7 @@ type stateDiff struct {
 
 	// Heze
 	latestExecutionPayloadBidHeze *ethpb.ExecutionPayloadBidHeze // override, replaces latestExecutionPayloadBid from Heze.
+	pqKeyDiffs                    []pqKeyDiff                    // sparse: changed or appended EIP-8450 entries.
 }
 
 type hdiff struct {

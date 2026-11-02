@@ -83,6 +83,7 @@ func NewBeaconStateHeze(options ...func(state *ethpb.BeaconStateHeze) error) (st
 			return nil, fmt.Errorf("apply state option: %w", err)
 		}
 	}
+	fillPQKeyRegistry(seed)
 
 	return state_native.NewUnsafe(seed)
 }
@@ -187,4 +188,17 @@ func HydrateExecutionPayloadBidHeze(b *ethpb.ExecutionPayloadBidHeze) *ethpb.Exe
 		b.InclusionListBits = bitfield.NewBitvector16()
 	}
 	return b
+}
+
+// fillPQKeyRegistry appends unset EIP-8450 entries so that the post-quantum key lists
+// match the validator and builder registries that the options set.
+func fillPQKeyRegistry(st *ethpb.BeaconStateHeze) {
+	for len(st.PostQuantumKeyMaterial) < len(st.Validators) {
+		st.PostQuantumKeyMaterial = append(st.PostQuantumKeyMaterial, &ethpb.PQKeyMaterial{XmssPublicKey: make([]byte, 32), VrfRoot: make([]byte, 32)})
+		st.PostQuantumKeyChangeEpochs = append(st.PostQuantumKeyChangeEpochs, params.BeaconConfig().FarFutureEpoch)
+	}
+	for i := len(st.BuilderPostQuantumKeyMaterial); i < len(st.Builders); i++ {
+		st.BuilderPostQuantumKeyMaterial = append(st.BuilderPostQuantumKeyMaterial, &ethpb.PQKeyMaterial{XmssPublicKey: make([]byte, 32), VrfRoot: make([]byte, 32)})
+		st.BuilderPostQuantumKeyChangeEpochs = append(st.BuilderPostQuantumKeyChangeEpochs, st.Builders[i].DepositEpoch)
+	}
 }

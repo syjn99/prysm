@@ -757,6 +757,7 @@ func (b *BeaconBlockBody) Proto() (proto.Message, error) {
 			SignedExecutionPayloadBid: b.signedExecutionPayloadBidHeze,
 			PayloadAttestations:       b.payloadAttestations,
 			ParentExecutionRequests:   b.parentExecutionRequests,
+			PqKeyRegistrations:        b.pqKeyRegistrations,
 		}, nil
 	default:
 		return nil, errors.New("unsupported beacon block body version")
@@ -1702,6 +1703,7 @@ func initBlockBodyFromProtoHeze(pb *eth.BeaconBlockBodyHeze) (*BeaconBlockBody, 
 		signedExecutionPayloadBidHeze: pb.SignedExecutionPayloadBid,
 		payloadAttestations:           pb.PayloadAttestations,
 		parentExecutionRequests:       per,
+		pqKeyRegistrations:            pb.PqKeyRegistrations,
 	}
 	return b, nil
 }

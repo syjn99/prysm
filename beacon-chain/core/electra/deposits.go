@@ -476,6 +476,8 @@ func ApplyPendingDeposit(ctx context.Context, st state.BeaconState, deposit *eth
 //	set_or_append_list(state.previous_epoch_participation, index, ParticipationFlags(0b0000_0000))
 //	set_or_append_list(state.current_epoch_participation, index, ParticipationFlags(0b0000_0000))
 //	set_or_append_list(state.inactivity_scores, index, uint64(0))
+//	set_or_append_list(state.post_quantum_key_material, index, PQKeyMaterial())  # [New in EIP-8450]
+//	set_or_append_list(state.post_quantum_key_change_epochs, index, FAR_FUTURE_EPOCH)  # [New in EIP-8450]
 func AddValidatorToRegistry(beaconState state.BeaconState, pubKey []byte, withdrawalCredentials []byte, amount uint64) error {
 	val, err := GetValidatorFromDeposit(pubKey, withdrawalCredentials, amount)
 	if err != nil {
@@ -497,6 +499,13 @@ func AddValidatorToRegistry(beaconState state.BeaconState, pubKey []byte, withdr
 			return err
 		}
 		if err := beaconState.AppendCurrentParticipationBits(0); err != nil {
+			return err
+		}
+	}
+	if beaconState.Version() >= version.Heze {
+		idx := primitives.ValidatorIndex(beaconState.NumValidators() - 1)
+		empty := &ethpb.PQKeyMaterial{XmssPublicKey: make([]byte, 32), VrfRoot: make([]byte, 32)}
+		if err := beaconState.SetPQKeyEntry(idx, empty, params.BeaconConfig().FarFutureEpoch); err != nil {
 			return err
 		}
 	}

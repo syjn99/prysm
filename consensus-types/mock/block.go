@@ -293,6 +293,10 @@ func (b *BeaconBlockBody) ParentExecutionRequests() (*enginev1.ExecutionRequests
 	panic("implement me")
 }
 
+func (b *BeaconBlockBody) PQKeyRegistrations() ([]*eth.SignedPQKeyRegistration, error) {
+	panic("implement me")
+}
+
 func (b *BeaconBlockBody) Attestations() []eth.Att {
 	panic("implement me")
 }

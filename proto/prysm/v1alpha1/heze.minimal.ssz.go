@@ -12,7 +12,7 @@ import (
 )
 
 func (c *BeaconBlockBodyHeze) SizeSSZ() int {
-	size := 336
+	size := 340
 	size += len(c.ProposerSlashings) * 416
 	for _, o := range c.AttesterSlashings {
 		size += 4
@@ -34,6 +34,7 @@ func (c *BeaconBlockBodyHeze) SizeSSZ() int {
 		c.ParentExecutionRequests = new(v1.ExecutionRequestsGloas)
 	}
 	size += c.ParentExecutionRequests.SizeSSZ()
+	size += len(c.PqKeyRegistrations) * 2580
 	return size
 }
 
@@ -44,7 +45,7 @@ func (c *BeaconBlockBodyHeze) MarshalSSZ() ([]byte, error) {
 
 func (c *BeaconBlockBodyHeze) MarshalSSZTo(dst []byte) ([]byte, error) {
 	var err error
-	offset := 336
+	offset := 340
 
 	// Field 0: RandaoReveal
 	if len(c.RandaoReveal) != 96 {
@@ -122,6 +123,10 @@ func (c *BeaconBlockBodyHeze) MarshalSSZTo(dst []byte) ([]byte, error) {
 	dst = ssz.WriteOffset(dst, offset)
 	offset += c.ParentExecutionRequests.SizeSSZ()
 
+	// Field 13: PqKeyRegistrations
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(c.PqKeyRegistrations) * 2580
+
 	// Field 3: ProposerSlashings
 	for _, o := range c.ProposerSlashings {
 		if dst, err = o.MarshalSSZTo(dst); err != nil {
@@ -194,13 +199,20 @@ func (c *BeaconBlockBodyHeze) MarshalSSZTo(dst []byte) ([]byte, error) {
 	if dst, err = c.ParentExecutionRequests.MarshalSSZTo(dst); err != nil {
 		return nil, fmt.Errorf("ParentExecutionRequests: %w", err)
 	}
+
+	// Field 13: PqKeyRegistrations
+	for _, o := range c.PqKeyRegistrations {
+		if dst, err = o.MarshalSSZTo(dst); err != nil {
+			return nil, fmt.Errorf("PqKeyRegistrations: %w", err)
+		}
+	}
 	return dst, err
 }
 
 func (c *BeaconBlockBodyHeze) UnmarshalSSZ(buf []byte) error {
 	var err error
 	size := uint64(len(buf))
-	if size < 336 {
+	if size < 340 {
 		return ssz.ErrSize
 	}
 
@@ -210,7 +222,7 @@ func (c *BeaconBlockBodyHeze) UnmarshalSSZ(buf []byte) error {
 	sszSlice8 := buf[220:320] // c.SyncAggregate
 
 	sszVarOffset3 := ssz.ReadOffset(buf[200:204]) // c.ProposerSlashings
-	if sszVarOffset3 != 336 {
+	if sszVarOffset3 != 340 {
 		return ssz.ErrInvalidVariableOffset
 	}
 	if sszVarOffset3 > size {
@@ -248,6 +260,10 @@ func (c *BeaconBlockBodyHeze) UnmarshalSSZ(buf []byte) error {
 	if sszVarOffset12 > size || sszVarOffset12 < sszVarOffset11 {
 		return ssz.ErrOffset
 	}
+	sszVarOffset13 := ssz.ReadOffset(buf[336:340]) // c.PqKeyRegistrations
+	if sszVarOffset13 > size || sszVarOffset13 < sszVarOffset12 {
+		return ssz.ErrOffset
+	}
 	sszSlice3 := buf[sszVarOffset3:sszVarOffset4]    // c.ProposerSlashings
 	sszSlice4 := buf[sszVarOffset4:sszVarOffset5]    // c.AttesterSlashings
 	sszSlice5 := buf[sszVarOffset5:sszVarOffset6]    // c.Attestations
@@ -256,7 +272,8 @@ func (c *BeaconBlockBodyHeze) UnmarshalSSZ(buf []byte) error {
 	sszSlice9 := buf[sszVarOffset9:sszVarOffset10]   // c.BlsToExecutionChanges
 	sszSlice10 := buf[sszVarOffset10:sszVarOffset11] // c.SignedExecutionPayloadBid
 	sszSlice11 := buf[sszVarOffset11:sszVarOffset12] // c.PayloadAttestations
-	sszSlice12 := buf[sszVarOffset12:]               // c.ParentExecutionRequests
+	sszSlice12 := buf[sszVarOffset12:sszVarOffset13] // c.ParentExecutionRequests
+	sszSlice13 := buf[sszVarOffset13:]               // c.PqKeyRegistrations
 
 	// Field 0: RandaoReveal
 	c.RandaoReveal = make([]byte, 0, 96)
@@ -494,6 +511,27 @@ func (c *BeaconBlockBodyHeze) UnmarshalSSZ(buf []byte) error {
 	if err = c.ParentExecutionRequests.UnmarshalSSZ(sszSlice12); err != nil {
 		return fmt.Errorf("ParentExecutionRequests: %w", err)
 	}
+
+	// Field 13: PqKeyRegistrations
+	{
+		if len(sszSlice13)%2580 != 0 {
+			return fmt.Errorf("misaligned bytes: c.PqKeyRegistrations length is %d, which is not a multiple of 2580: %w", len(sszSlice13), ssz.ErrIncorrectListSize)
+		}
+		numElem := len(sszSlice13) / 2580
+		if numElem > 8 {
+			return fmt.Errorf("ssz-max exceeded: c.PqKeyRegistrations has %d elements, ssz-max is 8: %w", numElem, ssz.ErrListTooBig)
+		}
+		c.PqKeyRegistrations = make([]*SignedPQKeyRegistration, numElem)
+		for i := 0; i < numElem; i++ {
+			var tmp *SignedPQKeyRegistration
+			tmp = new(SignedPQKeyRegistration)
+			tmpSlice := sszSlice13[i*2580 : (1+i)*2580]
+			if err = tmp.UnmarshalSSZ(tmpSlice); err != nil {
+				return fmt.Errorf("PqKeyRegistrations: %w", err)
+			}
+			c.PqKeyRegistrations[i] = tmp
+		}
+	}
 	return err
 }
 
@@ -505,7 +543,7 @@ func (c *BeaconBlockBodyHeze) HashTreeRootWith(hh *ssz.Hasher) error {
 	return c.ProgressiveHashTreeRootWith(hh)
 }
 
-var activeFieldsBeaconBlockBodyHeze = []byte{0b11111111, 0b00011111}
+var activeFieldsBeaconBlockBodyHeze = []byte{0b11111111, 0b00111111}
 
 func (c *BeaconBlockBodyHeze) ProgressiveHashTreeRoot() ([32]byte, error) {
 	hh := ssz.DefaultHasherPool.Get()
@@ -615,6 +653,16 @@ func (c *BeaconBlockBodyHeze) ProgressiveHashTreeRootWith(hh *ssz.Hasher) (err e
 	// Position 12: ParentExecutionRequests
 	if err := c.ParentExecutionRequests.HashTreeRootWith(hh); err != nil {
 		return fmt.Errorf("ParentExecutionRequests: %w", err)
+	}
+	// Position 13: PqKeyRegistrations
+	{
+		subIndx := hh.Index()
+		for _, o := range c.PqKeyRegistrations {
+			if err := o.HashTreeRootWith(hh); err != nil {
+				return fmt.Errorf("PqKeyRegistrations: %w", err)
+			}
+		}
+		hh.MerkleizeProgressiveWithMixin(subIndx, uint64(len(c.PqKeyRegistrations)))
 	}
 	hh.MerkleizeProgressiveWithActiveFields(indx, activeFieldsBeaconBlockBodyHeze)
 	return nil
@@ -979,7 +1027,7 @@ func (c *BeaconBlockHeze) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 }
 
 func (c *BeaconStateHeze) SizeSSZ() int {
-	size := 14405
+	size := 14421
 	size += len(c.HistoricalRoots) * 32
 	size += len(c.Eth1DataVotes) * 72
 	size += len(c.Validators) * 121
@@ -998,6 +1046,10 @@ func (c *BeaconStateHeze) SizeSSZ() int {
 	}
 	size += c.LatestExecutionPayloadBid.SizeSSZ()
 	size += len(c.PayloadExpectedWithdrawals) * 44
+	size += len(c.PostQuantumKeyMaterial) * 64
+	size += len(c.PostQuantumKeyChangeEpochs) * 8
+	size += len(c.BuilderPostQuantumKeyMaterial) * 64
+	size += len(c.BuilderPostQuantumKeyChangeEpochs) * 8
 	return size
 }
 
@@ -1008,7 +1060,7 @@ func (c *BeaconStateHeze) MarshalSSZ() ([]byte, error) {
 
 func (c *BeaconStateHeze) MarshalSSZTo(dst []byte) ([]byte, error) {
 	var err error
-	offset := 14405
+	offset := 14421
 
 	// Field 0: GenesisTime
 	dst = binary.LittleEndian.AppendUint64(dst, c.GenesisTime)
@@ -1284,6 +1336,22 @@ func (c *BeaconStateHeze) MarshalSSZTo(dst []byte) ([]byte, error) {
 		}
 	}
 
+	// Field 46: PostQuantumKeyMaterial
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(c.PostQuantumKeyMaterial) * 64
+
+	// Field 47: PostQuantumKeyChangeEpochs
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(c.PostQuantumKeyChangeEpochs) * 8
+
+	// Field 48: BuilderPostQuantumKeyMaterial
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(c.BuilderPostQuantumKeyMaterial) * 64
+
+	// Field 49: BuilderPostQuantumKeyChangeEpochs
+	dst = ssz.WriteOffset(dst, offset)
+	offset += len(c.BuilderPostQuantumKeyChangeEpochs) * 8
+
 	// Field 7: HistoricalRoots
 	if len(c.HistoricalRoots) > 16777216 {
 		return nil, ssz.ErrListTooBig
@@ -1384,13 +1452,41 @@ func (c *BeaconStateHeze) MarshalSSZTo(dst []byte) ([]byte, error) {
 			return nil, fmt.Errorf("PayloadExpectedWithdrawals: %w", err)
 		}
 	}
+
+	// Field 46: PostQuantumKeyMaterial
+	for _, o := range c.PostQuantumKeyMaterial {
+		if dst, err = o.MarshalSSZTo(dst); err != nil {
+			return nil, fmt.Errorf("PostQuantumKeyMaterial: %w", err)
+		}
+	}
+
+	// Field 47: PostQuantumKeyChangeEpochs
+	for _, o := range c.PostQuantumKeyChangeEpochs {
+		if dst, err = o.MarshalSSZTo(dst); err != nil {
+			return nil, fmt.Errorf("PostQuantumKeyChangeEpochs: %w", err)
+		}
+	}
+
+	// Field 48: BuilderPostQuantumKeyMaterial
+	for _, o := range c.BuilderPostQuantumKeyMaterial {
+		if dst, err = o.MarshalSSZTo(dst); err != nil {
+			return nil, fmt.Errorf("BuilderPostQuantumKeyMaterial: %w", err)
+		}
+	}
+
+	// Field 49: BuilderPostQuantumKeyChangeEpochs
+	for _, o := range c.BuilderPostQuantumKeyChangeEpochs {
+		if dst, err = o.MarshalSSZTo(dst); err != nil {
+			return nil, fmt.Errorf("BuilderPostQuantumKeyChangeEpochs: %w", err)
+		}
+	}
 	return dst, err
 }
 
 func (c *BeaconStateHeze) UnmarshalSSZ(buf []byte) error {
 	var err error
 	size := uint64(len(buf))
-	if size < 14405 {
+	if size < 14421 {
 		return ssz.ErrSize
 	}
 
@@ -1427,7 +1523,7 @@ func (c *BeaconStateHeze) UnmarshalSSZ(buf []byte) error {
 	sszSlice45 := buf[11333:14405] // c.PtcWindow
 
 	sszVarOffset7 := ssz.ReadOffset(buf[4272:4276]) // c.HistoricalRoots
-	if sszVarOffset7 != 14405 {
+	if sszVarOffset7 != 14421 {
 		return ssz.ErrInvalidVariableOffset
 	}
 	if sszVarOffset7 > size {
@@ -1489,6 +1585,22 @@ func (c *BeaconStateHeze) UnmarshalSSZ(buf []byte) error {
 	if sszVarOffset44 > size || sszVarOffset44 < sszVarOffset43 {
 		return ssz.ErrOffset
 	}
+	sszVarOffset46 := ssz.ReadOffset(buf[14405:14409]) // c.PostQuantumKeyMaterial
+	if sszVarOffset46 > size || sszVarOffset46 < sszVarOffset44 {
+		return ssz.ErrOffset
+	}
+	sszVarOffset47 := ssz.ReadOffset(buf[14409:14413]) // c.PostQuantumKeyChangeEpochs
+	if sszVarOffset47 > size || sszVarOffset47 < sszVarOffset46 {
+		return ssz.ErrOffset
+	}
+	sszVarOffset48 := ssz.ReadOffset(buf[14413:14417]) // c.BuilderPostQuantumKeyMaterial
+	if sszVarOffset48 > size || sszVarOffset48 < sszVarOffset47 {
+		return ssz.ErrOffset
+	}
+	sszVarOffset49 := ssz.ReadOffset(buf[14417:14421]) // c.BuilderPostQuantumKeyChangeEpochs
+	if sszVarOffset49 > size || sszVarOffset49 < sszVarOffset48 {
+		return ssz.ErrOffset
+	}
 	sszSlice7 := buf[sszVarOffset7:sszVarOffset9]    // c.HistoricalRoots
 	sszSlice9 := buf[sszVarOffset9:sszVarOffset11]   // c.Eth1DataVotes
 	sszSlice11 := buf[sszVarOffset11:sszVarOffset12] // c.Validators
@@ -1503,7 +1615,11 @@ func (c *BeaconStateHeze) UnmarshalSSZ(buf []byte) error {
 	sszSlice38 := buf[sszVarOffset38:sszVarOffset42] // c.Builders
 	sszSlice42 := buf[sszVarOffset42:sszVarOffset43] // c.BuilderPendingWithdrawals
 	sszSlice43 := buf[sszVarOffset43:sszVarOffset44] // c.LatestExecutionPayloadBid
-	sszSlice44 := buf[sszVarOffset44:]               // c.PayloadExpectedWithdrawals
+	sszSlice44 := buf[sszVarOffset44:sszVarOffset46] // c.PayloadExpectedWithdrawals
+	sszSlice46 := buf[sszVarOffset46:sszVarOffset47] // c.PostQuantumKeyMaterial
+	sszSlice47 := buf[sszVarOffset47:sszVarOffset48] // c.PostQuantumKeyChangeEpochs
+	sszSlice48 := buf[sszVarOffset48:sszVarOffset49] // c.BuilderPostQuantumKeyMaterial
+	sszSlice49 := buf[sszVarOffset49:]               // c.BuilderPostQuantumKeyChangeEpochs
 
 	// Field 0: GenesisTime
 	c.GenesisTime = binary.LittleEndian.Uint64(sszSlice0)
@@ -1972,6 +2088,90 @@ func (c *BeaconStateHeze) UnmarshalSSZ(buf []byte) error {
 			c.PtcWindow[i] = tmp
 		}
 	}
+
+	// Field 46: PostQuantumKeyMaterial
+	{
+		if len(sszSlice46)%64 != 0 {
+			return fmt.Errorf("misaligned bytes: c.PostQuantumKeyMaterial length is %d, which is not a multiple of 64: %w", len(sszSlice46), ssz.ErrIncorrectListSize)
+		}
+		numElem := len(sszSlice46) / 64
+		if numElem > 1099511627776 {
+			return fmt.Errorf("ssz-max exceeded: c.PostQuantumKeyMaterial has %d elements, ssz-max is 1099511627776: %w", numElem, ssz.ErrListTooBig)
+		}
+		c.PostQuantumKeyMaterial = make([]*PQKeyMaterial, numElem)
+		for i := 0; i < numElem; i++ {
+			var tmp *PQKeyMaterial
+			tmp = new(PQKeyMaterial)
+			tmpSlice := sszSlice46[i*64 : (1+i)*64]
+			if err = tmp.UnmarshalSSZ(tmpSlice); err != nil {
+				return fmt.Errorf("PostQuantumKeyMaterial: %w", err)
+			}
+			c.PostQuantumKeyMaterial[i] = tmp
+		}
+	}
+
+	// Field 47: PostQuantumKeyChangeEpochs
+	{
+		if len(sszSlice47)%8 != 0 {
+			return fmt.Errorf("misaligned bytes: c.PostQuantumKeyChangeEpochs length is %d, which is not a multiple of 8: %w", len(sszSlice47), ssz.ErrIncorrectListSize)
+		}
+		numElem := len(sszSlice47) / 8
+		if numElem > 1099511627776 {
+			return fmt.Errorf("ssz-max exceeded: c.PostQuantumKeyChangeEpochs has %d elements, ssz-max is 1099511627776: %w", numElem, ssz.ErrListTooBig)
+		}
+		c.PostQuantumKeyChangeEpochs = make([]primitives.Epoch, numElem)
+		for i := 0; i < numElem; i++ {
+			var tmp primitives.Epoch
+
+			tmpSlice := sszSlice47[i*8 : (1+i)*8]
+			if err = tmp.UnmarshalSSZ(tmpSlice); err != nil {
+				return fmt.Errorf("PostQuantumKeyChangeEpochs: %w", err)
+			}
+			c.PostQuantumKeyChangeEpochs[i] = tmp
+		}
+	}
+
+	// Field 48: BuilderPostQuantumKeyMaterial
+	{
+		if len(sszSlice48)%64 != 0 {
+			return fmt.Errorf("misaligned bytes: c.BuilderPostQuantumKeyMaterial length is %d, which is not a multiple of 64: %w", len(sszSlice48), ssz.ErrIncorrectListSize)
+		}
+		numElem := len(sszSlice48) / 64
+		if numElem > 1099511627776 {
+			return fmt.Errorf("ssz-max exceeded: c.BuilderPostQuantumKeyMaterial has %d elements, ssz-max is 1099511627776: %w", numElem, ssz.ErrListTooBig)
+		}
+		c.BuilderPostQuantumKeyMaterial = make([]*PQKeyMaterial, numElem)
+		for i := 0; i < numElem; i++ {
+			var tmp *PQKeyMaterial
+			tmp = new(PQKeyMaterial)
+			tmpSlice := sszSlice48[i*64 : (1+i)*64]
+			if err = tmp.UnmarshalSSZ(tmpSlice); err != nil {
+				return fmt.Errorf("BuilderPostQuantumKeyMaterial: %w", err)
+			}
+			c.BuilderPostQuantumKeyMaterial[i] = tmp
+		}
+	}
+
+	// Field 49: BuilderPostQuantumKeyChangeEpochs
+	{
+		if len(sszSlice49)%8 != 0 {
+			return fmt.Errorf("misaligned bytes: c.BuilderPostQuantumKeyChangeEpochs length is %d, which is not a multiple of 8: %w", len(sszSlice49), ssz.ErrIncorrectListSize)
+		}
+		numElem := len(sszSlice49) / 8
+		if numElem > 1099511627776 {
+			return fmt.Errorf("ssz-max exceeded: c.BuilderPostQuantumKeyChangeEpochs has %d elements, ssz-max is 1099511627776: %w", numElem, ssz.ErrListTooBig)
+		}
+		c.BuilderPostQuantumKeyChangeEpochs = make([]primitives.Epoch, numElem)
+		for i := 0; i < numElem; i++ {
+			var tmp primitives.Epoch
+
+			tmpSlice := sszSlice49[i*8 : (1+i)*8]
+			if err = tmp.UnmarshalSSZ(tmpSlice); err != nil {
+				return fmt.Errorf("BuilderPostQuantumKeyChangeEpochs: %w", err)
+			}
+			c.BuilderPostQuantumKeyChangeEpochs[i] = tmp
+		}
+	}
 	return err
 }
 
@@ -1983,7 +2183,7 @@ func (c *BeaconStateHeze) HashTreeRootWith(hh *ssz.Hasher) error {
 	return c.ProgressiveHashTreeRootWith(hh)
 }
 
-var activeFieldsBeaconStateHeze = []byte{0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b00111111}
+var activeFieldsBeaconStateHeze = []byte{0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b00000011}
 
 func (c *BeaconStateHeze) ProgressiveHashTreeRoot() ([32]byte, error) {
 	hh := ssz.DefaultHasherPool.Get()
@@ -2323,6 +2523,44 @@ func (c *BeaconStateHeze) ProgressiveHashTreeRootWith(hh *ssz.Hasher) (err error
 			}
 		}
 		hh.Merkleize(subIndx)
+	}
+	// Position 46: PostQuantumKeyMaterial
+	{
+		subIndx := hh.Index()
+		for _, o := range c.PostQuantumKeyMaterial {
+			if err := o.HashTreeRootWith(hh); err != nil {
+				return fmt.Errorf("PostQuantumKeyMaterial: %w", err)
+			}
+		}
+		hh.MerkleizeProgressiveWithMixin(subIndx, uint64(len(c.PostQuantumKeyMaterial)))
+	}
+	// Position 47: PostQuantumKeyChangeEpochs
+	{
+		subIndx := hh.Index()
+		for _, o := range c.PostQuantumKeyChangeEpochs {
+			hh.AppendUint64(uint64(o))
+		}
+		hh.FillUpTo32()
+		hh.MerkleizeProgressiveWithMixin(subIndx, uint64(len(c.PostQuantumKeyChangeEpochs)))
+	}
+	// Position 48: BuilderPostQuantumKeyMaterial
+	{
+		subIndx := hh.Index()
+		for _, o := range c.BuilderPostQuantumKeyMaterial {
+			if err := o.HashTreeRootWith(hh); err != nil {
+				return fmt.Errorf("BuilderPostQuantumKeyMaterial: %w", err)
+			}
+		}
+		hh.MerkleizeProgressiveWithMixin(subIndx, uint64(len(c.BuilderPostQuantumKeyMaterial)))
+	}
+	// Position 49: BuilderPostQuantumKeyChangeEpochs
+	{
+		subIndx := hh.Index()
+		for _, o := range c.BuilderPostQuantumKeyChangeEpochs {
+			hh.AppendUint64(uint64(o))
+		}
+		hh.FillUpTo32()
+		hh.MerkleizeProgressiveWithMixin(subIndx, uint64(len(c.BuilderPostQuantumKeyChangeEpochs)))
 	}
 	hh.MerkleizeProgressiveWithActiveFields(indx, activeFieldsBeaconStateHeze)
 	return nil
@@ -2739,6 +2977,251 @@ func (c *InclusionList) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 	return nil
 }
 
+func (c *PQKeyMaterial) SizeSSZ() int {
+	size := 64
+
+	return size
+}
+
+func (c *PQKeyMaterial) MarshalSSZ() ([]byte, error) {
+	buf := make([]byte, c.SizeSSZ())
+	return c.MarshalSSZTo(buf[:0])
+}
+
+func (c *PQKeyMaterial) MarshalSSZTo(dst []byte) ([]byte, error) {
+	var err error
+
+	// Field 0: XmssPublicKey
+	if len(c.XmssPublicKey) != 32 {
+		return nil, ssz.ErrBytesLength
+	}
+	dst = append(dst, c.XmssPublicKey...)
+
+	// Field 1: VrfRoot
+	if len(c.VrfRoot) != 32 {
+		return nil, ssz.ErrBytesLength
+	}
+	dst = append(dst, c.VrfRoot...)
+
+	return dst, err
+}
+
+func (c *PQKeyMaterial) UnmarshalSSZ(buf []byte) error {
+	var err error
+	size := uint64(len(buf))
+	if size != 64 {
+		return ssz.ErrSize
+	}
+
+	sszSlice0 := buf[0:32]  // c.XmssPublicKey
+	sszSlice1 := buf[32:64] // c.VrfRoot
+
+	// Field 0: XmssPublicKey
+	c.XmssPublicKey = make([]byte, 0, 32)
+	c.XmssPublicKey = append(c.XmssPublicKey, sszSlice0...)
+
+	// Field 1: VrfRoot
+	c.VrfRoot = make([]byte, 0, 32)
+	c.VrfRoot = append(c.VrfRoot, sszSlice1...)
+	return err
+}
+
+func (c *PQKeyMaterial) HashTreeRoot() ([32]byte, error) {
+	hh := ssz.DefaultHasherPool.Get()
+	if err := c.HashTreeRootWith(hh); err != nil {
+		ssz.DefaultHasherPool.Put(hh)
+		return [32]byte{}, err
+	}
+	root, err := hh.HashRoot()
+	ssz.DefaultHasherPool.Put(hh)
+	return root, err
+}
+
+func (c *PQKeyMaterial) HashTreeRootWith(hh *ssz.Hasher) (err error) {
+	indx := hh.Index()
+	// Field 0: XmssPublicKey
+	if len(c.XmssPublicKey) != 32 {
+		return ssz.ErrBytesLength
+	}
+	hh.PutBytes(c.XmssPublicKey)
+	// Field 1: VrfRoot
+	if len(c.VrfRoot) != 32 {
+		return ssz.ErrBytesLength
+	}
+	hh.PutBytes(c.VrfRoot)
+	hh.Merkleize(indx)
+	return nil
+}
+
+func (c *PQKeyPossession) SizeSSZ() int {
+	size := 80
+
+	return size
+}
+
+func (c *PQKeyPossession) MarshalSSZ() ([]byte, error) {
+	buf := make([]byte, c.SizeSSZ())
+	return c.MarshalSSZTo(buf[:0])
+}
+
+func (c *PQKeyPossession) MarshalSSZTo(dst []byte) ([]byte, error) {
+	var err error
+
+	// Field 0: Pubkey
+	if len(c.Pubkey) != 48 {
+		return nil, ssz.ErrBytesLength
+	}
+	dst = append(dst, c.Pubkey...)
+
+	// Field 1: XmssPublicKey
+	if len(c.XmssPublicKey) != 32 {
+		return nil, ssz.ErrBytesLength
+	}
+	dst = append(dst, c.XmssPublicKey...)
+
+	return dst, err
+}
+
+func (c *PQKeyPossession) UnmarshalSSZ(buf []byte) error {
+	var err error
+	size := uint64(len(buf))
+	if size != 80 {
+		return ssz.ErrSize
+	}
+
+	sszSlice0 := buf[0:48]  // c.Pubkey
+	sszSlice1 := buf[48:80] // c.XmssPublicKey
+
+	// Field 0: Pubkey
+	c.Pubkey = make([]byte, 0, 48)
+	c.Pubkey = append(c.Pubkey, sszSlice0...)
+
+	// Field 1: XmssPublicKey
+	c.XmssPublicKey = make([]byte, 0, 32)
+	c.XmssPublicKey = append(c.XmssPublicKey, sszSlice1...)
+	return err
+}
+
+func (c *PQKeyPossession) HashTreeRoot() ([32]byte, error) {
+	hh := ssz.DefaultHasherPool.Get()
+	if err := c.HashTreeRootWith(hh); err != nil {
+		ssz.DefaultHasherPool.Put(hh)
+		return [32]byte{}, err
+	}
+	root, err := hh.HashRoot()
+	ssz.DefaultHasherPool.Put(hh)
+	return root, err
+}
+
+func (c *PQKeyPossession) HashTreeRootWith(hh *ssz.Hasher) (err error) {
+	indx := hh.Index()
+	// Field 0: Pubkey
+	if len(c.Pubkey) != 48 {
+		return ssz.ErrBytesLength
+	}
+	hh.PutBytes(c.Pubkey)
+	// Field 1: XmssPublicKey
+	if len(c.XmssPublicKey) != 32 {
+		return ssz.ErrBytesLength
+	}
+	hh.PutBytes(c.XmssPublicKey)
+	hh.Merkleize(indx)
+	return nil
+}
+
+func (c *PQKeyRegistration) SizeSSZ() int {
+	size := 80
+
+	return size
+}
+
+func (c *PQKeyRegistration) MarshalSSZ() ([]byte, error) {
+	buf := make([]byte, c.SizeSSZ())
+	return c.MarshalSSZTo(buf[:0])
+}
+
+func (c *PQKeyRegistration) MarshalSSZTo(dst []byte) ([]byte, error) {
+	var err error
+
+	// Field 0: Index
+	if dst, err = c.Index.MarshalSSZTo(dst); err != nil {
+		return nil, fmt.Errorf("Index: %w", err)
+	}
+
+	// Field 1: KeyMaterial
+	if c.KeyMaterial == nil {
+		c.KeyMaterial = new(PQKeyMaterial)
+	}
+	if dst, err = c.KeyMaterial.MarshalSSZTo(dst); err != nil {
+		return nil, fmt.Errorf("KeyMaterial: %w", err)
+	}
+
+	// Field 2: PreviousChangeEpoch
+	if dst, err = c.PreviousChangeEpoch.MarshalSSZTo(dst); err != nil {
+		return nil, fmt.Errorf("PreviousChangeEpoch: %w", err)
+	}
+
+	return dst, err
+}
+
+func (c *PQKeyRegistration) UnmarshalSSZ(buf []byte) error {
+	var err error
+	size := uint64(len(buf))
+	if size != 80 {
+		return ssz.ErrSize
+	}
+
+	sszSlice0 := buf[0:8]   // c.Index
+	sszSlice1 := buf[8:72]  // c.KeyMaterial
+	sszSlice2 := buf[72:80] // c.PreviousChangeEpoch
+
+	// Field 0: Index
+	if err = c.Index.UnmarshalSSZ(sszSlice0); err != nil {
+		return fmt.Errorf("Index: %w", err)
+	}
+
+	// Field 1: KeyMaterial
+	c.KeyMaterial = new(PQKeyMaterial)
+	if err = c.KeyMaterial.UnmarshalSSZ(sszSlice1); err != nil {
+		return fmt.Errorf("KeyMaterial: %w", err)
+	}
+
+	// Field 2: PreviousChangeEpoch
+	if err = c.PreviousChangeEpoch.UnmarshalSSZ(sszSlice2); err != nil {
+		return fmt.Errorf("PreviousChangeEpoch: %w", err)
+	}
+	return err
+}
+
+func (c *PQKeyRegistration) HashTreeRoot() ([32]byte, error) {
+	hh := ssz.DefaultHasherPool.Get()
+	if err := c.HashTreeRootWith(hh); err != nil {
+		ssz.DefaultHasherPool.Put(hh)
+		return [32]byte{}, err
+	}
+	root, err := hh.HashRoot()
+	ssz.DefaultHasherPool.Put(hh)
+	return root, err
+}
+
+func (c *PQKeyRegistration) HashTreeRootWith(hh *ssz.Hasher) (err error) {
+	indx := hh.Index()
+	// Field 0: Index
+	if err := c.Index.HashTreeRootWith(hh); err != nil {
+		return fmt.Errorf("Index: %w", err)
+	}
+	// Field 1: KeyMaterial
+	if err := c.KeyMaterial.HashTreeRootWith(hh); err != nil {
+		return fmt.Errorf("KeyMaterial: %w", err)
+	}
+	// Field 2: PreviousChangeEpoch
+	if err := c.PreviousChangeEpoch.HashTreeRootWith(hh); err != nil {
+		return fmt.Errorf("PreviousChangeEpoch: %w", err)
+	}
+	hh.Merkleize(indx)
+	return nil
+}
+
 func (c *SignedBeaconBlockHeze) SizeSSZ() int {
 	size := 100
 	if c.Block == nil {
@@ -3013,6 +3496,101 @@ func (c *SignedInclusionList) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 		return fmt.Errorf("Message: %w", err)
 	}
 	// Field 1: Signature
+	if len(c.Signature) != 96 {
+		return ssz.ErrBytesLength
+	}
+	hh.PutBytes(c.Signature)
+	hh.Merkleize(indx)
+	return nil
+}
+
+func (c *SignedPQKeyRegistration) SizeSSZ() int {
+	size := 2580
+
+	return size
+}
+
+func (c *SignedPQKeyRegistration) MarshalSSZ() ([]byte, error) {
+	buf := make([]byte, c.SizeSSZ())
+	return c.MarshalSSZTo(buf[:0])
+}
+
+func (c *SignedPQKeyRegistration) MarshalSSZTo(dst []byte) ([]byte, error) {
+	var err error
+
+	// Field 0: Message
+	if c.Message == nil {
+		c.Message = new(PQKeyRegistration)
+	}
+	if dst, err = c.Message.MarshalSSZTo(dst); err != nil {
+		return nil, fmt.Errorf("Message: %w", err)
+	}
+
+	// Field 1: Possession
+	if len(c.Possession) != 2404 {
+		return nil, ssz.ErrBytesLength
+	}
+	dst = append(dst, c.Possession...)
+
+	// Field 2: Signature
+	if len(c.Signature) != 96 {
+		return nil, ssz.ErrBytesLength
+	}
+	dst = append(dst, c.Signature...)
+
+	return dst, err
+}
+
+func (c *SignedPQKeyRegistration) UnmarshalSSZ(buf []byte) error {
+	var err error
+	size := uint64(len(buf))
+	if size != 2580 {
+		return ssz.ErrSize
+	}
+
+	sszSlice0 := buf[0:80]      // c.Message
+	sszSlice1 := buf[80:2484]   // c.Possession
+	sszSlice2 := buf[2484:2580] // c.Signature
+
+	// Field 0: Message
+	c.Message = new(PQKeyRegistration)
+	if err = c.Message.UnmarshalSSZ(sszSlice0); err != nil {
+		return fmt.Errorf("Message: %w", err)
+	}
+
+	// Field 1: Possession
+	c.Possession = make([]byte, 0, 2404)
+	c.Possession = append(c.Possession, sszSlice1...)
+
+	// Field 2: Signature
+	c.Signature = make([]byte, 0, 96)
+	c.Signature = append(c.Signature, sszSlice2...)
+	return err
+}
+
+func (c *SignedPQKeyRegistration) HashTreeRoot() ([32]byte, error) {
+	hh := ssz.DefaultHasherPool.Get()
+	if err := c.HashTreeRootWith(hh); err != nil {
+		ssz.DefaultHasherPool.Put(hh)
+		return [32]byte{}, err
+	}
+	root, err := hh.HashRoot()
+	ssz.DefaultHasherPool.Put(hh)
+	return root, err
+}
+
+func (c *SignedPQKeyRegistration) HashTreeRootWith(hh *ssz.Hasher) (err error) {
+	indx := hh.Index()
+	// Field 0: Message
+	if err := c.Message.HashTreeRootWith(hh); err != nil {
+		return fmt.Errorf("Message: %w", err)
+	}
+	// Field 1: Possession
+	if len(c.Possession) != 2404 {
+		return ssz.ErrBytesLength
+	}
+	hh.PutBytes(c.Possession)
+	// Field 2: Signature
 	if len(c.Signature) != 96 {
 		return ssz.ErrBytesLength
 	}

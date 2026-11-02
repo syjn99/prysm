@@ -134,6 +134,14 @@ func (f FieldIndex) String() string {
 		return "payloadExpectedWithdrawals"
 	case PTCWindow:
 		return "ptcWindow"
+	case PostQuantumKeyMaterial:
+		return "postQuantumKeyMaterial"
+	case PostQuantumKeyChangeEpochs:
+		return "postQuantumKeyChangeEpochs"
+	case BuilderPostQuantumKeyMaterial:
+		return "builderPostQuantumKeyMaterial"
+	case BuilderPostQuantumKeyChangeEpochs:
+		return "builderPostQuantumKeyChangeEpochs"
 	default:
 		return fmt.Sprintf("unknown field index number: %d", f)
 	}
@@ -235,6 +243,14 @@ func (f FieldIndex) RealPosition() int {
 		return 44
 	case PTCWindow:
 		return 45
+	case PostQuantumKeyMaterial:
+		return 46
+	case PostQuantumKeyChangeEpochs:
+		return 47
+	case BuilderPostQuantumKeyMaterial:
+		return 48
+	case BuilderPostQuantumKeyChangeEpochs:
+		return 49
 	default:
 		return -1
 	}
@@ -291,25 +307,29 @@ const (
 	NextWithdrawalIndex
 	NextWithdrawalValidatorIndex
 	HistoricalSummaries
-	DepositRequestsStartIndex     // Electra: EIP-6110
-	DepositBalanceToConsume       // Electra: EIP-7251
-	ExitBalanceToConsume          // Electra: EIP-7251
-	EarliestExitEpoch             // Electra: EIP-7251
-	ConsolidationBalanceToConsume // Electra: EIP-7251
-	EarliestConsolidationEpoch    // Electra: EIP-7251
-	PendingDeposits               // Electra: EIP-7251
-	PendingPartialWithdrawals     // Electra: EIP-7251
-	PendingConsolidations         // Electra: EIP-7251
-	ProposerLookahead             // Fulu: EIP-7917
-	Builders                      // Gloas: EIP-7732
-	NextWithdrawalBuilderIndex    // Gloas: EIP-7732
-	ExecutionPayloadAvailability  // Gloas: EIP-7732
-	BuilderPendingPayments        // Gloas: EIP-7732
-	BuilderPendingWithdrawals     // Gloas: EIP-7732
-	LatestBlockHash               // Gloas: EIP-7732
-	PayloadExpectedWithdrawals    // Gloas: EIP-7732
-	PTCWindow                     // Gloas: EIP-7732
-	LatestExecutionPayloadBidHeze // Heze: EIP-7805
+	DepositRequestsStartIndex         // Electra: EIP-6110
+	DepositBalanceToConsume           // Electra: EIP-7251
+	ExitBalanceToConsume              // Electra: EIP-7251
+	EarliestExitEpoch                 // Electra: EIP-7251
+	ConsolidationBalanceToConsume     // Electra: EIP-7251
+	EarliestConsolidationEpoch        // Electra: EIP-7251
+	PendingDeposits                   // Electra: EIP-7251
+	PendingPartialWithdrawals         // Electra: EIP-7251
+	PendingConsolidations             // Electra: EIP-7251
+	ProposerLookahead                 // Fulu: EIP-7917
+	Builders                          // Gloas: EIP-7732
+	NextWithdrawalBuilderIndex        // Gloas: EIP-7732
+	ExecutionPayloadAvailability      // Gloas: EIP-7732
+	BuilderPendingPayments            // Gloas: EIP-7732
+	BuilderPendingWithdrawals         // Gloas: EIP-7732
+	LatestBlockHash                   // Gloas: EIP-7732
+	PayloadExpectedWithdrawals        // Gloas: EIP-7732
+	PTCWindow                         // Gloas: EIP-7732
+	LatestExecutionPayloadBidHeze     // Heze: EIP-7805
+	PostQuantumKeyMaterial            // Heze: EIP-8450
+	PostQuantumKeyChangeEpochs        // Heze: EIP-8450
+	BuilderPostQuantumKeyMaterial     // Heze: EIP-8450
+	BuilderPostQuantumKeyChangeEpochs // Heze: EIP-8450
 )
 
 // Enumerator keeps track of the number of states created since the node's start.

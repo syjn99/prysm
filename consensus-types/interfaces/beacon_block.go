@@ -73,6 +73,7 @@ type ReadOnlyBeaconBlockBody interface {
 	SignedExecutionPayloadBid() (ROSignedExecutionPayloadBid, error)
 	ExecutionPayloadBid() (ROExecutionPayloadBid, error)
 	ParentExecutionRequests() (*enginev1.ExecutionRequestsGloas, error)
+	PQKeyRegistrations() ([]*ethpb.SignedPQKeyRegistration, error)
 }
 
 type SignedBeaconBlock interface {

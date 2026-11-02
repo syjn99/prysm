@@ -44,7 +44,7 @@ const (
 	electraSharedFieldRefCount   = 10
 	fuluSharedFieldRefCount      = 11
 	gloasSharedFieldRefCount     = 13 // Fulu 11 + Builders, BuilderPendingWithdrawals, PTCWindow - LatestExecutionPayloadHeaderDeneb
-	hezeSharedFieldRefCount      = 13
+	hezeSharedFieldRefCount      = 17 // Gloas 13 + the four EIP-8450 post-quantum key lists
 )
 
 // Container is the set of per-fork beacon state containers that New and
@@ -862,6 +862,10 @@ func newHeze(st *ethpb.BeaconStateHeze) (state.BeaconState, error) {
 		latestBlockHash:               st.LatestBlockHash,
 		payloadExpectedWithdrawals:    st.PayloadExpectedWithdrawals,
 		ptcWindow:                     st.PtcWindow,
+		pqKeyMaterial:                 st.PostQuantumKeyMaterial,
+		pqKeyChangeEpochs:             st.PostQuantumKeyChangeEpochs,
+		builderPQKeyMaterial:          st.BuilderPostQuantumKeyMaterial,
+		builderPQKeyChangeEpochs:      st.BuilderPostQuantumKeyChangeEpochs,
 		dirtyFields:                   make(map[types.FieldIndex]bool, fieldCount),
 		dirtyIndices:                  make(map[types.FieldIndex][]uint64, fieldCount),
 		stateFieldLeaves:              make(map[types.FieldIndex]*fieldtrie.FieldTrie, len(fieldMap)),
@@ -904,9 +908,13 @@ func newHeze(st *ethpb.BeaconStateHeze) (state.BeaconState, error) {
 	b.sharedFieldReferences[types.PendingPartialWithdrawals] = stateutil.NewRef(1)
 	b.sharedFieldReferences[types.PendingConsolidations] = stateutil.NewRef(1)
 	b.sharedFieldReferences[types.ProposerLookahead] = stateutil.NewRef(1)
-	b.sharedFieldReferences[types.Builders] = stateutil.NewRef(1)                  // New in Gloas.
-	b.sharedFieldReferences[types.BuilderPendingWithdrawals] = stateutil.NewRef(1) // New in Gloas.
-	b.sharedFieldReferences[types.PTCWindow] = stateutil.NewRef(1)                 // New in Gloas.
+	b.sharedFieldReferences[types.Builders] = stateutil.NewRef(1)                          // New in Gloas.
+	b.sharedFieldReferences[types.BuilderPendingWithdrawals] = stateutil.NewRef(1)         // New in Gloas.
+	b.sharedFieldReferences[types.PTCWindow] = stateutil.NewRef(1)                         // New in Gloas.
+	b.sharedFieldReferences[types.PostQuantumKeyMaterial] = stateutil.NewRef(1)            // New in EIP-8450.
+	b.sharedFieldReferences[types.PostQuantumKeyChangeEpochs] = stateutil.NewRef(1)        // New in EIP-8450.
+	b.sharedFieldReferences[types.BuilderPostQuantumKeyMaterial] = stateutil.NewRef(1)     // New in EIP-8450.
+	b.sharedFieldReferences[types.BuilderPostQuantumKeyChangeEpochs] = stateutil.NewRef(1) // New in EIP-8450.
 
 	state.Count.Inc()
 	// Finalizer runs when dst is being destroyed in garbage collection.
@@ -981,6 +989,10 @@ func (b *BeaconState) Copy() state.BeaconState {
 		pendingPartialWithdrawals:  b.pendingPartialWithdrawals,
 		pendingConsolidations:      b.pendingConsolidations,
 		builders:                   b.builders,
+		pqKeyMaterial:              b.pqKeyMaterial,
+		pqKeyChangeEpochs:          b.pqKeyChangeEpochs,
+		builderPQKeyMaterial:       b.builderPQKeyMaterial,
+		builderPQKeyChangeEpochs:   b.builderPQKeyChangeEpochs,
 
 		// Everything else, too small to be concerned about, constant size.
 		genesisValidatorsRoot:               b.genesisValidatorsRoot,
@@ -1533,6 +1545,15 @@ func (b *BeaconState) rootSelector(ctx context.Context, field types.FieldIndex) 
 		return stateutil.PayloadExpectedWithdrawalsRoot(b.version, b.payloadExpectedWithdrawals)
 	case types.PTCWindow:
 		return stateutil.PTCWindowRoot(b.ptcWindow)
+	// ponytail: full progressive rehash of the list when dirty; move to a field trie if it shows in profiles.
+	case types.PostQuantumKeyMaterial:
+		return ssz.SliceRootProgressive(b.pqKeyMaterial)
+	case types.PostQuantumKeyChangeEpochs:
+		return stateutil.EpochListRoot(b.pqKeyChangeEpochs)
+	case types.BuilderPostQuantumKeyMaterial:
+		return ssz.SliceRootProgressive(b.builderPQKeyMaterial)
+	case types.BuilderPostQuantumKeyChangeEpochs:
+		return stateutil.EpochListRoot(b.builderPQKeyChangeEpochs)
 	}
 	return [32]byte{}, errors.New("invalid field index provided")
 }

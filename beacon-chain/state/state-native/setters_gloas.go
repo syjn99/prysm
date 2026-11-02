@@ -463,6 +463,13 @@ func (b *BeaconState) addBuilderFromDepositAtEpoch(pubkey [fieldparams.BLSPubkey
 	b.builders = builders
 
 	b.markFieldAsDirty(types.Builders)
+
+	// EIP-8450: reset the post-quantum key entry, including on a reused index.
+	if b.version >= version.Heze {
+		if err := b.setPQKeyEntryLockFree(index.ToValidatorIndex(), emptyPQKeyMaterial, depositEpoch); err != nil {
+			return 0, err
+		}
+	}
 	return index, nil
 }
 

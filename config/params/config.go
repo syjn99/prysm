@@ -354,6 +354,7 @@ type BeaconChainConfig struct {
 	MaxRequestInclusionList              uint64        `yaml:"MAX_REQUEST_INCLUSION_LIST" spec:"true"`                // MaxRequestInclusionList is the maximum number of inclusion lists in a single request.
 	MinSlotsForInclusionListsRequests    uint64        `yaml:"MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS" spec:"true"`    // MinSlotsForInclusionListsRequests is the minimum number of slots the node will keep inclusion lists for.
 	MaxTransactionsBytesPerInclusionList uint64        `yaml:"MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST" spec:"true"` // MaxTransactionsBytesPerInclusionList bounds the total size in bytes of the transactions in an inclusion list.
+	MaxPQKeyRegistrations                uint64        `yaml:"MAX_PQ_KEY_REGISTRATIONS"`                              // MaxPQKeyRegistrations is the maximum number of post-quantum key registrations per block (EIP-8450).
 
 	// Networking Specific Parameters
 	MaxPayloadSize                  uint64          `yaml:"MAX_PAYLOAD_SIZE" spec:"true"`                   // MAX_PAYLOAD_SIZE is the maximum allowed size of uncompressed payload in gossip messages and rpc chunks.

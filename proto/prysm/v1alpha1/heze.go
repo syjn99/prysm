@@ -80,9 +80,40 @@ func copyBeaconBlockBodyHeze(body *BeaconBlockBodyHeze) *BeaconBlockBodyHeze {
 		SignedExecutionPayloadBid: body.SignedExecutionPayloadBid.Copy(),
 		PayloadAttestations:       copyPayloadAttestations(body.PayloadAttestations),
 		ParentExecutionRequests:   CopyExecutionRequestsGloas(body.ParentExecutionRequests),
+		PqKeyRegistrations:        CopySlice(body.PqKeyRegistrations),
 	}
 	if body.SyncAggregate != nil {
 		copied.SyncAggregate = body.SyncAggregate.Copy()
 	}
 	return copied
+}
+
+// Copy creates a deep copy of PQKeyMaterial.
+func (k *PQKeyMaterial) Copy() *PQKeyMaterial {
+	if k == nil {
+		return nil
+	}
+	return &PQKeyMaterial{
+		XmssPublicKey: bytesutil.SafeCopyBytes(k.XmssPublicKey),
+		VrfRoot:       bytesutil.SafeCopyBytes(k.VrfRoot),
+	}
+}
+
+// Copy creates a deep copy of SignedPQKeyRegistration.
+func (r *SignedPQKeyRegistration) Copy() *SignedPQKeyRegistration {
+	if r == nil {
+		return nil
+	}
+	cp := &SignedPQKeyRegistration{
+		Possession: bytesutil.SafeCopyBytes(r.Possession),
+		Signature:  bytesutil.SafeCopyBytes(r.Signature),
+	}
+	if r.Message != nil {
+		cp.Message = &PQKeyRegistration{
+			Index:               r.Message.Index,
+			KeyMaterial:         r.Message.KeyMaterial.Copy(),
+			PreviousChangeEpoch: r.Message.PreviousChangeEpoch,
+		}
+	}
+	return cp
 }

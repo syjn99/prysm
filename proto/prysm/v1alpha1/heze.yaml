@@ -10,6 +10,7 @@ types:
       VoluntaryExits:        {type: "ProgressiveList"}
       BlsToExecutionChanges: {type: "ProgressiveList"}
       PayloadAttestations:   {type: "ProgressiveList"}
+      PqKeyRegistrations:    {type: "ProgressiveList"}
   - name: "BeaconBlockContentsHeze"
   - name: "BeaconBlockHeze"
   - name: "BeaconStateHeze"
@@ -26,11 +27,19 @@ types:
       Builders:                   {type: "ProgressiveList"}
       BuilderPendingWithdrawals:  {type: "ProgressiveList"}
       PayloadExpectedWithdrawals: {type: "ProgressiveList"}
+      PostQuantumKeyMaterial:            {type: "ProgressiveList"}
+      PostQuantumKeyChangeEpochs:        {type: "ProgressiveList"}
+      BuilderPostQuantumKeyMaterial:     {type: "ProgressiveList"}
+      BuilderPostQuantumKeyChangeEpochs: {type: "ProgressiveList"}
   - name: "ExecutionPayloadBidHeze"
     progressive: {}
     fields:
       BlobKzgCommitments: {type: "ProgressiveList"}
   - name: "InclusionList"
+  - name: "PQKeyMaterial"
+  - name: "PQKeyPossession"
+  - name: "PQKeyRegistration"
   - name: "SignedBeaconBlockHeze"
   - name: "SignedExecutionPayloadBidHeze"
   - name: "SignedInclusionList"
+  - name: "SignedPQKeyRegistration"

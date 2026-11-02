@@ -144,6 +144,12 @@ func init() {
 	// Replace the LatestExecutionPayloadBid field with LatestExecutionPayloadBidHeze for Heze.
 	hezeAllFields := slices.Clone(gloasFields)
 	hezeAllFields[slices.Index(hezeAllFields, types.LatestExecutionPayloadBid)] = types.LatestExecutionPayloadBidHeze
+	hezeAllFields = append(hezeAllFields,
+		types.PostQuantumKeyMaterial,
+		types.PostQuantumKeyChangeEpochs,
+		types.BuilderPostQuantumKeyMaterial,
+		types.BuilderPostQuantumKeyChangeEpochs,
+	)
 	hezeProgressiveSchema, err = newProgressiveStateFieldsSchema(
 		hezeAllFields,
 		nil,
