@@ -23,7 +23,6 @@ go_test(
     name = "go_default_test",
     size = "medium",
     srcs = [
-        "helpers_test.go",
         "known_answer_test.go",
         "known_answer_vectors_test.go",
         "lean_vectors_test.go",
@@ -32,4 +31,8 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":go_default_library"],
+    deps = [
+        "//testing/assert:go_default_library",
+        "//testing/require:go_default_library",
+    ],
 )

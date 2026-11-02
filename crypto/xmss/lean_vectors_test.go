@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/OffchainLabs/prysm/v7/testing/assert"
+	"github.com/OffchainLabs/prysm/v7/testing/require"
 )
 
 // testdata/lean_vectors.json holds vectors computed by the compiled Lean model:
@@ -38,12 +41,10 @@ type leanVectors struct {
 
 func loadLeanVectors(t *testing.T) *leanVectors {
 	b, err := os.ReadFile(filepath.Join("testdata", "lean_vectors.json"))
-	noError(t, err)
+	require.NoError(t, err)
 	var v leanVectors
-	noError(t, json.Unmarshal(b, &v))
-	if len(v.KeyGen) == 0 || len(v.Sign) == 0 || len(v.Verify) == 0 {
-		t.Fatal("empty Lean vectors")
-	}
+	require.NoError(t, json.Unmarshal(b, &v))
+	require.Equal(t, true, len(v.KeyGen) > 0 && len(v.Sign) > 0 && len(v.Verify) > 0, "empty Lean vectors")
 	return &v
 }
 
@@ -55,7 +56,7 @@ func TestLeanVectors(t *testing.T) {
 		for _, c := range v.KeyGen {
 			t.Run(c.Seed, func(t *testing.T) {
 				_, pk := KeyGen([seedLen]byte(fromHex(t, c.Seed)))
-				equalBytes(t, fromHex(t, c.PublicKey), pk[:])
+				assert.DeepEqual(t, fromHex(t, c.PublicKey), pk[:])
 			})
 		}
 	})
@@ -70,8 +71,8 @@ func TestLeanVectors(t *testing.T) {
 		for _, c := range v.Sign {
 			t.Run(fmt.Sprintf("%s/%d", c.Seed[:8], c.LeafIndex), func(t *testing.T) {
 				sig, err := Sign(SecretKey{Seed: [seedLen]byte(fromHex(t, c.Seed))}, c.LeafIndex, [messageLen]byte(fromHex(t, c.Message)))
-				noError(t, err)
-				equalBytes(t, fromHex(t, c.Signature), sig)
+				require.NoError(t, err)
+				assert.DeepEqual(t, fromHex(t, c.Signature), sig)
 			})
 		}
 	})
@@ -79,10 +80,10 @@ func TestLeanVectors(t *testing.T) {
 	t.Run("verify", func(t *testing.T) {
 		for i, c := range v.Verify {
 			t.Run(fmt.Sprintf("%d/%s/%d", c.SignCase, c.Target, c.Offset), func(t *testing.T) {
-				mustEqual(t, true, c.SignCase < len(v.Sign), "case %d", i)
+				require.Equal(t, true, c.SignCase < len(v.Sign), "case %d", i)
 				s := v.Sign[c.SignCase]
 				pk, ok := publicKeys[s.Seed]
-				mustEqual(t, true, ok, "no public key for seed %s", s.Seed)
+				require.Equal(t, true, ok, "no public key for seed %s", s.Seed)
 				msg := [messageLen]byte(fromHex(t, s.Message))
 				sig := fromHex(t, s.Signature)
 				switch c.Target {
@@ -96,7 +97,7 @@ func TestLeanVectors(t *testing.T) {
 				default:
 					t.Fatalf("unknown target %q", c.Target)
 				}
-				equal(t, c.Valid, Verify(pk, msg, sig))
+				assert.Equal(t, c.Valid, Verify(pk, msg, sig))
 			})
 		}
 	})

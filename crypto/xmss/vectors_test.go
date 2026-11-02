@@ -8,6 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/OffchainLabs/prysm/v7/testing/assert"
+	"github.com/OffchainLabs/prysm/v7/testing/require"
 )
 
 // The data-driven cases of EthLib tests/cryptography/xmss, at ethereum/EthLib
@@ -25,7 +28,7 @@ func parseCase(t *testing.T, data []byte) map[string]string {
 	prefix := ""
 	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		key, value, ok := strings.Cut(strings.TrimRight(line, " \r"), ":")
-		mustEqual(t, true, ok, "bad line %q", line)
+		require.Equal(t, true, ok, "bad line %q", line)
 		value = strings.TrimSpace(value)
 		indented := strings.HasPrefix(key, " ")
 		key = strings.TrimSpace(key)
@@ -44,14 +47,12 @@ func parseCase(t *testing.T, data []byte) map[string]string {
 // loadCases returns the parsed data.yaml file of each case of one operation, by case name.
 func loadCases(t *testing.T, op string) map[string]map[string]string {
 	files, err := filepath.Glob(filepath.Join("testdata", op, "*", "data.yaml"))
-	noError(t, err)
-	if len(files) == 0 {
-		t.Fatalf("no %s cases", op)
-	}
+	require.NoError(t, err)
+	require.NotEqual(t, 0, len(files), "no %s cases", op)
 	cases := make(map[string]map[string]string, len(files))
 	for _, f := range files {
 		b, err := os.ReadFile(f)
-		noError(t, err)
+		require.NoError(t, err)
 		cases[filepath.Base(filepath.Dir(f))] = parseCase(t, b)
 	}
 	return cases
@@ -59,33 +60,33 @@ func loadCases(t *testing.T, op string) map[string]map[string]string {
 
 func prefixedHex(t testing.TB, s string) []byte {
 	t.Helper()
-	mustEqual(t, true, strings.HasPrefix(s, "0x"), "missing 0x prefix: %s", s)
+	require.Equal(t, true, strings.HasPrefix(s, "0x"), "missing 0x prefix: %s", s)
 	b, err := hex.DecodeString(s[2:])
-	noError(t, err)
+	require.NoError(t, err)
 	return b
 }
 
 func TestParseCase(t *testing.T) {
 	got := parseCase(t, []byte("input:\n  seed: '0x01'\n  leaf_index: 7\noutput: null\n"))
-	equal(t, 3, len(got))
-	equal(t, "0x01", got["input.seed"])
-	equal(t, "7", got["input.leaf_index"])
-	equal(t, "null", got["output"])
+	assert.Equal(t, 3, len(got))
+	assert.Equal(t, "0x01", got["input.seed"])
+	assert.Equal(t, "7", got["input.leaf_index"])
+	assert.Equal(t, "null", got["output"])
 }
 
 func TestVectorChecksums(t *testing.T) {
 	sums, err := os.ReadFile(filepath.Join("testdata", "SHA256SUMS"))
-	noError(t, err)
+	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(string(sums)), "\n")
-	mustEqual(t, 30, len(lines))
+	require.Equal(t, 30, len(lines))
 	for _, line := range lines {
 		want, name, ok := strings.Cut(line, "  ")
-		mustEqual(t, true, ok, "bad line: %s", line)
+		require.Equal(t, true, ok, "bad line: %s", line)
 		t.Run(name, func(t *testing.T) {
 			b, err := os.ReadFile(filepath.Join("testdata", filepath.FromSlash(name)))
-			noError(t, err)
+			require.NoError(t, err)
 			got := sha256.Sum256(b)
-			equal(t, want, hex.EncodeToString(got[:]))
+			assert.Equal(t, want, hex.EncodeToString(got[:]))
 		})
 	}
 }
@@ -96,11 +97,11 @@ func TestKeyGenVectors(t *testing.T) {
 			seed := prefixedHex(t, c["input.seed"])
 			if len(seed) != seedLen {
 				// KeyGen takes a [32]byte, so the type rejects any other length.
-				equal(t, "null", c["output"])
+				assert.Equal(t, "null", c["output"])
 				return
 			}
 			_, pk := KeyGen([seedLen]byte(seed))
-			equalBytes(t, prefixedHex(t, c["output"]), pk[:])
+			assert.DeepEqual(t, prefixedHex(t, c["output"]), pk[:])
 		})
 	}
 }
@@ -112,14 +113,14 @@ func TestSignVectors(t *testing.T) {
 			msg := prefixedHex(t, c["input.message"])
 			if len(seed) != seedLen || len(msg) != messageLen {
 				// Sign takes a [32]byte seed and message, so the type rejects any other length.
-				equal(t, "null", c["output"])
+				assert.Equal(t, "null", c["output"])
 				return
 			}
 			idx, err := strconv.ParseUint(c["input.leaf_index"], 10, 32)
-			noError(t, err)
+			require.NoError(t, err)
 			sig, err := Sign(SecretKey{Seed: [seedLen]byte(seed)}, uint32(idx), [messageLen]byte(msg))
-			noError(t, err)
-			equalBytes(t, prefixedHex(t, c["output"]), sig)
+			require.NoError(t, err)
+			assert.DeepEqual(t, prefixedHex(t, c["output"]), sig)
 		})
 	}
 }
@@ -132,19 +133,19 @@ func TestVerifyVectors(t *testing.T) {
 			sig := prefixedHex(t, c["input.signature"])
 			if len(pk) != pubKeySize || len(msg) != messageLen {
 				// Verify takes a [32]byte key and message, so the type rejects any other length.
-				equal(t, "null", c["output"])
+				assert.Equal(t, "null", c["output"])
 				return
 			}
 			got := Verify([pubKeySize]byte(pk), [messageLen]byte(msg), sig)
 			if c["output"] == "null" {
 				// A rejected input is an ordinary false.
-				mustEqual(t, true, len(sig) != sigSize)
-				equal(t, false, got)
+				require.Equal(t, true, len(sig) != sigSize)
+				assert.Equal(t, false, got)
 				return
 			}
 			want, err := strconv.ParseBool(c["output"])
-			noError(t, err)
-			equal(t, want, got)
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
 		})
 	}
 }

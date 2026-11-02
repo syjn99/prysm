@@ -3,6 +3,9 @@ package xmss
 import (
 	"encoding/hex"
 	"testing"
+
+	"github.com/OffchainLabs/prysm/v7/testing/assert"
+	"github.com/OffchainLabs/prysm/v7/testing/require"
 )
 
 // The known answer of EthLib/Cryptography/Proofs/Xmss/KnownAnswer*.lean:
@@ -33,19 +36,19 @@ func kaMessage() [messageLen]byte {
 
 func fromHex(t testing.TB, s string) []byte {
 	b, err := hex.DecodeString(s)
-	noError(t, err)
+	require.NoError(t, err)
 	return b
 }
 
 func hexDigest(t testing.TB, s string) digest {
 	b := fromHex(t, s)
-	mustEqual(t, digestLen, len(b))
+	require.Equal(t, digestLen, len(b))
 	return digest(b)
 }
 
 func hexDigests(t testing.TB, s string) [numChains]digest {
 	b := fromHex(t, s)
-	mustEqual(t, numChains*digestLen, len(b))
+	require.Equal(t, numChains*digestLen, len(b))
 	var out [numChains]digest
 	for i := range out {
 		copy(out[i][:], b[i*digestLen:])
@@ -55,7 +58,7 @@ func hexDigests(t testing.TB, s string) [numChains]digest {
 
 func hexPath(t testing.TB, s string) [layerHeight]digest {
 	b := fromHex(t, s)
-	mustEqual(t, layerHeight*digestLen, len(b))
+	require.Equal(t, layerHeight*digestLen, len(b))
 	var out [layerHeight]digest
 	for i := range out {
 		copy(out[i][:], b[i*digestLen:])
@@ -100,37 +103,37 @@ func TestKnownAnswer(t *testing.T) {
 
 	t.Run("encode_publicKey", func(t *testing.T) {
 		enc := encodePublicKey(&pk)
-		equalBytes(t, fromHex(t, kaPublicKeyBytes), enc[:])
+		assert.DeepEqual(t, fromHex(t, kaPublicKeyBytes), enc[:])
 	})
 	t.Run("encode_signature", func(t *testing.T) {
-		equalBytes(t, fromHex(t, kaSignatureBytes), encodeSignature(&sig))
+		assert.DeepEqual(t, fromHex(t, kaSignatureBytes), encodeSignature(&sig))
 	})
 	t.Run("decode_publicKey", func(t *testing.T) {
 		got := decodePublicKey([pubKeySize]byte(fromHex(t, kaPublicKeyBytes)))
-		equal(t, pk, got)
+		assert.Equal(t, pk, got)
 	})
 	t.Run("decode_signature", func(t *testing.T) {
 		got, ok := decodeSignature(fromHex(t, kaSignatureBytes))
-		mustEqual(t, true, ok)
-		equal(t, sig, got)
+		require.Equal(t, true, ok)
+		assert.Equal(t, sig, got)
 	})
 	t.Run("schemeSeed_known_answer", func(t *testing.T) {
 		s := schemeSeed(h, &seed)
-		equalBytes(t, fromHex(t, kaSchemeSeed), s[:])
+		assert.DeepEqual(t, fromHex(t, kaSchemeSeed), s[:])
 	})
 	t.Run("publicParam_known_answer", func(t *testing.T) {
 		s := schemeSeed(h, &seed)
-		equal(t, pk.publicParam, publicParamOf(h, &s))
+		assert.Equal(t, pk.publicParam, publicParamOf(h, &s))
 	})
 	t.Run("verify_wrong_message", func(t *testing.T) {
 		m := msg
 		m[0] = 0
-		equal(t, false, verify(h, &pk, &m, &sig))
+		assert.Equal(t, false, verify(h, &pk, &m, &sig))
 	})
 	t.Run("verify_wrong_leafIndex", func(t *testing.T) {
 		s := sig
 		s.leafIndex = kaLeafIndex + 1
-		equal(t, false, verify(h, &pk, &msg, &s))
+		assert.Equal(t, false, verify(h, &pk, &msg, &s))
 	})
 }
 
@@ -144,24 +147,24 @@ func testLayerKnownAnswer(t *testing.T, l layer, e uint32, msg []byte, sig *laye
 
 	t.Run(name+"Codeword_known_answer", func(t *testing.T) {
 		x, ok := codewordOf(messageDigest(h, pp, l, e, msg, &sig.randomizer))
-		mustEqual(t, true, ok)
-		equal(t, wantCodeword, x)
+		require.Equal(t, true, ok)
+		assert.Equal(t, wantCodeword, x)
 	})
 	t.Run(name+"Chains", func(t *testing.T) {
 		for i := range numChains {
-			equal(t, ends[i], chainEnd(h, pp, l, e, wantCodeword, &sig.chainValues, i), "chain %d", i)
+			assert.Equal(t, ends[i], chainEnd(h, pp, l, e, wantCodeword, &sig.chainValues, i), "chain %d", i)
 		}
 	})
 	t.Run(name+"Leaf_known_answer", func(t *testing.T) {
-		equal(t, leaf, otsLeafHash(h, pp, l, e, &ends))
+		assert.Equal(t, leaf, otsLeafHash(h, pp, l, e, &ends))
 	})
 	t.Run(name+"Fold_known_answer", func(t *testing.T) {
-		equal(t, wantRoot, fold(h, pp, l, e, leaf, &sig.path))
+		assert.Equal(t, wantRoot, fold(h, pp, l, e, leaf, &sig.path))
 	})
 	t.Run(name+"LayerRoot_known_answer", func(t *testing.T) {
 		root, ok := layerRoot(h, pp, l, e, msg, sig)
-		mustEqual(t, true, ok)
-		equal(t, wantRoot, root)
+		require.Equal(t, true, ok)
+		assert.Equal(t, wantRoot, root)
 	})
 }
 
@@ -192,15 +195,15 @@ func testKeyKnownAnswer(t *testing.T, l layer, e uint32, startsHex, endsHex, lea
 	ends := hexDigests(t, endsHex)
 
 	t.Run(name+"Starts_known_answer", func(t *testing.T) {
-		equal(t, starts, chainStarts(h, pp, &s, l, e))
+		assert.Equal(t, starts, chainStarts(h, pp, &s, l, e))
 	})
 	t.Run(name+"KeyChains", func(t *testing.T) {
 		for i := range numChains {
-			equal(t, ends[i], chain(h, pp, l, e, i, 0, chainLength-1, starts[i]), "chain %d", i)
+			assert.Equal(t, ends[i], chain(h, pp, l, e, i, 0, chainLength-1, starts[i]), "chain %d", i)
 		}
 	})
 	t.Run(name+"PublicLeaf_known_answer", func(t *testing.T) {
-		equal(t, hexDigest(t, leafHex), otsPublicLeaf(h, pp, &s, l, e))
+		assert.Equal(t, hexDigest(t, leafHex), otsPublicLeaf(h, pp, &s, l, e))
 	})
 }
 
@@ -224,19 +227,19 @@ func TestKnownAnswerVerify(t *testing.T) {
 	tampered.path[15] = digest{}
 
 	t.Run("verify_signature", func(t *testing.T) {
-		equal(t, true, verify(h, &pk, &msg, &sig))
+		assert.Equal(t, true, verify(h, &pk, &msg, &sig))
 	})
 	t.Run("verify_known_answer", func(t *testing.T) {
 		pkBytes := [pubKeySize]byte(fromHex(t, kaPublicKeyBytes))
-		equal(t, true, Verify(pkBytes, msg, fromHex(t, kaSignatureBytes)))
+		assert.Equal(t, true, Verify(pkBytes, msg, fromHex(t, kaSignatureBytes)))
 	})
 	t.Run("tamperedFold_known_answer", func(t *testing.T) {
 		root := fold(h, &pk.publicParam, topLayer, bottomTree(kaLeafIndex), hexDigest(t, kaTopLeaf), &tampered.path)
-		equal(t, hexDigest(t, kaTamperedRoot), root)
+		assert.Equal(t, hexDigest(t, kaTamperedRoot), root)
 	})
 	t.Run("verify_tampered_path", func(t *testing.T) {
 		s := sig
 		s.top = tampered
-		equal(t, false, verify(h, &pk, &msg, &s))
+		assert.Equal(t, false, verify(h, &pk, &msg, &s))
 	})
 }
