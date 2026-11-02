@@ -2,15 +2,25 @@ load("@prysm//tools/go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "go_default_library",
-    srcs = ["upgrade.go"],
+    srcs = [
+        "pq_key_registration.go",
+        "upgrade.go",
+    ],
     importpath = "github.com/OffchainLabs/prysm/v7/beacon-chain/core/heze",
     visibility = ["//visibility:public"],
     deps = [
+        "//beacon-chain/core/signing:go_default_library",
         "//beacon-chain/core/time:go_default_library",
         "//beacon-chain/state:go_default_library",
         "//beacon-chain/state/state-native:go_default_library",
+        "//config/fieldparams:go_default_library",
         "//config/params:go_default_library",
+        "//consensus-types/interfaces:go_default_library",
+        "//consensus-types/primitives:go_default_library",
+        "//crypto/xmss:go_default_library",
+        "//encoding/bytesutil:go_default_library",
         "//proto/prysm/v1alpha1:go_default_library",
+        "//runtime/version:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@com_github_prysmaticlabs_go_bitfield//:go_default_library",
     ],
@@ -18,12 +28,19 @@ go_library(
 
 go_test(
     name = "go_default_test",
-    srcs = ["upgrade_test.go"],
+    srcs = [
+        "pq_key_registration_test.go",
+        "upgrade_test.go",
+    ],
     deps = [
         ":go_default_library",
         "//beacon-chain/core/time:go_default_library",
+        "//beacon-chain/state:go_default_library",
         "//beacon-chain/state/state-native:go_default_library",
         "//config/params:go_default_library",
+        "//consensus-types/primitives:go_default_library",
+        "//crypto/bls:go_default_library",
+        "//crypto/xmss:go_default_library",
         "//proto/prysm/v1alpha1:go_default_library",
         "//runtime/version:go_default_library",
         "//testing/require:go_default_library",

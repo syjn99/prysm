@@ -205,6 +205,8 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	DomainBuilderRequestAuth:          bytesutil.Uint32ToBytes4(0x0B000001),
 	DomainBuilderDeposit:              bytesutil.Uint32ToBytes4(0x0E000000),
 	DomainInclusionListCommittee:      bytesutil.Uint32ToBytes4(0x10000000),
+	DomainPQKeyRegistration:           bytesutil.Uint32ToBytes4(0x12000000),
+	DomainPQKeyPossession:             bytesutil.Uint32ToBytes4(0x13000000),
 
 	// Prysm constants.
 	GenesisValidatorsRoot:          [32]byte{75, 54, 61, 185, 78, 40, 97, 32, 215, 110, 185, 5, 52, 15, 221, 78, 84, 191, 233, 240, 107, 243, 63, 246, 207, 90, 210, 127, 81, 27, 254, 149},
@@ -388,6 +390,7 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	InclusionListDueBPS:                  primitives.BP(6667),
 	MaxRequestInclusionList:              16,
 	MaxPQKeyRegistrations:                8,
+	MinPQKeyChangeDelay:                  256,
 	MinSlotsForInclusionListsRequests:    1,
 	MaxTransactionsBytesPerInclusionList: 8192,
 

@@ -527,6 +527,20 @@ func VerifyOperationLengths(_ context.Context, state state.BeaconState, b interf
 		}
 	}
 
+	if body.Version() >= version.Heze {
+		registrations, err := body.PQKeyRegistrations()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get pq key registrations")
+		}
+		if uint64(len(registrations)) > params.BeaconConfig().MaxPQKeyRegistrations {
+			return nil, fmt.Errorf(
+				"number of pq key registrations (%d) in block body exceeds allowed threshold of %d",
+				len(registrations),
+				params.BeaconConfig().MaxPQKeyRegistrations,
+			)
+		}
+	}
+
 	eth1Data := state.Eth1Data()
 	if eth1Data == nil {
 		return nil, errors.New("nil eth1data in state")

@@ -167,6 +167,8 @@ type BeaconChainConfig struct {
 	DomainBuilderRequestAuth          [4]byte `yaml:"DOMAIN_BUILDER_REQUEST_AUTH" spec:"true"`           // DomainBuilderRequestAuth defines the BLS signature domain for builder bid request authentication.
 	DomainBuilderDeposit              [4]byte `yaml:"DOMAIN_BUILDER_DEPOSIT" spec:"true"`                // DomainBuilderDeposit defines the BLS signature domain for builder deposit requests (EIP-8282).
 	DomainInclusionListCommittee      [4]byte `yaml:"DOMAIN_INCLUSION_LIST_COMMITTEE" spec:"true"`       // DomainInclusionListCommittee defines the BLS signature domain for inclusion list committee members (EIP-7805).
+	DomainPQKeyRegistration           [4]byte `yaml:"DOMAIN_PQ_KEY_REGISTRATION"`                        // DomainPQKeyRegistration is the BLS domain of a post-quantum key registration (EIP-8450).
+	DomainPQKeyPossession             [4]byte `yaml:"DOMAIN_PQ_KEY_POSSESSION"`                          // DomainPQKeyPossession is the leanXMSS proof-of-possession domain (EIP-8450).
 
 	// Prysm constants.
 	GenesisValidatorsRoot          [32]byte        // GenesisValidatorsRoot is the root hash of the genesis validators.
@@ -350,11 +352,12 @@ type BeaconChainConfig struct {
 	MaxBuilderExitRequestsPerPayload     uint64 `yaml:"MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD" spec:"true"`      // MaxBuilderExitRequestsPerPayload is the maximum number of builder exit requests in each payload (EIP-8282).
 
 	// Values introduced in Heze upgrade
-	InclusionListDueBPS                  primitives.BP `yaml:"INCLUSION_LIST_DUE_BPS" spec:"true"`                    // InclusionListDueBPS defines the inclusion list due time in basis points of the slot.
-	MaxRequestInclusionList              uint64        `yaml:"MAX_REQUEST_INCLUSION_LIST" spec:"true"`                // MaxRequestInclusionList is the maximum number of inclusion lists in a single request.
-	MinSlotsForInclusionListsRequests    uint64        `yaml:"MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS" spec:"true"`    // MinSlotsForInclusionListsRequests is the minimum number of slots the node will keep inclusion lists for.
-	MaxTransactionsBytesPerInclusionList uint64        `yaml:"MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST" spec:"true"` // MaxTransactionsBytesPerInclusionList bounds the total size in bytes of the transactions in an inclusion list.
-	MaxPQKeyRegistrations                uint64        `yaml:"MAX_PQ_KEY_REGISTRATIONS"`                              // MaxPQKeyRegistrations is the maximum number of post-quantum key registrations per block (EIP-8450).
+	InclusionListDueBPS                  primitives.BP    `yaml:"INCLUSION_LIST_DUE_BPS" spec:"true"`                    // InclusionListDueBPS defines the inclusion list due time in basis points of the slot.
+	MaxRequestInclusionList              uint64           `yaml:"MAX_REQUEST_INCLUSION_LIST" spec:"true"`                // MaxRequestInclusionList is the maximum number of inclusion lists in a single request.
+	MinSlotsForInclusionListsRequests    uint64           `yaml:"MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS" spec:"true"`    // MinSlotsForInclusionListsRequests is the minimum number of slots the node will keep inclusion lists for.
+	MaxTransactionsBytesPerInclusionList uint64           `yaml:"MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST" spec:"true"` // MaxTransactionsBytesPerInclusionList bounds the total size in bytes of the transactions in an inclusion list.
+	MaxPQKeyRegistrations                uint64           `yaml:"MAX_PQ_KEY_REGISTRATIONS"`                              // MaxPQKeyRegistrations is the maximum number of post-quantum key registrations per block (EIP-8450).
+	MinPQKeyChangeDelay                  primitives.Epoch `yaml:"MIN_PQ_KEY_CHANGE_DELAY"`                               // MinPQKeyChangeDelay is the minimum number of epochs between two changes of the keys of an index (EIP-8450).
 
 	// Networking Specific Parameters
 	MaxPayloadSize                  uint64          `yaml:"MAX_PAYLOAD_SIZE" spec:"true"`                   // MAX_PAYLOAD_SIZE is the maximum allowed size of uncompressed payload in gossip messages and rpc chunks.

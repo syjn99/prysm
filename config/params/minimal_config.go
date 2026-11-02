@@ -112,6 +112,7 @@ func MinimalSpecConfig() *BeaconChainConfig {
 	minimalConfig.GloasForkEpoch = minimalConfig.FarFutureEpoch
 	minimalConfig.HezeForkVersion = []byte{8, 0, 0, 1}
 	minimalConfig.HezeForkEpoch = minimalConfig.FarFutureEpoch
+	minimalConfig.MinPQKeyChangeDelay = 8
 
 	minimalConfig.SyncCommitteeSize = 32
 	minimalConfig.InactivityScoreBias = 4

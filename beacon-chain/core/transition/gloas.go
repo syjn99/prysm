@@ -9,6 +9,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/epoch/precompute"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/gloas"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/helpers"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/heze"
 	v "github.com/OffchainLabs/prysm/v7/beacon-chain/core/validators"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/state"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/interfaces"
@@ -59,6 +60,11 @@ import (
 //	    # [New in Gloas:EIP7732]
 //	    for_ops(body.payload_attestations, process_payload_attestation)
 //	</spec>
+//
+// EIP-8450 (Heze) appends:
+//
+//	assert len(body.pq_key_registrations) <= MAX_PQ_KEY_REGISTRATIONS
+//	for_ops(body.pq_key_registrations, process_pq_key_registration)
 func gloasOperations(ctx context.Context, st state.BeaconState, block interfaces.ReadOnlyBeaconBlock, parentSlot primitives.Slot) (state.BeaconState, error) {
 	ctx, span := trace.StartSpan(ctx, "core.state.gloasOperations")
 	defer span.End()
@@ -101,6 +107,10 @@ func gloasOperations(ctx context.Context, st state.BeaconState, block interfaces
 	}
 	if err := gloas.ProcessPayloadAttestations(ctx, st, bb); err != nil {
 		return nil, errors.Wrap(ErrProcessPayloadAttestationsFailed, err.Error())
+	}
+	// [New in EIP-8450] Registrations run last, after every other operation of the block.
+	if err := heze.ProcessPQKeyRegistrations(st, bb); err != nil {
+		return nil, errors.Wrap(ErrProcessPQKeyRegistrationsFailed, err.Error())
 	}
 
 	return st, nil
