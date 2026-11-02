@@ -74,10 +74,13 @@ const (
 	seenSyncMsgSize             = 1000 // Maximum of 512 sync committee members, 1000 is a safe amount.
 	seenSyncContributionSize    = 512  // Maximum of SYNC_COMMITTEE_SIZE as specified by the spec.
 	seenExitSize                = 100
-	seenPQKeyRegistrationSize   = 10000
-	seenProposerSlashingSize    = 100
-	badBlockSize                = 1000
-	syncMetricsInterval         = 10 * time.Second
+	// ponytail: LRU capacity eviction of first-seen EIP-8450 pairs. The EIP clears a record only once its
+	// registration is invalid against the finalized state; after 10,000 newer valid registrations an
+	// unincluded pair can be accepted once more. Prune by finalized state if that shows up on the network.
+	seenPQKeyRegistrationSize = 10000
+	seenProposerSlashingSize  = 100
+	badBlockSize              = 1000
+	syncMetricsInterval       = 10 * time.Second
 )
 
 var (
