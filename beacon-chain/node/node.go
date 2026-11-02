@@ -1063,6 +1063,7 @@ func (b *BeaconNode) registerRPCService(router *http.ServeMux) error {
 		ExitPool:                         b.exitPool,
 		SlashingsPool:                    b.slashingsPool,
 		BLSChangesPool:                   b.blsToExecPool,
+		PQKeyPool:                        b.pqKeyPool,
 		SyncCommitteeObjectPool:          b.syncCommitteePool,
 		ExecutionChainService:            web3Service,
 		ExecutionChainInfoFetcher:        web3Service,

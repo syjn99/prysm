@@ -711,6 +711,11 @@ func (vs *Server) handlePostBlockStateError(ctx context.Context, block interface
 		if err := block.SetAttesterSlashings([]ethpb.AttSlashing{}); err != nil {
 			return nil, errors.Wrap(err, "could not set attester slashings")
 		}
+	case errors.Is(err, transition.ErrProcessPQKeyRegistrationsFailed):
+		log.WithError(err).Warn("Retrying block construction without pq key registrations")
+		if err := block.SetPQKeyRegistrations([]*ethpb.SignedPQKeyRegistration{}); err != nil {
+			return nil, errors.Wrap(err, "could not set pq key registrations")
+		}
 	case errors.Is(err, transition.ErrProcessVoluntaryExitsFailed):
 		log.WithError(err).Warn("Retrying block construction without voluntary exits")
 		block.SetVoluntaryExits([]*ethpb.SignedVoluntaryExit{})

@@ -21,6 +21,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/payloadattestation"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/synccommittee"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
@@ -87,6 +88,7 @@ type Server struct {
 	ExecutionEngineCaller            execution.EngineCaller
 	BlockBuilder                     builder.BlockBuilder
 	BLSChangesPool                   blstoexec.PoolManager
+	PQKeyPool                        pqkeys.PoolManager
 	ClockWaiter                      startup.ClockWaiter
 	CoreService                      *core.Service
 	AttestationStateFetcher          blockchain.AttestationStateFetcher

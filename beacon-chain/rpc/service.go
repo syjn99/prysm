@@ -23,6 +23,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/payloadattestation"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/synccommittee"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
@@ -108,6 +109,7 @@ type Config struct {
 	SlashingsPool                    slashings.PoolManager
 	SyncCommitteeObjectPool          synccommittee.Pool
 	BLSChangesPool                   blstoexec.PoolManager
+	PQKeyPool                        pqkeys.PoolManager
 	SyncService                      chainSync.Checker
 	Broadcaster                      p2p.Broadcaster
 	PeersFetcher                     p2p.PeersProvider
@@ -266,6 +268,7 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		BeaconDB:                         s.cfg.BeaconDB,
 		BlockBuilder:                     s.cfg.BlockBuilder,
 		BLSChangesPool:                   s.cfg.BLSChangesPool,
+		PQKeyPool:                        s.cfg.PQKeyPool,
 		ClockWaiter:                      s.cfg.ClockWaiter,
 		CoreService:                      coreService,
 		ProposerPreferencesCache:         s.cfg.ProposerPreferencesCache,

@@ -34,6 +34,7 @@ func (vs *Server) buildBlockGloas(ctx context.Context, sBlk interfaces.SignedBea
 		if err := vs.setParentExecutionRequests(ctx, sBlk, head, parentFull); err != nil {
 			log.WithError(err).Error("Could not set parent execution requests")
 		}
+		vs.setPQKeyRegistrations(sBlk, head)
 	})
 
 	// The circuit breaker gate is applied here rather than at bid selection so the builder-API
