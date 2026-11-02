@@ -16,7 +16,7 @@ import (
 // PoolManager keeps pending post-quantum key registrations for block inclusion.
 type PoolManager interface {
 	PendingRegistrations() []*ethpb.SignedPQKeyRegistration
-	RegistrationsForInclusion(st state.BeaconState) ([]*ethpb.SignedPQKeyRegistration, error)
+	RegistrationsForInclusion(st state.BeaconState) []*ethpb.SignedPQKeyRegistration
 	InsertRegistration(r *ethpb.SignedPQKeyRegistration)
 	MarkIncluded(r *ethpb.SignedPQKeyRegistration)
 }
@@ -60,10 +60,10 @@ func (p *Pool) PendingRegistrations() []*ethpb.SignedPQKeyRegistration {
 
 // RegistrationsForInclusion returns up to MAX_PQ_KEY_REGISTRATIONS registrations that apply, in order, on a copy of st.
 // It drops registrations whose previous change epoch no longer matches the state, since they can never apply.
-func (p *Pool) RegistrationsForInclusion(st state.BeaconState) ([]*ethpb.SignedPQKeyRegistration, error) {
+func (p *Pool) RegistrationsForInclusion(st state.BeaconState) []*ethpb.SignedPQKeyRegistration {
 	pending := p.PendingRegistrations()
 	if len(pending) == 0 {
-		return nil, nil
+		return nil
 	}
 	sim := st.Copy()
 
@@ -85,7 +85,7 @@ func (p *Pool) RegistrationsForInclusion(st state.BeaconState) ([]*ethpb.SignedP
 		}
 		result = append(result, r)
 	}
-	return result, nil
+	return result
 }
 
 // InsertRegistration adds a registration unless one is pending for the same pair.

@@ -52,8 +52,7 @@ func TestPool(t *testing.T) {
 		for _, r := range []*ethpb.SignedPQKeyRegistration{r0, r1, r2} {
 			p.InsertRegistration(r)
 		}
-		got, err := p.RegistrationsForInclusion(st)
-		require.NoError(t, err)
+		got := p.RegistrationsForInclusion(st)
 		require.DeepEqual(t, []*ethpb.SignedPQKeyRegistration{r0, r1}, got)
 		require.Equal(t, 3, len(p.PendingRegistrations()))
 
@@ -70,8 +69,7 @@ func TestPool(t *testing.T) {
 		p.InsertRegistration(util.SignPQKeyRegistration(t, st, keys[3], &ethpb.PQKeyRegistration{
 			Index: 3, KeyMaterial: r0.Message.KeyMaterial, PreviousChangeEpoch: far,
 		}, r0.Possession))
-		got, err := p.RegistrationsForInclusion(st)
-		require.NoError(t, err)
+		got := p.RegistrationsForInclusion(st)
 		require.DeepEqual(t, []*ethpb.SignedPQKeyRegistration{r0}, got)
 	})
 
@@ -81,8 +79,7 @@ func TestPool(t *testing.T) {
 		require.NoError(t, heze.ProcessPQKeyRegistration(applied, r0))
 		p.InsertRegistration(r0)
 		p.InsertRegistration(r1)
-		got, err := p.RegistrationsForInclusion(applied)
-		require.NoError(t, err)
+		got := p.RegistrationsForInclusion(applied)
 		require.DeepEqual(t, []*ethpb.SignedPQKeyRegistration{r1}, got)
 		require.DeepEqual(t, []*ethpb.SignedPQKeyRegistration{r1}, p.PendingRegistrations())
 	})

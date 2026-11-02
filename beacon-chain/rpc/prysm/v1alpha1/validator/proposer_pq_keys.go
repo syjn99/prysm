@@ -14,11 +14,7 @@ func (vs *Server) setPQKeyRegistrations(sBlk interfaces.SignedBeaconBlock, head 
 	if sBlk.Version() < version.Heze || vs.PQKeyPool == nil {
 		return
 	}
-	registrations, err := vs.PQKeyPool.RegistrationsForInclusion(head)
-	if err != nil {
-		log.WithError(err).Error("Could not get pq key registrations")
-		registrations = nil
-	}
+	registrations := vs.PQKeyPool.RegistrationsForInclusion(head)
 	if registrations == nil {
 		registrations = []*ethpb.SignedPQKeyRegistration{}
 	}
