@@ -137,6 +137,17 @@ func TestPQKeyRegistrationsPool(t *testing.T) {
 		require.DeepSSZEqual(t, release, pending[0])
 	})
 
+	t.Run("reports a full pool and does not broadcast", func(t *testing.T) {
+		s, b := newServer(&blockchainmock.ChainService{State: st})
+		s.PQKeyPool = fullPool{s.PQKeyPool}
+		body, err := json.Marshal([]*structs.SignedPQKeyRegistration{structs.SignedPQKeyRegistrationFromConsensus(valid)})
+		require.NoError(t, err)
+		w := post(t, s, body)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		require.StringContains(t, "pool is full", w.Body.String())
+		require.Equal(t, false, b.BroadcastCalled.Load())
+	})
+
 	t.Run("rejects an empty request", func(t *testing.T) {
 		s, _ := newServer(&blockchainmock.ChainService{State: st})
 		require.Equal(t, http.StatusBadRequest, post(t, s, []byte("[]")).Code)
@@ -151,3 +162,8 @@ func TestPQKeyRegistrationsPool(t *testing.T) {
 		require.Equal(t, false, b.BroadcastCalled.Load())
 	})
 }
+
+// fullPool is a pool that refuses every registration.
+type fullPool struct{ pqkeys.PoolManager }
+
+func (fullPool) InsertRegistration(*ethpb.SignedPQKeyRegistration) bool { return false }

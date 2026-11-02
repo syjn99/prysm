@@ -18,7 +18,7 @@ import (
 type PoolManager interface {
 	PendingRegistrations() []*ethpb.SignedPQKeyRegistration
 	RegistrationsForInclusion(st state.BeaconState) []*ethpb.SignedPQKeyRegistration
-	InsertRegistration(r *ethpb.SignedPQKeyRegistration)
+	InsertRegistration(r *ethpb.SignedPQKeyRegistration) bool
 	MarkIncluded(r *ethpb.SignedPQKeyRegistration)
 }
 
@@ -32,16 +32,20 @@ func keyOf(r *ethpb.SignedPQKeyRegistration) key {
 	return key{index: r.Message.Index, previousEpoch: r.Message.PreviousChangeEpoch}
 }
 
+// MaxPendingRegistrations caps the pool: 16,384 registrations of 2,580 bytes, about 42 MB,
+// or 2,048 full blocks of backlog.
+const MaxPendingRegistrations = 1 << 14
+
 // Pool is a PoolManager. The latest registration inserted for a pair wins.
-// ponytail: unbounded map; gossip validation bounds it to one entry per (index, change epoch). Add a size cap if REST spam shows up.
 type Pool struct {
-	lock sync.RWMutex
-	m    map[key]*ethpb.SignedPQKeyRegistration
+	lock  sync.RWMutex
+	m     map[key]*ethpb.SignedPQKeyRegistration
+	limit int
 }
 
-// NewPool returns an empty pool.
+// NewPool returns an empty pool that holds at most MaxPendingRegistrations registrations.
 func NewPool() *Pool {
-	return &Pool{m: make(map[key]*ethpb.SignedPQKeyRegistration)}
+	return &Pool{m: make(map[key]*ethpb.SignedPQKeyRegistration), limit: MaxPendingRegistrations}
 }
 
 // PendingRegistrations returns every pending registration, ordered by index and previous change epoch.
@@ -87,15 +91,21 @@ func (p *Pool) RegistrationsForInclusion(st state.BeaconState) []*ethpb.SignedPQ
 	return result
 }
 
-// InsertRegistration adds a registration. It replaces a pending registration for the same pair, so a
-// newer valid registration takes the place of one that became invalid. Callers validate r first.
-func (p *Pool) InsertRegistration(r *ethpb.SignedPQKeyRegistration) {
+// InsertRegistration adds a registration and reports whether the pool holds it. It replaces a pending
+// registration for the same pair, so a newer valid registration takes the place of one that became
+// invalid. A full pool refuses a new pair. Callers validate r first.
+func (p *Pool) InsertRegistration(r *ethpb.SignedPQKeyRegistration) bool {
 	if r == nil || r.Message == nil {
-		return
+		return false
 	}
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	p.m[keyOf(r)] = r
+	k := keyOf(r)
+	if _, ok := p.m[k]; !ok && len(p.m) >= p.limit {
+		return false
+	}
+	p.m[k] = r
+	return true
 }
 
 // remove deletes r, unless a newer registration has replaced it for its pair.

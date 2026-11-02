@@ -75,7 +75,10 @@ func (s *Server) SubmitPQKeyRegistrations(w http.ResponseWriter, r *http.Request
 			failures = append(failures, &server.IndexedError{Index: i, Message: "Invalid PQ key registration: " + err.Error()})
 			continue
 		}
-		s.PQKeyPool.InsertRegistration(reg)
+		if !s.PQKeyPool.InsertRegistration(reg) {
+			failures = append(failures, &server.IndexedError{Index: i, Message: "PQ key registration pool is full"})
+			continue
+		}
 		if err := s.Broadcaster.Broadcast(ctx, reg); err != nil {
 			failures = append(failures, &server.IndexedError{Index: i, Message: "Could not broadcast PQ key registration: " + err.Error()})
 		}

@@ -125,6 +125,17 @@ func TestPool(t *testing.T) {
 		require.DeepSSZEqual(t, r1, got[0])
 	})
 
+	t.Run("refuses new pairs when full", func(t *testing.T) {
+		p := NewPool()
+		p.limit = 2
+		require.Equal(t, true, p.InsertRegistration(r0))
+		require.Equal(t, true, p.InsertRegistration(r1))
+		require.Equal(t, false, p.InsertRegistration(r2))
+		// A pair already in the pool can still be replaced.
+		require.Equal(t, true, p.InsertRegistration(r1))
+		require.Equal(t, 2, len(p.PendingRegistrations()))
+	})
+
 	t.Run("drops registrations that can never apply", func(t *testing.T) {
 		p := NewPool()
 		applied := st.Copy()
