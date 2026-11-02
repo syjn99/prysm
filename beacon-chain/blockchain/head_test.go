@@ -13,6 +13,7 @@ import (
 	testDB "github.com/OffchainLabs/prysm/v7/beacon-chain/db/testing"
 	forkchoicetypes "github.com/OffchainLabs/prysm/v7/beacon-chain/forkchoice/types"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/config/params"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/blocks"
 	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
@@ -995,4 +996,54 @@ func TestUpdateHead_noSavedChanges(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, headRoot, newRoot)
 	require.Equal(t, headRoot, service.headRoot())
+}
+
+func TestSaveOrphanedOps_PQKeyRegistrations(t *testing.T) {
+	ctx := t.Context()
+	beaconDB := testDB.SetupDB(t)
+	service := setupBeaconChain(t, beaconDB)
+	service.cfg.PQKeyPool = pqkeys.NewPool()
+	service.SetGenesisTime(time.Now().Add(-2 * params.BeaconConfig().SlotDuration()))
+
+	// 0 -- 1 (with a registration)
+	//  \-2
+	reg := &ethpb.SignedPQKeyRegistration{
+		Message: &ethpb.PQKeyRegistration{
+			Index:               3,
+			KeyMaterial:         &ethpb.PQKeyMaterial{XmssPublicKey: bytes.Repeat([]byte{1}, 32), VrfRoot: make([]byte, 32)},
+			PreviousChangeEpoch: params.BeaconConfig().FarFutureEpoch,
+		},
+		Possession: make([]byte, 2404),
+		Signature:  make([]byte, 96),
+	}
+	blkG := util.NewBeaconBlockHeze()
+	rG, err := blkG.Block.HashTreeRoot()
+	require.NoError(t, err)
+	blk1 := util.NewBeaconBlockHeze()
+	blk1.Block.Slot = 1
+	blk1.Block.ParentRoot = rG[:]
+	blk1.Block.Body.PqKeyRegistrations = []*ethpb.SignedPQKeyRegistration{reg}
+	r1, err := blk1.Block.HashTreeRoot()
+	require.NoError(t, err)
+	blk2 := util.NewBeaconBlockHeze()
+	blk2.Block.Slot = 2
+	blk2.Block.ParentRoot = rG[:]
+	r2, err := blk2.Block.HashTreeRoot()
+	require.NoError(t, err)
+
+	ojc := &ethpb.Checkpoint{Root: params.BeaconConfig().ZeroHash[:]}
+	ofc := &ethpb.Checkpoint{Root: params.BeaconConfig().ZeroHash[:]}
+	for _, blk := range []*ethpb.SignedBeaconBlockHeze{blkG, blk1, blk2} {
+		r, err := blk.Block.HashTreeRoot()
+		require.NoError(t, err)
+		st, blkRoot, err := prepareForkchoiceState(ctx, blk.Block.Slot, r, bytesutil.ToBytes32(blk.Block.ParentRoot), [32]byte{}, ojc, ofc)
+		require.NoError(t, err)
+		require.NoError(t, service.cfg.ForkChoiceStore.InsertNode(ctx, st, blkRoot))
+		util.SaveBlock(t, ctx, beaconDB, blk)
+	}
+
+	require.NoError(t, service.saveOrphanedOperations(ctx, r1, r2))
+	pending := service.cfg.PQKeyPool.PendingRegistrations()
+	require.Equal(t, 1, len(pending))
+	require.DeepSSZEqual(t, reg, pending[0])
 }

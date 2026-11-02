@@ -550,6 +550,15 @@ func (s *Service) saveOrphanedOperations(ctx context.Context, orphanedRoot [32]b
 				s.cfg.BLSToExecPool.InsertBLSToExecChange(c)
 			}
 		}
+		if orphanedBlk.Version() >= version.Heze && s.cfg.PQKeyPool != nil {
+			registrations, err := orphanedBlk.Block().Body().PQKeyRegistrations()
+			if err != nil {
+				return errors.Wrap(err, "could not get pq key registrations")
+			}
+			for _, r := range registrations {
+				s.cfg.PQKeyPool.InsertRegistration(r)
+			}
+		}
 		parentRoot := orphanedBlk.Block().ParentRoot()
 		orphanedRoot = bytesutil.ToBytes32(parentRoot[:])
 	}
