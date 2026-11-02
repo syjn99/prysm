@@ -28,8 +28,9 @@ func (s *Server) ListPQKeyRegistrations(w http.ResponseWriter, r *http.Request) 
 }
 
 // SubmitPQKeyRegistrations validates EIP-8450 post-quantum key registrations against the head state,
-// adds the valid ones to the pool and broadcasts them. The registrations of one request are applied
-// in order, so a request cannot register one leanXMSS key twice.
+// adds the valid ones to the pool and broadcasts them. Each registration is checked on its own against
+// the head state, as peers check it on gossip, so the node never broadcasts a registration that is valid
+// only after another registration of the same request. The pool resolves conflicts at block production.
 func (s *Server) SubmitPQKeyRegistrations(w http.ResponseWriter, r *http.Request) {
 	ctx, span := trace.StartSpan(r.Context(), "beacon.SubmitPQKeyRegistrations")
 	defer span.End()
@@ -49,7 +50,7 @@ func (s *Server) SubmitPQKeyRegistrations(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	headState, err := s.ChainInfoFetcher.HeadState(ctx)
+	headState, err := s.ChainInfoFetcher.HeadStateReadOnly(ctx)
 	if err != nil {
 		httputil.HandleError(w, "Could not get head state: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -58,7 +59,6 @@ func (s *Server) SubmitPQKeyRegistrations(w http.ResponseWriter, r *http.Request
 		httputil.HandleError(w, "PQ key registrations are not supported before Heze", http.StatusBadRequest)
 		return
 	}
-	sim := headState.Copy()
 
 	var failures []*server.IndexedError
 	for i, item := range req {
@@ -71,7 +71,7 @@ func (s *Server) SubmitPQKeyRegistrations(w http.ResponseWriter, r *http.Request
 			failures = append(failures, &server.IndexedError{Index: i, Message: "Unable to decode SignedPQKeyRegistration: " + err.Error()})
 			continue
 		}
-		if err := heze.ProcessPQKeyRegistration(sim, reg); err != nil {
+		if err := heze.ValidatePQKeyRegistration(headState, reg); err != nil {
 			failures = append(failures, &server.IndexedError{Index: i, Message: "Invalid PQ key registration: " + err.Error()})
 			continue
 		}

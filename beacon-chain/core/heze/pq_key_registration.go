@@ -80,6 +80,14 @@ func ProcessPQKeyRegistrations(st state.BeaconState, body interfaces.ReadOnlyBea
 //	    entries[index] = key_material
 //	    change_epochs[index] = get_current_epoch(state)
 func ProcessPQKeyRegistration(st state.BeaconState, signed *ethpb.SignedPQKeyRegistration) error {
+	if err := ValidatePQKeyRegistration(st, signed); err != nil {
+		return err
+	}
+	return st.SetPQKeyEntry(signed.Message.Index, signed.Message.KeyMaterial, time.CurrentEpoch(st))
+}
+
+// ValidatePQKeyRegistration runs every assert of process_pq_key_registration against st without changing it.
+func ValidatePQKeyRegistration(st state.ReadOnlyBeaconState, signed *ethpb.SignedPQKeyRegistration) error {
 	if signed == nil || signed.Message == nil || signed.Message.KeyMaterial == nil {
 		return errors.New("nil pq key registration")
 	}
@@ -129,8 +137,7 @@ func ProcessPQKeyRegistration(st state.BeaconState, signed *ethpb.SignedPQKeyReg
 	if !IsValidPQPossessionProof(st, pubkey, keyMaterial.XmssPublicKey, signed.Possession) {
 		return errors.New("invalid proof of possession")
 	}
-
-	return st.SetPQKeyEntry(registration.Index, keyMaterial, currentEpoch)
+	return nil
 }
 
 // RegistrantPubkey checks that the registrant of a registration may register keys,
