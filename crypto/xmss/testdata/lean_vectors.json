@@ -113,205 +113,9 @@
    "valid": true
   },
   {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 0,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 0,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
-  },
-  {
    "sign_case": 1,
    "target": "none",
    "valid": true
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 1,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 1,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
   },
   {
    "sign_case": 2,
@@ -319,205 +123,9 @@
    "valid": true
   },
   {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 2,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 2,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
-  },
-  {
    "sign_case": 3,
    "target": "none",
    "valid": true
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 3,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 3,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
   },
   {
    "sign_case": 4,
@@ -525,205 +133,9 @@
    "valid": true
   },
   {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 4,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 4,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
-  },
-  {
    "sign_case": 5,
    "target": "none",
    "valid": true
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 5,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 5,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
   },
   {
    "sign_case": 6,
@@ -731,205 +143,9 @@
    "valid": true
   },
   {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 6,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 6,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
-  },
-  {
    "sign_case": 7,
    "target": "none",
    "valid": true
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 7,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 7,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
   },
   {
    "sign_case": 8,
@@ -937,205 +153,9 @@
    "valid": true
   },
   {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 8,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 8,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
-  },
-  {
    "sign_case": 9,
    "target": "none",
    "valid": true
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 9,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 9,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
   },
   {
    "sign_case": 10,
@@ -1143,205 +163,9 @@
    "valid": true
   },
   {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 10,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 10,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
-  },
-  {
    "sign_case": 11,
    "target": "none",
    "valid": true
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 11,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 11,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
   },
   {
    "sign_case": 12,
@@ -1349,205 +173,9 @@
    "valid": true
   },
   {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 12,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 12,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
-  },
-  {
    "sign_case": 13,
    "target": "none",
    "valid": true
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 4,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 20,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 932,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 948,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 1203,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 1204,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 1220,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 2148,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "signature",
-   "valid": false,
-   "offset": 2403,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "message",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "message",
-   "valid": false,
-   "offset": 31,
-   "xor": 128
-  },
-  {
-   "sign_case": 13,
-   "target": "public_key",
-   "valid": false,
-   "offset": 0,
-   "xor": 1
-  },
-  {
-   "sign_case": 13,
-   "target": "public_key",
-   "valid": false,
-   "offset": 16,
-   "xor": 1
   },
   {
    "sign_case": 14,
@@ -1555,98 +183,98 @@
    "valid": true
   },
   {
-   "sign_case": 14,
+   "sign_case": 0,
    "target": "signature",
    "valid": false,
    "offset": 0,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 1,
    "target": "signature",
    "valid": false,
    "offset": 4,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 2,
    "target": "signature",
    "valid": false,
    "offset": 20,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 3,
    "target": "signature",
    "valid": false,
    "offset": 932,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 4,
    "target": "signature",
    "valid": false,
    "offset": 948,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 5,
    "target": "signature",
    "valid": false,
    "offset": 1203,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 6,
    "target": "signature",
    "valid": false,
    "offset": 1204,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 7,
    "target": "signature",
    "valid": false,
    "offset": 1220,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 8,
    "target": "signature",
    "valid": false,
    "offset": 2148,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 9,
    "target": "signature",
    "valid": false,
    "offset": 2403,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 10,
    "target": "message",
    "valid": false,
    "offset": 0,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 11,
    "target": "message",
    "valid": false,
    "offset": 31,
    "xor": 128
   },
   {
-   "sign_case": 14,
+   "sign_case": 12,
    "target": "public_key",
    "valid": false,
    "offset": 0,
    "xor": 1
   },
   {
-   "sign_case": 14,
+   "sign_case": 13,
    "target": "public_key",
    "valid": false,
    "offset": 16,

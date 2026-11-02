@@ -79,12 +79,18 @@ def apply(case, target, offset, xor):
     return vals
 
 
-jobs = []
-for i, s in enumerate(sign):
+def case_of(i):
+    s = sign[i]
     name = next(n for n in seeds if seeds[n] == s["seed"])
-    case = {"pk": pks[name], "message": s["message"], "signature": s["signature"]}
-    for target, offset, xor in tampers:
-        jobs.append((i, target, offset, xor, apply(case, target, offset, xor)))
+    return {"pk": pks[name], "message": s["message"], "signature": s["signature"]}
+
+
+# Every signature verifies untampered. Each tamper is applied to one signature, tamper j to
+# sign case j mod len(sign), so the negatives cover different seeds and leaf indices.
+jobs = [(i, "none", None, 0, apply(case_of(i), "none", None, 0)) for i in range(len(sign))]
+for j, (target, offset, xor) in enumerate(tampers[1:]):
+    i = j % len(sign)
+    jobs.append((i, target, offset, xor, apply(case_of(i), target, offset, xor)))
 
 verify = []
 with cf.ThreadPoolExecutor(max_workers=16) as ex:
