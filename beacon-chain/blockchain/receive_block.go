@@ -490,6 +490,9 @@ func (s *Service) prunePostBlockOperationPools(ctx context.Context, blk interfac
 	if err := s.markIncludedBlockBLSToExecChanges(blk.Block()); err != nil {
 		return errors.Wrap(err, "could not process BLSToExecutionChanges")
 	}
+	if err := s.markIncludedPQKeyRegistrations(blk.Block()); err != nil {
+		return err
+	}
 
 	// Mark slashings as seen so we don't include same ones in future blocks.
 	for _, as := range blk.Block().Body().AttesterSlashings() {
@@ -512,6 +515,21 @@ func (s *Service) markIncludedBlockBLSToExecChanges(headBlock interfaces.ReadOnl
 	}
 	for _, change := range changes {
 		s.cfg.BLSToExecPool.MarkIncluded(change)
+	}
+	return nil
+}
+
+// markIncludedPQKeyRegistrations drops the block's EIP-8450 registrations from the pool.
+func (s *Service) markIncludedPQKeyRegistrations(headBlock interfaces.ReadOnlyBeaconBlock) error {
+	if headBlock.Version() < version.Heze || s.cfg.PQKeyPool == nil {
+		return nil
+	}
+	registrations, err := headBlock.Body().PQKeyRegistrations()
+	if err != nil {
+		return errors.Wrap(err, "could not get pq key registrations")
+	}
+	for _, r := range registrations {
+		s.cfg.PQKeyPool.MarkIncluded(r)
 	}
 	return nil
 }

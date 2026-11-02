@@ -38,6 +38,8 @@ const (
 	GossipContributionAndProofMessage = "sync_committee_contribution_and_proof"
 	// GossipBlsToExecutionChangeMessage is the name for the bls to execution change message type.
 	GossipBlsToExecutionChangeMessage = "bls_to_execution_change"
+	// GossipPQKeyRegistrationMessage is the name for the EIP-8450 post-quantum key registration message type.
+	GossipPQKeyRegistrationMessage = "pq_key_registration"
 	// GossipBlobSidecarMessage is the name for the blob sidecar message type.
 	GossipBlobSidecarMessage = "blob_sidecar"
 	// GossipLightClientFinalityUpdateMessage is the name for the light client finality update message type.
@@ -75,6 +77,8 @@ const (
 	SyncContributionAndProofSubnetTopicFormat = GossipProtocolAndDigest + GossipContributionAndProofMessage
 	// BlsToExecutionChangeSubnetTopicFormat is the topic format for the bls to execution change subnet.
 	BlsToExecutionChangeSubnetTopicFormat = GossipProtocolAndDigest + GossipBlsToExecutionChangeMessage
+	// PQKeyRegistrationTopicFormat is the topic format for EIP-8450 post-quantum key registrations.
+	PQKeyRegistrationTopicFormat = GossipProtocolAndDigest + GossipPQKeyRegistrationMessage
 	// BlobSubnetTopicFormat is the topic format for the blob subnet.
 	BlobSubnetTopicFormat = GossipProtocolAndDigest + GossipBlobSidecarMessage + "_%d"
 	// LightClientFinalityUpdateTopicFormat is the topic format for the light client finality update subnet.
@@ -157,7 +161,7 @@ func (s *Service) allTopics() []topic {
 	cfg := params.BeaconConfig()
 	// bellatrix: no special topics; electra: blobs topics handled all together
 	genesis, altair, capella := cfg.GenesisEpoch, cfg.AltairForkEpoch, cfg.CapellaForkEpoch
-	deneb, fulu, gloas, future := cfg.DenebForkEpoch, cfg.FuluForkEpoch, cfg.GloasForkEpoch, cfg.FarFutureEpoch
+	deneb, fulu, gloas, heze, future := cfg.DenebForkEpoch, cfg.FuluForkEpoch, cfg.GloasForkEpoch, cfg.HezeForkEpoch, cfg.FarFutureEpoch
 	// Templates are starter topics - they have a placeholder digest and the subnet is set to the maximum value
 	// for the subnet (see how this is used in allSubnetsBelow). These are not directly returned by the method,
 	// they are copied and modified for each digest where they apply based on the start and end epochs.
@@ -178,6 +182,7 @@ func (s *Service) allTopics() []topic {
 		newTopic(gloas, future, empty, GossipExecutionPayloadEnvelopeMessage),
 		newTopic(gloas, future, empty, GossipExecutionPayloadBidMessage),
 		newTopic(gloas, future, empty, GossipSignedProposerPreferencesMessage),
+		newTopic(heze, future, empty, GossipPQKeyRegistrationMessage),
 	}
 	last := params.GetNetworkScheduleEntry(genesis)
 	schedule := []params.NetworkScheduleEntry{last}

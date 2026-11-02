@@ -31,6 +31,7 @@ var gossipTopicMappings = map[string]func() proto.Message{
 	ExecutionPayloadEnvelopeTopicFormat:       func() proto.Message { return &ethpb.SignedExecutionPayloadEnvelope{} },
 	ExecutionPayloadBidTopicFormat:            func() proto.Message { return &ethpb.SignedExecutionPayloadBid{} },
 	SignedProposerPreferencesTopicFormat:      func() proto.Message { return &ethpb.SignedProposerPreferences{} },
+	PQKeyRegistrationTopicFormat:              func() proto.Message { return &ethpb.SignedPQKeyRegistration{} },
 }
 
 // GossipTopicMappings is a function to return the assigned data type

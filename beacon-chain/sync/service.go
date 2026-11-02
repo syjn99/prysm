@@ -26,6 +26,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/payloadattestation"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/synccommittee"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
@@ -73,6 +74,7 @@ const (
 	seenSyncMsgSize             = 1000 // Maximum of 512 sync committee members, 1000 is a safe amount.
 	seenSyncContributionSize    = 512  // Maximum of SYNC_COMMITTEE_SIZE as specified by the spec.
 	seenExitSize                = 100
+	seenPQKeyRegistrationSize   = 10000
 	seenProposerSlashingSize    = 100
 	badBlockSize                = 1000
 	syncMetricsInterval         = 10 * time.Second
@@ -103,6 +105,7 @@ type config struct {
 	slashingPool            slashings.PoolManager
 	syncCommsPool           synccommittee.Pool
 	blsToExecPool           blstoexec.PoolManager
+	pqKeyPool               pqkeys.PoolManager
 	chain                   blockchainService
 	initialSync             Checker
 	blockNotifier           blockfeed.Notifier
@@ -173,6 +176,7 @@ type Service struct {
 	seenUnAggregatedAttestationCache     *lru.Cache
 	seenExitLock                         sync.RWMutex
 	seenExitCache                        *lru.Cache
+	seenPQKeyRegistrationCache           *lru.Cache
 	seenProposerSlashingLock             sync.RWMutex
 	seenProposerSlashingCache            *lru.Cache
 	seenAttesterSlashingLock             sync.RWMutex
@@ -438,6 +442,7 @@ func (s *Service) initCaches() {
 	s.seenSyncContributionCache = lruwrpr.New(seenSyncContributionSize)
 	s.syncContributionBitsOverlapCache = lruwrpr.New(seenSyncContributionSize)
 	s.seenExitCache = lruwrpr.New(seenExitSize)
+	s.seenPQKeyRegistrationCache = lruwrpr.New(seenPQKeyRegistrationSize)
 	s.seenAttesterSlashingCache = make(map[uint64]bool)
 	s.seenProposerSlashingCache = lruwrpr.New(seenProposerSlashingSize)
 	s.badBlockCache = lruwrpr.New(badBlockSize)
