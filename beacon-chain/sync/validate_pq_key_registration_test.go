@@ -124,10 +124,12 @@ func TestValidatePQKeyRegistration(t *testing.T) {
 	})
 
 	t.Run("accepts one of several valid registrations for a pair validated at once", func(t *testing.T) {
-		regs := []*ethpb.SignedPQKeyRegistration{valid, sign(keys[0], 0, material(xpkB, 1), far, proofB)}
-		for _, seed := range []byte{0xc, 0xd} {
-			xpk, proof := util.PQPossessionProof(t, st, keys[0].PublicKey().Marshal(), [32]byte{seed}, 0)
-			regs = append(regs, sign(keys[0], 0, material(xpk, 1), far, proof))
+		// Four distinct valid registrations for one pair: two keys, each with two VRF roots.
+		regs := []*ethpb.SignedPQKeyRegistration{
+			valid,
+			sign(keys[0], 0, material(xpkA, 2), far, proofA),
+			sign(keys[0], 0, material(xpkB, 1), far, proofB),
+			sign(keys[0], 0, material(xpkB, 2), far, proofB),
 		}
 		for range 5 {
 			s := newService(st)
