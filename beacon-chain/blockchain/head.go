@@ -477,6 +477,21 @@ func (s *Service) headEpochTransition(newHeadSlot primitives.Slot, newHeadRoot [
 	return slots.ToEpoch(newHeadSlot) > slots.ToEpoch(parentSlot), nil
 }
 
+// saveOrphanedPQKeyRegistrations returns the EIP-8450 registrations of an orphaned block to the pool.
+func (s *Service) saveOrphanedPQKeyRegistrations(blk interfaces.ReadOnlySignedBeaconBlock) error {
+	if blk.Version() < version.Heze || s.cfg.PQKeyPool == nil {
+		return nil
+	}
+	registrations, err := blk.Block().Body().PQKeyRegistrations()
+	if err != nil {
+		return errors.Wrap(err, "could not get pq key registrations")
+	}
+	for _, r := range registrations {
+		s.cfg.PQKeyPool.InsertRegistration(r)
+	}
+	return nil
+}
+
 // This saves the Attestations and BLSToExecChanges between `orphanedRoot` and the common ancestor root that is derived using `newHeadRoot`.
 // It also filters out the attestations that is one epoch older as a defense so invalid attestations don't flow into the attestation pool.
 func (s *Service) saveOrphanedOperations(ctx context.Context, orphanedRoot [32]byte, newHeadRoot [32]byte) error {
@@ -497,10 +512,20 @@ func (s *Service) saveOrphanedOperations(ctx context.Context, orphanedRoot [32]b
 		if err != nil {
 			return err
 		}
-		// If the block is an epoch older, break out of the loop since we can't include atts anyway.
+		// EIP-8450 registrations do not expire, so recover them from every orphaned block.
+		if err := s.saveOrphanedPQKeyRegistrations(orphanedBlk); err != nil {
+			return err
+		}
+		// If the block is an epoch older, stop recovering the other operations since we can't include atts anyway.
 		// This prevents stuck within this for loop longer than necessary.
 		if orphanedBlk.Block().Slot()+params.BeaconConfig().SlotsPerEpoch <= s.CurrentSlot() {
-			break
+			if orphanedBlk.Version() < version.Heze {
+				break
+			}
+			// Keep walking to the common ancestor for the registrations of older Heze blocks.
+			parentRoot := orphanedBlk.Block().ParentRoot()
+			orphanedRoot = bytesutil.ToBytes32(parentRoot[:])
+			continue
 		}
 		for _, a := range orphanedBlk.Block().Body().Attestations() {
 			// if the attestation is one epoch older, it wouldn't been useful to save it.
@@ -548,15 +573,6 @@ func (s *Service) saveOrphanedOperations(ctx context.Context, orphanedRoot [32]b
 			}
 			for _, c := range changes {
 				s.cfg.BLSToExecPool.InsertBLSToExecChange(c)
-			}
-		}
-		if orphanedBlk.Version() >= version.Heze && s.cfg.PQKeyPool != nil {
-			registrations, err := orphanedBlk.Block().Body().PQKeyRegistrations()
-			if err != nil {
-				return errors.Wrap(err, "could not get pq key registrations")
-			}
-			for _, r := range registrations {
-				s.cfg.PQKeyPool.InsertRegistration(r)
 			}
 		}
 		parentRoot := orphanedBlk.Block().ParentRoot()
