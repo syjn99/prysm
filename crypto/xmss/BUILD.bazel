@@ -26,6 +26,7 @@ go_test(
         "helpers_test.go",
         "known_answer_test.go",
         "known_answer_vectors_test.go",
+        "lean_vectors_test.go",
         "vectors_test.go",
         "xmss_test.go",
     ],
