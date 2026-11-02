@@ -123,6 +123,16 @@ func TestValidatePQKeyRegistration(t *testing.T) {
 		require.Equal(t, pubsub.ValidationIgnore, got)
 	})
 
+	t.Run("an invalid registration does not take the first-seen record of its pair", func(t *testing.T) {
+		s := newService(st)
+		badSig := sign(keys[1], 0, material(xpkA, 1), far, proofA)
+		got, _ := s.validatePQKeyRegistrationMessage(t.Context(), badSig)
+		require.Equal(t, pubsub.ValidationReject, got)
+		got, err := s.validatePQKeyRegistrationMessage(t.Context(), valid)
+		require.NoError(t, err)
+		require.Equal(t, pubsub.ValidationAccept, got)
+	})
+
 	t.Run("accepts one of several valid registrations for a pair validated at once", func(t *testing.T) {
 		// Four distinct valid registrations for one pair: two keys, each with two VRF roots.
 		regs := []*ethpb.SignedPQKeyRegistration{
