@@ -2,6 +2,8 @@ package sync
 
 import (
 	"bytes"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -119,6 +121,31 @@ func TestValidatePQKeyRegistration(t *testing.T) {
 		other := sign(keys[0], 0, material(xpkB, 1), far, proofB)
 		got, _ = s.validatePQKeyRegistrationMessage(t.Context(), other)
 		require.Equal(t, pubsub.ValidationIgnore, got)
+	})
+
+	t.Run("accepts one of several valid registrations for a pair validated at once", func(t *testing.T) {
+		regs := []*ethpb.SignedPQKeyRegistration{valid, sign(keys[0], 0, material(xpkB, 1), far, proofB)}
+		for _, seed := range []byte{0xc, 0xd} {
+			xpk, proof := util.PQPossessionProof(t, st, keys[0].PublicKey().Marshal(), [32]byte{seed}, 0)
+			regs = append(regs, sign(keys[0], 0, material(xpk, 1), far, proof))
+		}
+		for range 5 {
+			s := newService(st)
+			var accepted atomic.Int32
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			for _, r := range regs {
+				wg.Go(func() {
+					<-start
+					if got, _ := s.validatePQKeyRegistrationMessage(t.Context(), r); got == pubsub.ValidationAccept {
+						accepted.Add(1)
+					}
+				})
+			}
+			close(start)
+			wg.Wait()
+			require.Equal(t, int32(1), accepted.Load())
+		}
 	})
 
 	t.Run("decodes a gossip message", func(t *testing.T) {

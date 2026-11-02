@@ -157,7 +157,10 @@ func (s *Service) validatePQKeyRegistrationMessage(ctx context.Context, signed *
 		return pubsub.ValidationReject, errors.New("invalid proof of possession")
 	}
 
-	s.setPQKeyRegistrationSeen(seenKey)
+	// Record the pair atomically: of two valid registrations validated at once, only the first is accepted.
+	if seen, _ := s.seenPQKeyRegistrationCache.ContainsOrAdd(seenKey, true); seen {
+		return pubsub.ValidationIgnore, nil
+	}
 	return pubsub.ValidationAccept, nil
 }
 
@@ -170,10 +173,6 @@ func (s *Service) currentEpochWithClockDisparity() primitives.Epoch {
 func (s *Service) hasSeenPQKeyRegistration(k pqKeyRegistrationKey) bool {
 	_, seen := s.seenPQKeyRegistrationCache.Get(k)
 	return seen
-}
-
-func (s *Service) setPQKeyRegistrationSeen(k pqKeyRegistrationKey) {
-	s.seenPQKeyRegistrationCache.Add(k, true)
 }
 
 func isZeroRoot(b []byte) bool {
