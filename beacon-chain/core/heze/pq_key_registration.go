@@ -20,6 +20,11 @@ import (
 // PQPossessionXMSSIndex is the leaf index at which the proof of possession is signed (EIP-8450).
 const PQPossessionXMSSIndex uint32 = 0
 
+// ErrPQKeyRegistrationNotYetValid marks a registration that fails only because it is too early:
+// its builder's deposit is not finalized yet, or MIN_PQ_KEY_CHANGE_DELAY has not passed.
+// Every other failure is permanent for the state's chain.
+var ErrPQKeyRegistrationNotYetValid = errors.New("pq key registration is not valid yet")
+
 // ProcessPQKeyRegistrations applies the EIP-8450 post-quantum key registrations of a block, in order.
 // They run after every other operation of the block.
 func ProcessPQKeyRegistrations(st state.BeaconState, body interfaces.ReadOnlyBeaconBlockBody) error {
@@ -114,7 +119,7 @@ func ValidatePQKeyRegistration(st state.ReadOnlyBeaconState, signed *ethpb.Signe
 			return errors.Wrap(err, "change epoch overflow")
 		}
 		if currentEpoch < earliest {
-			return fmt.Errorf("keys changed at epoch %d cannot change again before epoch %d", changeEpoch, earliest)
+			return errors.Wrapf(ErrPQKeyRegistrationNotYetValid, "keys changed at epoch %d cannot change again before epoch %d", changeEpoch, earliest)
 		}
 	}
 
@@ -157,7 +162,10 @@ func RegistrantPubkey(st state.ReadOnlyBeaconState, registration *ethpb.PQKeyReg
 			return nil, err
 		}
 		if !active {
-			return nil, fmt.Errorf("builder %d is not active", index)
+			if builder.WithdrawableEpoch != params.BeaconConfig().FarFutureEpoch {
+				return nil, fmt.Errorf("builder %d is not active: it has initiated an exit", index)
+			}
+			return nil, errors.Wrapf(ErrPQKeyRegistrationNotYetValid, "builder %d is not active: deposit not finalized", index)
 		}
 		if !isZero(registration.KeyMaterial.VrfRoot) {
 			return nil, errors.New("builder registration has a nonzero VRF root")

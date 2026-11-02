@@ -1,6 +1,7 @@
 package heze_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/core/heze"
@@ -199,6 +200,23 @@ func TestProcessPQKeyRegistration(t *testing.T) {
 		inUse, err := f.st.IsPQPublicKeyInUse(xpkB)
 		require.NoError(t, err)
 		require.Equal(t, false, inUse)
+	})
+
+	t.Run("marks only too-early failures as not valid yet", func(t *testing.T) {
+		st := f.st.Copy()
+		require.NoError(t, heze.ProcessPQKeyRegistration(st, regA))
+		early := register(t, st, 0, f.valKeys[0], 0xb, vrf(1), pqTestEpoch, 0)
+		require.ErrorIs(t, heze.ValidatePQKeyRegistration(st, early), heze.ErrPQKeyRegistrationNotYetValid)
+
+		notFinalized := signRegistration(t, st, f.builderKey, &ethpb.PQKeyRegistration{Index: primitives.BuilderIndex(1).ToValidatorIndex(), KeyMaterial: regC.Message.KeyMaterial, PreviousChangeEpoch: pqTestFinalizedEpoch}, regC.Possession)
+		require.ErrorIs(t, heze.ValidatePQKeyRegistration(st, notFinalized), heze.ErrPQKeyRegistrationNotYetValid)
+
+		exitedBuilder := signRegistration(t, st, f.builderKey, &ethpb.PQKeyRegistration{Index: primitives.BuilderIndex(2).ToValidatorIndex(), KeyMaterial: regC.Message.KeyMaterial, PreviousChangeEpoch: 1}, regC.Possession)
+		err := heze.ValidatePQKeyRegistration(st, exitedBuilder)
+		require.ErrorContains(t, "initiated an exit", err)
+		require.Equal(t, false, errors.Is(err, heze.ErrPQKeyRegistrationNotYetValid))
+		keyInUse := signRegistration(t, st, f.valKeys[1], &ethpb.PQKeyRegistration{Index: 1, KeyMaterial: regA.Message.KeyMaterial, PreviousChangeEpoch: far}, regA.Possession)
+		require.Equal(t, false, errors.Is(heze.ValidatePQKeyRegistration(st, keyInUse), heze.ErrPQKeyRegistrationNotYetValid))
 	})
 
 	// Each case fails at its own check; the expected error names that check.

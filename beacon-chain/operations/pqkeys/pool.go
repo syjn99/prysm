@@ -3,6 +3,7 @@ package pqkeys
 
 import (
 	"cmp"
+	"errors"
 	"slices"
 	"sync"
 
@@ -31,7 +32,7 @@ func keyOf(r *ethpb.SignedPQKeyRegistration) key {
 	return key{index: r.Message.Index, previousEpoch: r.Message.PreviousChangeEpoch}
 }
 
-// Pool is a PoolManager. The first registration inserted for a pair wins.
+// Pool is a PoolManager. The latest registration inserted for a pair wins.
 // ponytail: unbounded map; gossip validation bounds it to one entry per (index, change epoch). Add a size cap if REST spam shows up.
 type Pool struct {
 	lock sync.RWMutex
@@ -59,7 +60,8 @@ func (p *Pool) PendingRegistrations() []*ethpb.SignedPQKeyRegistration {
 }
 
 // RegistrationsForInclusion returns up to MAX_PQ_KEY_REGISTRATIONS registrations that apply, in order, on a copy of st.
-// It drops registrations whose previous change epoch no longer matches the state, since they can never apply.
+// It removes registrations that fail for a permanent reason (exited registrant, index out of range, key in use,
+// stale previous change epoch, bad signature or proof) and keeps those that are only too early.
 func (p *Pool) RegistrationsForInclusion(st state.BeaconState) []*ethpb.SignedPQKeyRegistration {
 	pending := p.PendingRegistrations()
 	if len(pending) == 0 {
@@ -73,14 +75,11 @@ func (p *Pool) RegistrationsForInclusion(st state.BeaconState) []*ethpb.SignedPQ
 		if uint64(len(result)) == limit {
 			break
 		}
-		_, changeEpoch, err := sim.PQKeyEntry(r.Message.Index)
-		if err != nil || changeEpoch != r.Message.PreviousChangeEpoch {
-			// Outside the registry, or a change has already been applied: it can never apply.
-			p.MarkIncluded(r)
-			continue
-		}
 		// Apply on the copy so that two registrations of one key in one block are caught.
 		if err := heze.ProcessPQKeyRegistration(sim, r); err != nil {
+			if !errors.Is(err, heze.ErrPQKeyRegistrationNotYetValid) {
+				p.remove(r)
+			}
 			continue
 		}
 		result = append(result, r)
@@ -88,19 +87,25 @@ func (p *Pool) RegistrationsForInclusion(st state.BeaconState) []*ethpb.SignedPQ
 	return result
 }
 
-// InsertRegistration adds a registration unless one is pending for the same pair.
+// InsertRegistration adds a registration. It replaces a pending registration for the same pair, so a
+// newer valid registration takes the place of one that became invalid. Callers validate r first.
 func (p *Pool) InsertRegistration(r *ethpb.SignedPQKeyRegistration) {
 	if r == nil || r.Message == nil {
 		return
 	}
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	p.m[keyOf(r)] = r
+}
 
+// remove deletes r, unless a newer registration has replaced it for its pair.
+func (p *Pool) remove(r *ethpb.SignedPQKeyRegistration) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	k := keyOf(r)
-	if _, ok := p.m[k]; ok {
-		return
+	if p.m[k] == r {
+		delete(p.m, k)
 	}
-	p.m[k] = r
 }
 
 // MarkIncluded removes the registration for the pair of r.
