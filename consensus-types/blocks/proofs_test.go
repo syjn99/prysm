@@ -195,7 +195,7 @@ func TestComputeBlockBodyFieldRoots_Heze(t *testing.T) {
 
 	roots, err := ComputeBlockBodyFieldRoots(t.Context(), b)
 	require.NoError(t, err)
-	require.Equal(t, 13, len(roots))
+	require.Equal(t, 14, len(roots))
 
 	signedBid, err := b.SignedExecutionPayloadBid()
 	require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestProgressiveContainerActiveFields(t *testing.T) {
 	t.Run("heze", func(t *testing.T) {
 		for container, want := range map[progressiveContainerType][32]byte{
 			executionPayloadBidProgressiveContainer: {0xff, 0x1f},
-			beaconBlockBodyProgressiveContainer:     {0xff, 0x1f},
+			beaconBlockBodyProgressiveContainer:     {0xff, 0x3f},
 		} {
 			activeFields, err := progressiveContainerActiveFields(version.Heze, container)
 			require.NoError(t, err)

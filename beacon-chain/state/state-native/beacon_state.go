@@ -83,6 +83,10 @@ type BeaconState struct {
 	latestBlockHash               []byte
 	payloadExpectedWithdrawals    []*enginev1.Withdrawal
 	ptcWindow                     []*ethpb.PTCs
+	pqKeyMaterial                 []*ethpb.PQKeyMaterial
+	pqKeyChangeEpochs             []primitives.Epoch
+	builderPQKeyMaterial          []*ethpb.PQKeyMaterial
+	builderPQKeyChangeEpochs      []primitives.Epoch
 
 	id                    uint64
 	lock                  sync.RWMutex
@@ -150,6 +154,10 @@ type beaconStateMarshalable struct {
 	LatestBlockHash                     []byte                                  `json:"latest_block_hash" yaml:"latest_block_hash"`
 	PayloadExpectedWithdrawals          []*enginev1.Withdrawal                  `json:"payload_expected_withdrawals" yaml:"payload_expected_withdrawals"`
 	PtcWindow                           []*ethpb.PTCs                           `json:"ptc_window" yaml:"ptc_window"`
+	PostQuantumKeyMaterial              []*ethpb.PQKeyMaterial                  `json:"post_quantum_key_material" yaml:"post_quantum_key_material"`
+	PostQuantumKeyChangeEpochs          []primitives.Epoch                      `json:"post_quantum_key_change_epochs" yaml:"post_quantum_key_change_epochs"`
+	BuilderPostQuantumKeyMaterial       []*ethpb.PQKeyMaterial                  `json:"builder_post_quantum_key_material" yaml:"builder_post_quantum_key_material"`
+	BuilderPostQuantumKeyChangeEpochs   []primitives.Epoch                      `json:"builder_post_quantum_key_change_epochs" yaml:"builder_post_quantum_key_change_epochs"`
 }
 
 func (b *BeaconState) MarshalJSON() ([]byte, error) {
@@ -214,6 +222,10 @@ func (b *BeaconState) MarshalJSON() ([]byte, error) {
 		LatestBlockHash:                     b.latestBlockHash,
 		PayloadExpectedWithdrawals:          b.payloadExpectedWithdrawals,
 		PtcWindow:                           b.ptcWindow,
+		PostQuantumKeyMaterial:              b.pqKeyMaterial,
+		PostQuantumKeyChangeEpochs:          b.pqKeyChangeEpochs,
+		BuilderPostQuantumKeyMaterial:       b.builderPQKeyMaterial,
+		BuilderPostQuantumKeyChangeEpochs:   b.builderPQKeyChangeEpochs,
 	}
 	return json.Marshal(marshalable)
 }

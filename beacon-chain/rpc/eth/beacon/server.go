@@ -13,6 +13,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/payloadattestation"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
@@ -52,6 +53,7 @@ type Server struct {
 	ExecutionReconstructor     execution.Reconstructor
 	FinalizationFetcher        blockchain.FinalizationFetcher
 	BLSChangesPool             blstoexec.PoolManager
+	PQKeyPool                  pqkeys.PoolManager
 	PayloadAttestationPool     payloadattestation.PoolManager
 	PayloadAttestationReceiver blockchain.PayloadAttestationReceiver
 	ForkchoiceFetcher          blockchain.ForkchoiceFetcher

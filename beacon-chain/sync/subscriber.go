@@ -296,6 +296,18 @@ func (s *Service) registerSubscribers(nse params.NetworkScheduleEntry) bool {
 		})
 	}
 
+	// New gossip topic in Heze (EIP-8450)
+	if params.BeaconConfig().HezeForkEpoch <= nse.Epoch {
+		s.spawn(func() {
+			s.subscribe(
+				p2p.PQKeyRegistrationTopicFormat,
+				s.validatePQKeyRegistration,
+				s.pqKeyRegistrationSubscriber,
+				nse,
+			)
+		})
+	}
+
 	// New gossip topic in Deneb, removed in Electra
 	if params.BeaconConfig().DenebForkEpoch <= nse.Epoch && nse.Epoch < params.BeaconConfig().ElectraForkEpoch {
 		s.spawn(func() {

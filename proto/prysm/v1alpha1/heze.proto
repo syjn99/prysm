@@ -154,6 +154,9 @@ message BeaconBlockBodyHeze {
   repeated PayloadAttestation payload_attestations = 12
       [ (ethereum.eth.ext.ssz_max) = "payload_attestation.size" ];
   ethereum.engine.v1.ExecutionRequestsGloas parent_execution_requests = 13;
+  // [New in EIP-8450]
+  repeated SignedPQKeyRegistration pq_key_registrations = 14
+      [ (ethereum.eth.ext.ssz_max) = "8" ];
 }
 
 // SignedBeaconBlockHeze represents a signed beacon block in the Heze fork.
@@ -176,4 +179,61 @@ message BeaconBlockContentsHeze {
     (ethereum.eth.ext.ssz_size) = "?,blob.size",
     (ethereum.eth.ext.ssz_max) = "max_blob_commitments.size"
   ];
+}
+
+// =============================================================================
+// EIP-8450: Post-Quantum Consensus Key Registry
+// =============================================================================
+
+// PQKeyMaterial holds the post-quantum keys of one validator or builder.
+//
+// Spec:
+// class PQKeyMaterial(Container):
+//     xmss_public_key: XMSSPublicKey
+//     vrf_root: VRFRoot
+message PQKeyMaterial {
+  bytes xmss_public_key = 1 [ (ethereum.eth.ext.ssz_size) = "32" ];
+  bytes vrf_root = 2 [ (ethereum.eth.ext.ssz_size) = "32" ];
+}
+
+// PQKeyRegistration names the registrant, the keys, and the last change.
+//
+// Spec:
+// class PQKeyRegistration(Container):
+//     index: ValidatorIndex
+//     key_material: PQKeyMaterial
+//     previous_change_epoch: Epoch
+message PQKeyRegistration {
+  uint64 index = 1 [ (ethereum.eth.ext.cast_type) =
+                         "github.com/OffchainLabs/prysm/v7/consensus-types/"
+                         "primitives.ValidatorIndex" ];
+  PQKeyMaterial key_material = 2;
+  uint64 previous_change_epoch = 3 [
+    (ethereum.eth.ext.cast_type) =
+        "github.com/OffchainLabs/prysm/v7/consensus-types/primitives.Epoch"
+  ];
+}
+
+// PQKeyPossession is the message that the proof of possession signs.
+//
+// Spec:
+// class PQKeyPossession(Container):
+//     pubkey: BLSPubkey
+//     xmss_public_key: XMSSPublicKey
+message PQKeyPossession {
+  bytes pubkey = 1 [ (ethereum.eth.ext.ssz_size) = "48" ];
+  bytes xmss_public_key = 2 [ (ethereum.eth.ext.ssz_size) = "32" ];
+}
+
+// SignedPQKeyRegistration is a registration as it appears in a beacon block.
+//
+// Spec:
+// class SignedPQKeyRegistration(Container):
+//     message: PQKeyRegistration
+//     possession: XMSSSignature
+//     signature: BLSSignature
+message SignedPQKeyRegistration {
+  PQKeyRegistration message = 1;
+  bytes possession = 2 [ (ethereum.eth.ext.ssz_size) = "2404" ];
+  bytes signature = 3 [ (ethereum.eth.ext.ssz_size) = "96" ];
 }

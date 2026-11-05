@@ -13,6 +13,7 @@ import (
 	lightclient "github.com/OffchainLabs/prysm/v7/beacon-chain/light-client"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/p2p"
@@ -134,6 +135,14 @@ func WithExitPool(p voluntaryexits.PoolManager) Option {
 func WithSlashingPool(p slashings.PoolManager) Option {
 	return func(s *Service) error {
 		s.cfg.SlashingPool = p
+		return nil
+	}
+}
+
+// WithPQKeyPool to drop EIP-8450 post-quantum key registrations once included.
+func WithPQKeyPool(p pqkeys.PoolManager) Option {
+	return func(s *Service) error {
+		s.cfg.PQKeyPool = p
 		return nil
 	}
 }

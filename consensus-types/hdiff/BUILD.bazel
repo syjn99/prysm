@@ -7,6 +7,7 @@ go_library(
         "snappy.go",
         "state_diff.go",
         "state_diff_gloas.go",
+        "state_diff_heze.go",
     ],
     importpath = "github.com/OffchainLabs/prysm/v7/consensus-types/hdiff",
     visibility = ["//visibility:public"],

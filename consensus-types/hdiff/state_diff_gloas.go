@@ -88,6 +88,9 @@ func diffGloasFields(diff *stateDiff, source, target state.ReadOnlyBeaconState) 
 		return errors.Wrap(err, "failed to get ptc window")
 	}
 
+	if target.Version() >= version.Heze {
+		return diffPQKeys(diff, source, target)
+	}
 	return nil
 }
 
@@ -237,6 +240,9 @@ func serializedGloasFieldsSize(s *stateDiff) int {
 	for _, ptcs := range s.ptcWindow {
 		size += ptcs.SizeSSZ()
 	}
+	if s.targetVersion >= version.Heze {
+		size += 8 + len(s.pqKeyDiffs)*pqKeyDiffLength
+	}
 	return size
 }
 
@@ -310,6 +316,9 @@ func serializeGloasFields(ret []byte, s *stateDiff) []byte {
 		}
 	}
 
+	if s.targetVersion >= version.Heze {
+		ret = serializePQKeyDiffs(ret, s.pqKeyDiffs)
+	}
 	return ret
 }
 
@@ -464,6 +473,9 @@ func (ret *stateDiff) readGloasFields(data *[]byte) error {
 		*data = (*data)[ptcSize:]
 	}
 
+	if ret.targetVersion >= version.Heze {
+		return ret.readPQKeyDiffs(data)
+	}
 	return nil
 }
 
@@ -529,6 +541,13 @@ func applyGloasFields(source state.BeaconState, diff *stateDiff) error {
 	// ptcWindow.
 	if err := source.SetPTCWindow(diff.ptcWindow); err != nil {
 		return errors.Wrap(err, "failed to set ptc window")
+	}
+
+	// EIP-8450 post-quantum keys, after builders so that appended builder entries exist.
+	for _, d := range diff.pqKeyDiffs {
+		if err := source.SetPQKeyEntry(d.registrant, d.key, d.changeEpoch); err != nil {
+			return errors.Wrap(err, "failed to set post-quantum key entry")
+		}
 	}
 
 	return nil

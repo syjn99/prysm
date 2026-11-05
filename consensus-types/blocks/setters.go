@@ -212,6 +212,15 @@ func (b *SignedBeaconBlock) SetPayloadAttestations(pa []*eth.PayloadAttestation)
 	return nil
 }
 
+// SetPQKeyRegistrations sets the post-quantum key registrations in the block (EIP-8450).
+func (b *SignedBeaconBlock) SetPQKeyRegistrations(r []*eth.SignedPQKeyRegistration) error {
+	if b.version < version.Heze {
+		return consensus_types.ErrNotSupported("SetPQKeyRegistrations", b.version)
+	}
+	b.block.body.pqKeyRegistrations = r
+	return nil
+}
+
 // SetParentExecutionRequests sets the parent execution requests in the block.
 func (b *SignedBeaconBlock) SetParentExecutionRequests(r *enginev1.ExecutionRequestsGloas) error {
 	if b.version < version.Gloas {

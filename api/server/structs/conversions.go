@@ -1698,3 +1698,60 @@ func SyncAggregateFromConsensus(sa *eth.SyncAggregate) *SyncAggregate {
 		SyncCommitteeSignature: hexutil.Encode(sa.SyncCommitteeSignature),
 	}
 }
+
+func (s *SignedPQKeyRegistration) ToConsensus() (*eth.SignedPQKeyRegistration, error) {
+	if s.Message == nil {
+		return nil, server.NewDecodeError(errNilValue, "Message")
+	}
+	if s.Message.KeyMaterial == nil {
+		return nil, server.NewDecodeError(errNilValue, "Message.KeyMaterial")
+	}
+	index, err := strconv.ParseUint(s.Message.Index, 10, 64)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "Message.Index")
+	}
+	previous, err := strconv.ParseUint(s.Message.PreviousChangeEpoch, 10, 64)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "Message.PreviousChangeEpoch")
+	}
+	xmssKey, err := bytesutil.DecodeHexWithLength(s.Message.KeyMaterial.XmssPublicKey, fieldparams.RootLength)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "Message.KeyMaterial.XmssPublicKey")
+	}
+	vrfRoot, err := bytesutil.DecodeHexWithLength(s.Message.KeyMaterial.VrfRoot, fieldparams.RootLength)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "Message.KeyMaterial.VrfRoot")
+	}
+	possession, err := bytesutil.DecodeHexWithLength(s.Possession, fieldparams.XMSSSignatureLength)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "Possession")
+	}
+	sig, err := bytesutil.DecodeHexWithLength(s.Signature, fieldparams.BLSSignatureLength)
+	if err != nil {
+		return nil, server.NewDecodeError(err, "Signature")
+	}
+	return &eth.SignedPQKeyRegistration{
+		Message: &eth.PQKeyRegistration{
+			Index:               primitives.ValidatorIndex(index),
+			KeyMaterial:         &eth.PQKeyMaterial{XmssPublicKey: xmssKey, VrfRoot: vrfRoot},
+			PreviousChangeEpoch: primitives.Epoch(previous),
+		},
+		Possession: possession,
+		Signature:  sig,
+	}, nil
+}
+
+func SignedPQKeyRegistrationFromConsensus(r *eth.SignedPQKeyRegistration) *SignedPQKeyRegistration {
+	return &SignedPQKeyRegistration{
+		Message: &PQKeyRegistration{
+			Index: fmt.Sprintf("%d", r.Message.Index),
+			KeyMaterial: &PQKeyMaterial{
+				XmssPublicKey: hexutil.Encode(r.Message.KeyMaterial.XmssPublicKey),
+				VrfRoot:       hexutil.Encode(r.Message.KeyMaterial.VrfRoot),
+			},
+			PreviousChangeEpoch: fmt.Sprintf("%d", r.Message.PreviousChangeEpoch),
+		},
+		Possession: hexutil.Encode(r.Possession),
+		Signature:  hexutil.Encode(r.Signature),
+	}
+}

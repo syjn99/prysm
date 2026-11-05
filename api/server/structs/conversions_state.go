@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	beaconState "github.com/OffchainLabs/prysm/v7/beacon-chain/state"
+	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	enginev1 "github.com/OffchainLabs/prysm/v7/proto/engine/v1"
+	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
@@ -1371,53 +1373,77 @@ func BeaconStateHezeFromConsensus(st beaconState.BeaconState) (*BeaconStateHeze,
 	if err != nil {
 		return nil, fmt.Errorf("PTC window: %w", err)
 	}
+	pqKeys, pqEpochs, builderPQKeys, builderPQEpochs, err := st.PQKeyListsReadOnly()
+	if err != nil {
+		return nil, fmt.Errorf("post-quantum keys: %w", err)
+	}
 
 	return &BeaconStateHeze{
-		GenesisTime:                   fmt.Sprintf("%d", st.GenesisTime().Unix()),
-		GenesisValidatorsRoot:         hexutil.Encode(st.GenesisValidatorsRoot()),
-		Slot:                          fmt.Sprintf("%d", st.Slot()),
-		Fork:                          ForkFromConsensus(st.Fork()),
-		LatestBlockHeader:             BeaconBlockHeaderFromConsensus(st.LatestBlockHeader()),
-		BlockRoots:                    br,
-		StateRoots:                    sr,
-		HistoricalRoots:               hr,
-		Eth1Data:                      Eth1DataFromConsensus(st.Eth1Data()),
-		Eth1DataVotes:                 votes,
-		Eth1DepositIndex:              fmt.Sprintf("%d", st.Eth1DepositIndex()),
-		Validators:                    vals,
-		Balances:                      bals,
-		RandaoMixes:                   rm,
-		Slashings:                     slashings,
-		PreviousEpochParticipation:    prevPart,
-		CurrentEpochParticipation:     currPart,
-		JustificationBits:             hexutil.Encode(st.JustificationBits()),
-		PreviousJustifiedCheckpoint:   CheckpointFromConsensus(st.PreviousJustifiedCheckpoint()),
-		CurrentJustifiedCheckpoint:    CheckpointFromConsensus(st.CurrentJustifiedCheckpoint()),
-		FinalizedCheckpoint:           CheckpointFromConsensus(st.FinalizedCheckpoint()),
-		InactivityScores:              is,
-		CurrentSyncCommittee:          SyncCommitteeFromConsensus(currSc),
-		NextSyncCommittee:             SyncCommitteeFromConsensus(nextSc),
-		NextWithdrawalIndex:           fmt.Sprintf("%d", nwi),
-		NextWithdrawalValidatorIndex:  fmt.Sprintf("%d", nwvi),
-		HistoricalSummaries:           hs,
-		DepositRequestsStartIndex:     fmt.Sprintf("%d", drsi),
-		DepositBalanceToConsume:       fmt.Sprintf("%d", dbtc),
-		ExitBalanceToConsume:          fmt.Sprintf("%d", ebtc),
-		EarliestExitEpoch:             fmt.Sprintf("%d", eee),
-		ConsolidationBalanceToConsume: fmt.Sprintf("%d", cbtc),
-		EarliestConsolidationEpoch:    fmt.Sprintf("%d", ece),
-		PendingDeposits:               PendingDepositsFromConsensus(pbd),
-		PendingPartialWithdrawals:     PendingPartialWithdrawalsFromConsensus(ppw),
-		PendingConsolidations:         PendingConsolidationsFromConsensus(pc),
-		ProposerLookahead:             lookahead,
-		LatestExecutionPayloadBid:     ROExecutionPayloadBidHezeFromConsensus(lepb),
-		Builders:                      BuildersFromConsensus(builders),
-		NextWithdrawalBuilderIndex:    fmt.Sprintf("%d", nwbi),
-		ExecutionPayloadAvailability:  hexutil.Encode(epa),
-		BuilderPendingPayments:        BuilderPendingPaymentsFromConsensus(bpp),
-		BuilderPendingWithdrawals:     BuilderPendingWithdrawalsFromConsensus(bpw),
-		LatestBlockHash:               hexutil.Encode(lbh[:]),
-		PayloadExpectedWithdrawals:    WithdrawalsFromConsensus(pew),
-		PtcWindow:                     PTCWindowFromConsensus(ptcWindow),
+		GenesisTime:                       fmt.Sprintf("%d", st.GenesisTime().Unix()),
+		GenesisValidatorsRoot:             hexutil.Encode(st.GenesisValidatorsRoot()),
+		Slot:                              fmt.Sprintf("%d", st.Slot()),
+		Fork:                              ForkFromConsensus(st.Fork()),
+		LatestBlockHeader:                 BeaconBlockHeaderFromConsensus(st.LatestBlockHeader()),
+		BlockRoots:                        br,
+		StateRoots:                        sr,
+		HistoricalRoots:                   hr,
+		Eth1Data:                          Eth1DataFromConsensus(st.Eth1Data()),
+		Eth1DataVotes:                     votes,
+		Eth1DepositIndex:                  fmt.Sprintf("%d", st.Eth1DepositIndex()),
+		Validators:                        vals,
+		Balances:                          bals,
+		RandaoMixes:                       rm,
+		Slashings:                         slashings,
+		PreviousEpochParticipation:        prevPart,
+		CurrentEpochParticipation:         currPart,
+		JustificationBits:                 hexutil.Encode(st.JustificationBits()),
+		PreviousJustifiedCheckpoint:       CheckpointFromConsensus(st.PreviousJustifiedCheckpoint()),
+		CurrentJustifiedCheckpoint:        CheckpointFromConsensus(st.CurrentJustifiedCheckpoint()),
+		FinalizedCheckpoint:               CheckpointFromConsensus(st.FinalizedCheckpoint()),
+		InactivityScores:                  is,
+		CurrentSyncCommittee:              SyncCommitteeFromConsensus(currSc),
+		NextSyncCommittee:                 SyncCommitteeFromConsensus(nextSc),
+		NextWithdrawalIndex:               fmt.Sprintf("%d", nwi),
+		NextWithdrawalValidatorIndex:      fmt.Sprintf("%d", nwvi),
+		HistoricalSummaries:               hs,
+		DepositRequestsStartIndex:         fmt.Sprintf("%d", drsi),
+		DepositBalanceToConsume:           fmt.Sprintf("%d", dbtc),
+		ExitBalanceToConsume:              fmt.Sprintf("%d", ebtc),
+		EarliestExitEpoch:                 fmt.Sprintf("%d", eee),
+		ConsolidationBalanceToConsume:     fmt.Sprintf("%d", cbtc),
+		EarliestConsolidationEpoch:        fmt.Sprintf("%d", ece),
+		PendingDeposits:                   PendingDepositsFromConsensus(pbd),
+		PendingPartialWithdrawals:         PendingPartialWithdrawalsFromConsensus(ppw),
+		PendingConsolidations:             PendingConsolidationsFromConsensus(pc),
+		ProposerLookahead:                 lookahead,
+		LatestExecutionPayloadBid:         ROExecutionPayloadBidHezeFromConsensus(lepb),
+		Builders:                          BuildersFromConsensus(builders),
+		NextWithdrawalBuilderIndex:        fmt.Sprintf("%d", nwbi),
+		ExecutionPayloadAvailability:      hexutil.Encode(epa),
+		BuilderPendingPayments:            BuilderPendingPaymentsFromConsensus(bpp),
+		BuilderPendingWithdrawals:         BuilderPendingWithdrawalsFromConsensus(bpw),
+		LatestBlockHash:                   hexutil.Encode(lbh[:]),
+		PayloadExpectedWithdrawals:        WithdrawalsFromConsensus(pew),
+		PtcWindow:                         PTCWindowFromConsensus(ptcWindow),
+		PostQuantumKeyMaterial:            pqKeyMaterialFromConsensus(pqKeys),
+		PostQuantumKeyChangeEpochs:        epochsFromConsensus(pqEpochs),
+		BuilderPostQuantumKeyMaterial:     pqKeyMaterialFromConsensus(builderPQKeys),
+		BuilderPostQuantumKeyChangeEpochs: epochsFromConsensus(builderPQEpochs),
 	}, nil
+}
+
+func pqKeyMaterialFromConsensus(keys []*eth.PQKeyMaterial) []*PQKeyMaterial {
+	result := make([]*PQKeyMaterial, len(keys))
+	for i, k := range keys {
+		result[i] = &PQKeyMaterial{XmssPublicKey: hexutil.Encode(k.XmssPublicKey), VrfRoot: hexutil.Encode(k.VrfRoot)}
+	}
+	return result
+}
+
+func epochsFromConsensus(epochs []primitives.Epoch) []string {
+	result := make([]string, len(epochs))
+	for i, e := range epochs {
+		result[i] = fmt.Sprintf("%d", e)
+	}
+	return result
 }

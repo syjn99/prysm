@@ -651,13 +651,21 @@ func TestBeaconStateGloasFromConsensus(t *testing.T) {
 func TestBeaconStateHezeFromConsensus(t *testing.T) {
 	st, err := util.NewBeaconStateHeze(func(s *eth.BeaconStateHeze) error {
 		s.LatestExecutionPayloadBid.InclusionListBits = []byte{0x01, 0x80}
+		s.Validators = []*eth.Validator{{PublicKey: make([]byte, 48)}}
+		s.Builders = []*eth.Builder{{Pubkey: make([]byte, 48), Version: []byte{0}, ExecutionAddress: make([]byte, 20), DepositEpoch: 4}}
 		return nil
 	})
 	require.NoError(t, err)
+	key := &eth.PQKeyMaterial{XmssPublicKey: bytes.Repeat([]byte{0xaa}, 32), VrfRoot: bytes.Repeat([]byte{0xbb}, 32)}
+	require.NoError(t, st.SetPQKeyEntry(0, key, 7))
 
 	got, err := BeaconStateHezeFromConsensus(st)
 	require.NoError(t, err)
 	require.Equal(t, "0x0180", got.LatestExecutionPayloadBid.InclusionListBits)
+	require.DeepEqual(t, []*PQKeyMaterial{{XmssPublicKey: hexutil.Encode(key.XmssPublicKey), VrfRoot: hexutil.Encode(key.VrfRoot)}}, got.PostQuantumKeyMaterial)
+	require.DeepEqual(t, []string{"7"}, got.PostQuantumKeyChangeEpochs)
+	require.DeepEqual(t, []*PQKeyMaterial{{XmssPublicKey: hexutil.Encode(make([]byte, 32)), VrfRoot: hexutil.Encode(make([]byte, 32))}}, got.BuilderPostQuantumKeyMaterial)
+	require.DeepEqual(t, []string{"4"}, got.BuilderPostQuantumKeyChangeEpochs)
 }
 
 func TestBeaconBlock_ToConsensus_NilListElements(t *testing.T) {

@@ -65,6 +65,9 @@ func (s stubBlockBody) ExecutionPayloadBid() (interfaces.ROExecutionPayloadBid, 
 func (s stubBlockBody) ParentExecutionRequests() (*enginev1.ExecutionRequestsGloas, error) {
 	return nil, nil
 }
+func (s stubBlockBody) PQKeyRegistrations() ([]*ethpb.SignedPQKeyRegistration, error) {
+	return nil, nil
+}
 func (s stubBlockBody) MarshalSSZ() ([]byte, error)         { return nil, nil }
 func (s stubBlockBody) MarshalSSZTo([]byte) ([]byte, error) { return nil, nil }
 func (s stubBlockBody) UnmarshalSSZ([]byte) error           { return nil }

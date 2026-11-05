@@ -1,10 +1,13 @@
 package structs
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
+	eth "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
 	"github.com/OffchainLabs/prysm/v7/testing/require"
 	"github.com/OffchainLabs/prysm/v7/testing/util"
 )
@@ -13,12 +16,22 @@ func TestSignedBeaconBlockHezeRoundTrip(t *testing.T) {
 	blk := util.NewBeaconBlockHeze()
 	blk.Block.Slot = 7
 	blk.Block.Body.SignedExecutionPayloadBid.Message.InclusionListBits = []byte{0x01, 0x80}
+	blk.Block.Body.PqKeyRegistrations = []*eth.SignedPQKeyRegistration{{
+		Message: &eth.PQKeyRegistration{
+			Index:               primitives.ValidatorIndex(primitives.BuilderIndexFlag | 3),
+			KeyMaterial:         &eth.PQKeyMaterial{XmssPublicKey: bytes.Repeat([]byte{1}, 32), VrfRoot: make([]byte, 32)},
+			PreviousChangeEpoch: 9,
+		},
+		Possession: bytes.Repeat([]byte{2}, 2404),
+		Signature:  bytes.Repeat([]byte{3}, 96),
+	}}
 
 	jsonBlock, err := SignedBeaconBlockHezeFromConsensus(blk)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(jsonBlock)
 	require.NoError(t, err)
 	require.Equal(t, true, strings.Contains(string(encoded), `"inclusion_list_bits":"0x0180"`))
+	require.Equal(t, true, strings.Contains(string(encoded), `"pq_key_registrations":[{"message":{"index":"1099511627779"`))
 
 	decoded := &SignedBeaconBlockHeze{}
 	require.NoError(t, json.Unmarshal(encoded, decoded))

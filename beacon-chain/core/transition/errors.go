@@ -16,5 +16,6 @@ var (
 	ErrProcessVoluntaryExitsFailed           = errors.New("process voluntary exits failed")
 	ErrProcessBLSChangesFailed               = errors.New("process BLS to execution changes failed")
 	ErrProcessPayloadAttestationsFailed      = errors.New("process payload attestations failed")
+	ErrProcessPQKeyRegistrationsFailed       = errors.New("process pq key registrations failed")
 	ErrProcessSyncAggregateFailed            = errors.New("process sync aggregate failed")
 )

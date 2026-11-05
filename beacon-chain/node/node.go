@@ -40,6 +40,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/payloadattestation"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/synccommittee"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
@@ -103,6 +104,7 @@ type BeaconNode struct {
 	slashingsPool             slashings.PoolManager
 	syncCommitteePool         synccommittee.Pool
 	blsToExecPool             blstoexec.PoolManager
+	pqKeyPool                 pqkeys.PoolManager
 	depositCache              cache.DepositCache
 	proposerPreferencesCache  *cache.ProposerPreferencesCache
 	subscribedValidatorsCache *cache.SubscribedValidatorsCache
@@ -175,6 +177,7 @@ func New(cliCtx *cli.Context, cancel context.CancelFunc, optFuncs []func(*cli.Co
 		slashingsPool:             slashings.NewPool(),
 		syncCommitteePool:         synccommittee.NewPool(),
 		blsToExecPool:             blstoexec.NewPool(),
+		pqKeyPool:                 pqkeys.NewPool(),
 		proposerPreferencesCache:  cache.NewProposerPreferencesCache(),
 		subscribedValidatorsCache: cache.NewSubscribedValidatorsCache(),
 		builderCircuitBreaker:     cache.NewBuilderCircuitBreaker(),
@@ -803,6 +806,7 @@ func (b *BeaconNode) registerBlockchainService(fc forkchoice.ForkChoicer, gs *st
 		blockchain.WithExitPool(b.exitPool),
 		blockchain.WithSlashingPool(b.slashingsPool),
 		blockchain.WithBLSToExecPool(b.blsToExecPool),
+		blockchain.WithPQKeyPool(b.pqKeyPool),
 		blockchain.WithP2PBroadcaster(b.fetchP2P()),
 		blockchain.WithStateNotifier(b),
 		blockchain.WithAttestationService(attService),
@@ -903,6 +907,7 @@ func (b *BeaconNode) registerSyncService(initialSyncComplete chan struct{}, bFil
 		regularsync.WithSlashingPool(b.slashingsPool),
 		regularsync.WithSyncCommsPool(b.syncCommitteePool),
 		regularsync.WithBlsToExecPool(b.blsToExecPool),
+		regularsync.WithPQKeyPool(b.pqKeyPool),
 		regularsync.WithStateGen(b.stateGen),
 		regularsync.WithSlasherAttestationsFeed(b.slasherAttestationsFeed),
 		regularsync.WithSlasherBlockHeadersFeed(b.slasherBlockHeadersFeed),
@@ -1058,6 +1063,7 @@ func (b *BeaconNode) registerRPCService(router *http.ServeMux) error {
 		ExitPool:                         b.exitPool,
 		SlashingsPool:                    b.slashingsPool,
 		BLSChangesPool:                   b.blsToExecPool,
+		PQKeyPool:                        b.pqKeyPool,
 		SyncCommitteeObjectPool:          b.syncCommitteePool,
 		ExecutionChainService:            web3Service,
 		ExecutionChainInfoFetcher:        web3Service,

@@ -341,4 +341,9 @@ type BeaconStateHeze struct {
 	LatestExecutionPayloadBid     *ExecutionPayloadBidHeze
 	PayloadExpectedWithdrawals    []*enginev1.Withdrawal `ssz-max:"16"`
 	PtcWindow                     []*PTCs                `ssz-size:"96"`
+	// [New in EIP-8450]
+	PostQuantumKeyMaterial            []*PQKeyMaterial   `ssz-max:"1099511627776"`
+	PostQuantumKeyChangeEpochs        []primitives.Epoch `ssz-max:"1099511627776"`
+	BuilderPostQuantumKeyMaterial     []*PQKeyMaterial   `ssz-max:"1099511627776"`
+	BuilderPostQuantumKeyChangeEpochs []primitives.Epoch `ssz-max:"1099511627776"`
 }

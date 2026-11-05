@@ -25,6 +25,7 @@ const (
 	executionPayloadBidFieldCount       = 12
 	executionPayloadBidFieldCountHeze   = 13
 	beaconBlockBodyFieldCount           = 13
+	beaconBlockBodyFieldCountHeze       = 14 // EIP-8450 appends pq_key_registrations.
 )
 
 type progressiveContainerType uint8
@@ -54,8 +55,10 @@ func ComputeBlockBodyFieldRoots(ctx context.Context, blockBody *BeaconBlockBody)
 		fieldRoots = make([][]byte, 11)
 	case version.Deneb:
 		fieldRoots = make([][]byte, 12)
-	case version.Electra, version.Fulu, version.Gloas, version.Heze:
+	case version.Electra, version.Fulu, version.Gloas:
 		fieldRoots = make([][]byte, 13)
+	case version.Heze:
+		fieldRoots = make([][]byte, beaconBlockBodyFieldCountHeze)
 	default:
 		return nil, fmt.Errorf("unknown block body version %s", version.String(blockBody.version))
 	}
@@ -263,6 +266,18 @@ func computeGloasBlockBodyFieldRoots(blockBody *BeaconBlockBody, fieldRoots [][]
 	}
 	copy(fieldRoots[12], root[:])
 
+	if blockBody.version >= version.Heze {
+		registrations, err := blockBody.PQKeyRegistrations()
+		if err != nil {
+			return err
+		}
+		root, err = blockBodyListRoot(blockBody.version, registrations, params.BeaconConfig().MaxPQKeyRegistrations)
+		if err != nil {
+			return err
+		}
+		copy(fieldRoots[13], root[:])
+	}
+
 	return nil
 }
 
@@ -450,7 +465,11 @@ func progressiveContainerActiveFields(v int, container progressiveContainerType)
 		}
 		return af, nil
 	case beaconBlockBodyProgressiveContainer:
-		af := make([]bool, beaconBlockBodyFieldCount)
+		fieldCount := beaconBlockBodyFieldCount
+		if v >= version.Heze {
+			fieldCount = beaconBlockBodyFieldCountHeze
+		}
+		af := make([]bool, fieldCount)
 		for i := range af {
 			af[i] = true
 		}

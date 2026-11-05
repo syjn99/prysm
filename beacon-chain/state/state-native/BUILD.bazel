@@ -21,6 +21,7 @@ go_library(
         "getters_payload_header.go",
         "getters_proposer_lookahead.go",
         "getters_randao.go",
+        "getters_setters_heze.go",
         "getters_state.go",
         "getters_sync_committee.go",
         "getters_validator.go",
@@ -106,6 +107,7 @@ go_test(
         "getters_exit_test.go",
         "getters_gloas_test.go",
         "getters_participation_test.go",
+        "getters_setters_heze_test.go",
         "getters_setters_lookahead_test.go",
         "getters_test.go",
         "getters_validator_test.go",
@@ -142,6 +144,7 @@ go_test(
     embed = [":go_default_library"],
     deps = [
         "//beacon-chain/cache:go_default_library",
+        "//beacon-chain/core/electra:go_default_library",
         "//beacon-chain/core/helpers:go_default_library",
         "//beacon-chain/core/signing:go_default_library",
         "//beacon-chain/core/transition:go_default_library",

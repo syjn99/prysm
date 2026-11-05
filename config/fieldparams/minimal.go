@@ -17,6 +17,7 @@ const (
 	SyncCommitteeLength                   = 32                // SYNC_COMMITTEE_SIZE
 	RootLength                            = 32                // RootLength defines the byte length of a Merkle root.
 	BLSSignatureLength                    = 96                // BLSSignatureLength defines the byte length of a BLSSignature.
+	XMSSSignatureLength                   = 2404              // XMSSSignatureLength is the byte length of a leanXMSS signature (EIP-8450).
 	BLSPubkeyLength                       = 48                // BLSPubkeyLength defines the byte length of a BLSSignature.
 	MaxTxsPerPayloadLength                = 1048576           // MaxTxsPerPayloadLength defines the maximum number of transactions that can be included in a payload.
 	MaxBytesPerTxLength                   = 1073741824        // MaxBytesPerTxLength defines the maximum number of bytes that can be included in a transaction.

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	fieldparams "github.com/OffchainLabs/prysm/v7/config/fieldparams"
+	"github.com/OffchainLabs/prysm/v7/consensus-types/primitives"
 	"github.com/OffchainLabs/prysm/v7/encoding/bytesutil"
 	"github.com/OffchainLabs/prysm/v7/encoding/ssz"
 	ethpb "github.com/OffchainLabs/prysm/v7/proto/prysm/v1alpha1"
@@ -67,6 +68,15 @@ func Uint64ListRoot(stateVersion int, vals []uint64) ([32]byte, error) {
 		return uint64ListRootProgressive(vals)
 	}
 	return uint64ListRootWithRegistryLimit(vals)
+}
+
+// EpochListRoot computes the progressive SSZ root of a list of epochs.
+func EpochListRoot(epochs []primitives.Epoch) ([32]byte, error) {
+	vals := make([]uint64, len(epochs))
+	for i, e := range epochs {
+		vals[i] = uint64(e)
+	}
+	return uint64ListRootProgressive(vals)
 }
 
 func uint64ListRootWithRegistryLimit(vals []uint64) ([32]byte, error) {

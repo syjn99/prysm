@@ -1386,6 +1386,14 @@ func (b *BeaconBlockBody) ParentExecutionRequests() (*enginev1.ExecutionRequests
 	return nil, consensus_types.ErrNotSupported("ParentExecutionRequests", b.version)
 }
 
+// PQKeyRegistrations returns the post-quantum key registrations in the block (EIP-8450).
+func (b *BeaconBlockBody) PQKeyRegistrations() ([]*eth.SignedPQKeyRegistration, error) {
+	if b.version >= version.Heze {
+		return b.pqKeyRegistrations, nil
+	}
+	return nil, consensus_types.ErrNotSupported("PQKeyRegistrations", b.version)
+}
+
 // Version returns the version of the beacon block body
 func (b *BeaconBlockBody) Version() int {
 	return b.version

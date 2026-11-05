@@ -37,6 +37,7 @@ type BeaconBlockBodyHeze struct {
 	SignedExecutionPayloadBid *SignedExecutionPayloadBidHeze `json:"signed_execution_payload_bid"`
 	PayloadAttestations       []*PayloadAttestation          `json:"payload_attestations"`
 	ParentExecutionRequests   *ExecutionRequestsGloas        `json:"parent_execution_requests"`
+	PQKeyRegistrations        []*SignedPQKeyRegistration     `json:"pq_key_registrations"`
 }
 
 type BeaconBlockHeze struct {
@@ -109,6 +110,11 @@ type BeaconStateHeze struct {
 	LatestBlockHash               string                      `json:"latest_block_hash"`
 	PayloadExpectedWithdrawals    []*Withdrawal               `json:"payload_expected_withdrawals"`
 	PtcWindow                     [][]string                  `json:"ptc_window"`
+	// EIP-8450
+	PostQuantumKeyMaterial            []*PQKeyMaterial `json:"post_quantum_key_material"`
+	PostQuantumKeyChangeEpochs        []string         `json:"post_quantum_key_change_epochs"`
+	BuilderPostQuantumKeyMaterial     []*PQKeyMaterial `json:"builder_post_quantum_key_material"`
+	BuilderPostQuantumKeyChangeEpochs []string         `json:"builder_post_quantum_key_change_epochs"`
 }
 
 type BlockContentsHeze struct {

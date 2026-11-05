@@ -13,6 +13,7 @@ import (
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/attestations"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/blstoexec"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/payloadattestation"
+	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/pqkeys"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/slashings"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/synccommittee"
 	"github.com/OffchainLabs/prysm/v7/beacon-chain/operations/voluntaryexits"
@@ -78,6 +79,14 @@ func WithSlashingPool(slashingPool slashings.PoolManager) Option {
 func WithSyncCommsPool(syncCommsPool synccommittee.Pool) Option {
 	return func(s *Service) error {
 		s.cfg.syncCommsPool = syncCommsPool
+		return nil
+	}
+}
+
+// WithPQKeyPool sets the pool of EIP-8450 post-quantum key registrations.
+func WithPQKeyPool(pool pqkeys.PoolManager) Option {
+	return func(s *Service) error {
+		s.cfg.pqKeyPool = pool
 		return nil
 	}
 }

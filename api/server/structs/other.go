@@ -337,3 +337,27 @@ type BuilderConfig struct {
 	BuilderBoostFactor string          `json:"builder_boost_factor"`
 	Builders           []*BuilderEntry `json:"builders"`
 }
+
+// PQKeyMaterial is the EIP-8450 post-quantum key material of one validator or builder.
+type PQKeyMaterial struct {
+	XmssPublicKey string `json:"xmss_public_key"`
+	VrfRoot       string `json:"vrf_root"`
+}
+
+// PQKeyRegistration is the message of an EIP-8450 post-quantum key registration.
+type PQKeyRegistration struct {
+	Index               string         `json:"index"`
+	KeyMaterial         *PQKeyMaterial `json:"key_material"`
+	PreviousChangeEpoch string         `json:"previous_change_epoch"`
+}
+
+// SignedPQKeyRegistration is an EIP-8450 post-quantum key registration with its proof of possession and BLS signature.
+type SignedPQKeyRegistration struct {
+	Message    *PQKeyRegistration `json:"message"`
+	Possession string             `json:"possession"`
+	Signature  string             `json:"signature"`
+}
+
+type ListPQKeyRegistrationsResponse struct {
+	Data []*SignedPQKeyRegistration `json:"data"`
+}
